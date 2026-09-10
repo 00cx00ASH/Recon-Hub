@@ -95,6 +95,7 @@ também o que o `monitor` usa pra detectar "finding novo".
 | **asset**        | descoberta (subdomínio, porta, URL…)     | `store`                                 |
 | **pipeline run** | execução de uma pipeline + estado de cada step | `store`                            |
 | **program**      | escopo de um alvo (`in_scope`/`out_of_scope` wildcard) | `programs/<nome>.json`     |
+| **projeto**      | pasta por programa: notas + snapshot (report/summary/assets) | `data/projects/<nome>/` (auto-sincronizada) |
 | **watch**        | pipeline agendada + webhook de alerta    | `watches/<nome>.json` (mutável)         |
 
 `store` = **JSON-lines em `./data/`** por padrão (zero deps), ou **SQLite** se
@@ -318,6 +319,40 @@ Detalhes em [`README.md` → Backend de armazenamento](../README.md#backend-de-a
    webhook — pega regressão / superfície nova sem você olhar.
 7. `GET /api/programs/acme/export` — bundle JSON com tudo (jobs + runs + findings
    + assets) pro seu arquivo.
+8. A pasta `data/projects/acme/` já foi ficando pronta sozinha durante todo esse
+   fluxo — abra `report.md` direto do disco, ou escreva em `notes.md` pela aba
+   **Projetos** do dashboard (`GET/PUT /api/programs/acme/notes`).
+
+---
+
+## 6.1. Projeto = pasta por alvo
+
+Cada programa que você cria em **6.1** já ganha, automaticamente, uma pasta em
+`data/projects/<nome>/`:
+
+- `project.json` — o escopo (`in_scope`/`out_of_scope`), pra pasta ser autocontida
+- `summary.json` — contagens (jobs por status, findings por severidade, assets
+  por tipo, última atividade) — sempre fresco: toda leitura resincroniza
+- `report.md` — o mesmo relatório de bounty, já escopado pra esse programa
+- `assets.json` — snapshot de tudo que foi descoberto
+- `notes.md` — **o único arquivo que é seu** — o hub nunca sobrescreve
+
+A sincronização é automática: toda vez que um job (ou step de pipeline) daquele
+programa termina, a pasta é regravada sozinha (`internal/project`, ligado no
+engine via `OnJobDone`). Não precisa rodar nada manualmente — mas o botão
+**↻ sincronizar** na aba **Projetos** força na hora, e é o mesmo endpoint que o
+hub chama:
+
+```bash
+curl -s -H "$H" -XPOST localhost:7878/api/programs/acme/sync
+curl -s -H "$H" localhost:7878/api/programs/acme/summary | jq
+curl -s -H "$H" -XPUT localhost:7878/api/programs/acme/notes \
+  -d '{"notes":"alvo principal: acme.com\ncontato: security@acme.com"}'
+```
+
+Se você faz bug bounty em vários alvos ao mesmo tempo, é essa pasta que separa
+tudo fisicamente — cada programa com seu relatório, seus assets e suas notas,
+sem precisar montar filtro nenhum manualmente.
 
 ---
 
@@ -336,6 +371,9 @@ Detalhes em [`README.md` → Backend de armazenamento](../README.md#backend-de-a
 | GET    | `/api/programs/{name}/report.md` · `.html` | idem, escopado                     |
 | GET/POST | `/api/programs` · `/api/programs/{name}` | escopo                            |
 | GET    | `/api/programs/{name}/export`          | bundle JSON completo                   |
+| GET    | `/api/programs/{name}/summary`         | resumo do projeto (resincroniza)       |
+| POST   | `/api/programs/{name}/sync`            | força a resincronização da pasta       |
+| GET/PUT | `/api/programs/{name}/notes`          | notas do projeto (`{"notes":"..."}`)   |
 | GET/POST | `/api/pipelines` · `/api/pipeline-runs` · `/api/pipeline-runs/{id}[/cancel|/events]` | pipelines |
 | GET/POST | `/api/watches` · `/api/watches/{name}[/run]` | monitoramento                 |
 | GET    | `/api/wordlists`                       | wordlists indexadas                    |

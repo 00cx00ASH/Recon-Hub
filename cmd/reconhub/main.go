@@ -26,6 +26,7 @@ import (
 	"reconhub/internal/engine"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
+	"reconhub/internal/project"
 	"reconhub/internal/registry"
 	"reconhub/internal/scope"
 	"reconhub/internal/store"
@@ -131,6 +132,11 @@ func main() {
 		gnames = append(gnames, p.Name)
 	}
 	log.Printf("programs: %d de %s %v", len(gnames), cfg.ProgramsDir, gnames)
+	for _, p := range programs.List() {
+		if err := project.Init(cfg.DataDir, p.Name); err != nil {
+			log.Printf("project init (%s): %v", p.Name, err)
+		}
+	}
 
 	wls, _ := wordlist.Load(cfg.WordlistsDir, cfg.SeclistsDir)
 	log.Printf("wordlists: %d indexadas (%s%s)", len(wls.List()), cfg.WordlistsDir,
@@ -138,6 +144,14 @@ func main() {
 
 	eng := engine.New(st, reg, bus.New(), cfg.MaxConcurrent)
 	eng.Wordlists = wls
+	eng.OnJobDone = func(job *store.Job) {
+		if strings.TrimSpace(job.Program) == "" {
+			return
+		}
+		if _, err := project.SyncFromStore(cfg.DataDir, job.Program, programs, st); err != nil {
+			log.Printf("project sync (%s): %v", job.Program, err)
+		}
+	}
 
 	watches, err := monitor.Load(cfg.WatchesDir)
 	if err != nil {
@@ -160,6 +174,7 @@ func main() {
 		Token:     token,
 		WebDir:    cfg.WebDir,
 		DocsFile:  cfg.DocsFile,
+		DataDir:   cfg.DataDir,
 	}
 
 	httpSrv := &http.Server{

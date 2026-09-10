@@ -229,6 +229,9 @@ específica de todas, então qualquer `/api/...` ganha dela.
 | GET    | `/api/assets`            | assets descobertos (`?program=&kind=`) |
 | GET    | `/api/programs`          | programas de `./programs`          |
 | GET    | `/api/programs/{name}`   | um programa (escopo)              |
+| GET    | `/api/programs/{name}/summary` | resumo do projeto (e resincroniza) |
+| POST   | `/api/programs/{name}/sync` | resincroniza a pasta do projeto  |
+| GET/PUT | `/api/programs/{name}/notes` | notas do projeto              |
 | GET    | `/api/pipelines`         | pipelines de `./pipelines`        |
 | POST   | `/api/pipeline-runs`     | roda uma pipeline                 |
 | GET    | `/api/pipeline-runs`     | lista runs                        |
@@ -504,6 +507,46 @@ Passe `"program": "acme"` ao criar um job ou uma pipeline-run. Efeitos:
 
 ---
 
+## Projeto (pasta física por alvo)
+
+Todo programa ganha uma pasta própria em `data/projects/<nome>/` — criada
+automaticamente ao criar o programa (ou na subida do hub, para os que já
+existem em `programs/`) e **mantida em sincronia sozinha** a cada job daquele
+programa que termina. Pensado pra quem acompanha vários alvos de bug bounty ao
+mesmo tempo: cada um com sua pasta, seu relatório e suas notas, sem precisar
+filtrar nada manualmente.
+
+```
+data/projects/acme/
+├── project.json    escopo do programa (in_scope/out_of_scope) — a pasta é autocontida
+├── summary.json    contagens (jobs por status, findings por severidade, assets por tipo, última atividade)
+├── report.md       relatório de bounty, já escopado pra este programa
+├── assets.json      todos os assets descobertos neste programa
+└── notes.md         notas livres suas — nunca sobrescrito automaticamente
+```
+
+| método | rota                                | o quê                                             |
+|--------|--------------------------------------|----------------------------------------------------|
+| GET    | `/api/programs/{nome}/summary`       | contagens atuais (também resincroniza os arquivos) |
+| POST   | `/api/programs/{nome}/sync`          | força a resincronização agora                      |
+| GET    | `/api/programs/{nome}/notes`         | lê as notas do projeto                              |
+| PUT    | `/api/programs/{nome}/notes`         | grava as notas (`{"notes":"..."}`)                  |
+
+```bash
+curl -s -H "$H" localhost:7878/api/programs/acme/summary | jq
+curl -s -H "$H" -XPUT localhost:7878/api/programs/acme/notes \
+  -d '{"notes":"alvo principal: acme.com\ncontato: security@acme.com"}'
+```
+
+No dashboard: aba **Projetos** — escolha o programa, veja o resumo, edite as
+notas e sincronize manualmente quando quiser (o hub já faz isso sozinho depois
+de cada job, mas o botão força na hora). `notes.md` é o único arquivo da pasta
+que você edita; os outros são sempre regenerados a partir do que está no
+`store` — não edite `summary.json`/`report.md`/`assets.json` à mão, a próxima
+sincronização sobrescreve.
+
+---
+
 ## Relatório para bug bounty
 
 O hub monta um relatório pronto pra submeter a partir dos findings guardados.
@@ -726,6 +769,7 @@ internal/store/             interface Store; FileStore (JSON-lines) + sqlite.go 
 internal/registry/          carrega tools/<nome>/tool.json
 internal/pipeline/          carrega pipelines/<nome>.json
 internal/scope/             carrega programs/<nome>.json + match de escopo
+internal/project/           pasta física por programa (data/projects/<nome>/): notas + snapshot sincronizado
 internal/wordlist/          indexa wordlists/ + um checkout do SecLists
 internal/monitor/           watches: pipeline agendada + diff de findings + webhook
 internal/runner/            spawn do processo + parser NDJSON
@@ -775,6 +819,7 @@ wordlists/                  wordlists embutidas (+ SecLists via seclists_dir)
 web/                        dashboard servido em /
 docs/TOOL_CONTRACT.md       contrato de ferramenta (completo)
 data/                       runtime: jobs/findings/assets/events/pipeline_runs + token — no .gitignore
+data/projects/<nome>/       pasta por programa: notes.md (suas notas), summary.json, report.md, assets.json
 ```
 
 Cada ferramenta em Go é um **módulo próprio** (`go.mod` na pasta): `go build ./...`

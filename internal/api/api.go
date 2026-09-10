@@ -14,6 +14,7 @@ import (
 	"reconhub/internal/engine"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
+	"reconhub/internal/project"
 	"reconhub/internal/registry"
 	"reconhub/internal/report"
 	"reconhub/internal/scope"
@@ -34,6 +35,7 @@ type Server struct {
 	Token     auth.Token
 	WebDir    string
 	DocsFile  string
+	DataDir   string // root of ./data — projects/<program>/ lives under here
 }
 
 // resolveProgram looks up a program by name. An empty name is fine (nil, nil).
@@ -89,6 +91,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/programs", s.auth(s.createProgram))
 	mux.HandleFunc("GET /api/programs/{name}", s.auth(s.getProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
+
+	// projeto: pasta física em data/projects/<name>/ — notas + snapshot sincronizado
+	mux.HandleFunc("GET /api/programs/{name}/summary", s.auth(s.projectSummary))
+	mux.HandleFunc("POST /api/programs/{name}/sync", s.auth(s.syncProject))
+	mux.HandleFunc("GET /api/programs/{name}/notes", s.auth(s.getNotes))
+	mux.HandleFunc("PUT /api/programs/{name}/notes", s.auth(s.putNotes))
 
 	mux.HandleFunc("GET /api/watches", s.auth(s.listWatches))
 	mux.HandleFunc("POST /api/watches", s.auth(s.createWatch))
@@ -463,7 +471,66 @@ func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	saved, _ := s.Programs.Get(strings.ToLower(strings.TrimSpace(p.Name)))
+	_ = project.Init(s.DataDir, saved.Name) // pasta do projeto — best-effort, um sync futuro a recria de qualquer jeito
 	writeJSON(w, http.StatusCreated, saved)
+}
+
+// --- projeto (pasta física em data/projects/<name>/) ---
+
+// syncProject rebuilds the project's snapshot (summary, report, assets) from
+// current store state and returns the fresh summary.
+func (s *Server) syncProject(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	sum, err := project.SyncFromStore(s.DataDir, name, s.Programs, s.Store)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, sum)
+}
+
+// projectSummary is a sync + read in one call — it always returns fresh
+// counts, so there's no separate "stale" state for the caller to worry about.
+func (s *Server) projectSummary(w http.ResponseWriter, r *http.Request) {
+	s.syncProject(w, r)
+}
+
+func (s *Server) getNotes(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	txt, err := project.ReadNotes(s.DataDir, name)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"program": name, "notes": txt})
+}
+
+func (s *Server) putNotes(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	var body struct {
+		Notes string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.WriteNotes(s.DataDir, name, body.Notes); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // exportProgram bundles everything recorded under a program into one JSON.

@@ -36,6 +36,12 @@ type Engine struct {
 	// before the job runs. Optional.
 	Wordlists wordlistResolver
 
+	// OnJobDone, when set, is called (in its own goroutine) with the final
+	// state of every job that finishes, queued or synchronous (pipeline
+	// steps included). Used to keep a job's project folder in sync without
+	// coupling the engine to the project package.
+	OnJobDone func(job *store.Job)
+
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
 }
@@ -199,6 +205,11 @@ func (e *Engine) finish(job *store.Job, status string, ec *int, msg string) {
 		detail += ": " + msg
 	}
 	e.emit(job.ID, store.Event{Type: "done", Level: "info", Msg: detail})
+
+	if e.OnJobDone != nil {
+		jc := *job
+		go e.OnJobDone(&jc)
+	}
 }
 
 func (e *Engine) emit(jobID string, ev store.Event) {

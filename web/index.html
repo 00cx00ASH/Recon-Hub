@@ -229,6 +229,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       <button role="tab" aria-selected="false" data-view="monitor">Monitor</button>
       <button role="tab" aria-selected="false" data-view="findings">Findings</button>
       <button role="tab" aria-selected="false" data-view="assets">Assets</button>
+      <button role="tab" aria-selected="false" data-view="projects">Projetos</button>
       <button role="tab" aria-selected="false" data-view="docs">Docs</button>
     </div>
 
@@ -382,6 +383,35 @@ docker compose exec reconhub cat /app/data/token</pre>
         <thead><tr><th>tipo</th><th>valor</th><th>ferramenta</th><th>programa</th><th>quando</th></tr></thead>
         <tbody id="assetsRows"></tbody>
       </table></div>
+    </div>
+
+    <div class="view" id="view-projects">
+      <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.8rem;flex-wrap:wrap">
+        <label for="projSelect">projeto</label>
+        <select id="projSelect" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem"><option value="">— escolha um projeto —</option></select>
+        <button class="cancel" id="projSync" style="color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)">↻ sincronizar</button>
+        <span style="flex:1"></span>
+        <a id="projReportMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
+        <a id="projReportHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
+        <a id="projExport" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar tudo .json</a>
+      </div>
+
+      <div id="projNoSel" class="muted">Escolha um projeto acima — ou crie um novo em <b>Job atual → ＋ novo projeto</b>. Cada projeto vira uma pasta em <code>data/projects/&lt;nome&gt;/</code> com notas, snapshot e relatório.</div>
+
+      <div id="projBox" hidden>
+        <div class="plrun" style="max-width:none;margin-bottom:1.2rem">
+          <h2 style="margin-top:0">Resumo</h2>
+          <div id="projStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem"></div>
+          <p class="help" id="projSynced" style="margin-top:.7rem"></p>
+        </div>
+
+        <h2>Notas</h2>
+        <textarea id="projNotes" rows="10" spellcheck="false" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.6rem;resize:vertical"></textarea>
+        <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem">
+          <button class="run" id="projNotesSave" style="width:auto;padding:.5rem 1rem">Salvar notas</button>
+          <span class="help" id="projNotesMsg"></span>
+        </div>
+      </div>
     </div>
 
     <div class="view" id="view-docs">
@@ -766,7 +796,7 @@ async function loadPrograms(){
   let programs = [];
   try { ({ programs } = await api('/programs')); } catch {}
   PROGRAMS = programs || [];
-  for (const sel of ['#jobProgram', '#plProgram', '#findProgram', '#assetProgram']) {
+  for (const sel of ['#jobProgram', '#plProgram', '#findProgram', '#assetProgram', '#projSelect']) {
     const s = $(sel), keep = s.firstElementChild, cur = s.value;
     s.innerHTML = ''; s.append(keep);
     for (const p of programs || []) s.append(el('option', { value: p.name, textContent: p.name }));
@@ -798,6 +828,87 @@ function exportURL(program){
   const t = tokenInput.value.trim();
   return '/api/programs/' + encodeURIComponent(program) + '/export' + (t ? '?access_token=' + encodeURIComponent(t) : '');
 }
+function tokQS(){
+  const t = tokenInput.value.trim();
+  return t ? '?access_token=' + encodeURIComponent(t) : '';
+}
+
+/* ---------- projeto (pasta física + notas) ---------- */
+let currentProject = null;
+
+function loadProjectsTab(){
+  const v = $('#projSelect').value;
+  if (v) renderProject(v);
+  else { currentProject = null; $('#projBox').hidden = true; $('#projNoSel').hidden = false; }
+}
+
+function projStatBlock(label, obj){
+  const rows = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]);
+  const box = el('div', { style: 'border:1px solid var(--border);border-radius:3px;padding:.5rem .6rem' });
+  box.append(el('div', { textContent: label, style: 'color:var(--faint);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem' }));
+  if (!rows.length) box.append(el('div', { textContent: '—', style: 'color:var(--faint)' }));
+  for (const [k, v] of rows) box.append(el('div', { textContent: `${k}: ${v}`, style: "font-family:'IBM Plex Mono',monospace;font-size:12px" }));
+  return box;
+}
+
+function renderProjectSummary(sum){
+  const box = $('#projStats');
+  box.innerHTML = '';
+  box.append(projStatBlock('jobs (' + sum.jobs + ')', sum.jobs_by_status));
+  box.append(projStatBlock('findings (' + sum.findings + ')', sum.findings_by_severity));
+  box.append(projStatBlock('assets (' + sum.assets + ')', sum.assets_by_kind));
+  box.append(projStatBlock('pipeline runs', { total: sum.pipeline_runs }));
+  $('#projSynced').textContent = 'sincronizado ' + fmtTime(sum.synced_at) +
+    (sum.last_activity ? ' · última atividade ' + fmtTime(sum.last_activity) : '');
+}
+
+async function renderProject(name){
+  currentProject = name;
+  $('#projNoSel').hidden = true;
+  $('#projBox').hidden = false;
+
+  $('#projReportMd').href = '/api/programs/' + encodeURIComponent(name) + '/report.md' + tokQS();
+  $('#projReportHtml').href = '/api/programs/' + encodeURIComponent(name) + '/report.html' + tokQS();
+  $('#projExport').href = exportURL(name);
+
+  try {
+    renderProjectSummary(await api('/programs/' + encodeURIComponent(name) + '/summary'));
+  } catch (e) {
+    $('#projStats').innerHTML = '';
+    $('#projSynced').textContent = 'erro: ' + e.message;
+  }
+  try {
+    const { notes } = await api('/programs/' + encodeURIComponent(name) + '/notes');
+    $('#projNotes').value = notes || '';
+  } catch { $('#projNotes').value = ''; }
+  $('#projNotesMsg').textContent = '';
+}
+
+$('#projSelect').addEventListener('change', () => {
+  const v = $('#projSelect').value;
+  if (v) renderProject(v);
+  else { currentProject = null; $('#projBox').hidden = true; $('#projNoSel').hidden = false; }
+});
+
+$('#projSync').addEventListener('click', async () => {
+  if (!currentProject) return;
+  $('#projSync').disabled = true;
+  try { renderProjectSummary(await api('/programs/' + encodeURIComponent(currentProject) + '/sync', { method: 'POST' })); }
+  catch (e) { alert('falha ao sincronizar: ' + e.message); }
+  finally { $('#projSync').disabled = false; }
+});
+
+$('#projNotesSave').addEventListener('click', async () => {
+  if (!currentProject) return;
+  $('#projNotesSave').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject) + '/notes', {
+      method: 'PUT', body: JSON.stringify({ notes: $('#projNotes').value }),
+    });
+    $('#projNotesMsg').textContent = 'salvo ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) { $('#projNotesMsg').textContent = 'erro: ' + e.message; }
+  finally { $('#projNotesSave').disabled = false; }
+});
 
 /* ---------- findings tab ---------- */
 function reportURL(ext, dl){
@@ -1147,6 +1258,7 @@ function selectTab(view){
   if (view === 'monitor') loadWatches();
   if (view === 'findings') loadFindings();
   if (view === 'assets') loadAssets();
+  if (view === 'projects') loadProjectsTab();
   if (view === 'docs') loadDocs();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.view)));
