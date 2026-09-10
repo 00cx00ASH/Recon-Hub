@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,6 +55,31 @@ func (s *Server) resolveProgram(name string) (*scope.Program, error) {
 		return nil, errUnknownProgram
 	}
 	return &p, nil
+}
+
+// scopeExempt lists tools whose "target" is never the program's own domain —
+// checking it against in_scope/out_of_scope would be meaningless (and would
+// wrongly block legitimate runs).
+var scopeExempt = map[string]bool{
+	"int-github-audit":   true, // target is an org/repo or username
+	"scan-postman-net":   true, // target is a Postman workspace/collection ID
+	"scan-postman-audit": true, // target is a Postman workspace/collection ID
+}
+
+// inScope reports whether target is allowed to run under prog for the given
+// tool. A nil program (no program selected) or an exempt tool always passes.
+// A target that doesn't look like a hostname (no dot — e.g. a pasted blob, a
+// search query, a file path used by "paste"/"file" modes) also passes: scope
+// is defined in terms of hosts, so it has nothing to say about those.
+func inScope(tool string, prog *scope.Program, target string) bool {
+	if prog == nil || scopeExempt[tool] {
+		return true
+	}
+	h := scope.Host(target)
+	if !strings.Contains(h, ".") {
+		return true
+	}
+	return prog.Contains(target)
 }
 
 var (
@@ -220,6 +246,10 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 	name := ""
 	if prog != nil {
 		name = prog.Name
+		if !inScope(req.Tool, prog, req.Target) {
+			writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q", req.Target, name))
+			return
+		}
 	}
 	job, err := s.Engine.Submit(req.Tool, req.Target, name, req.Params)
 	if err != nil {
@@ -519,8 +549,13 @@ func (s *Server) createWatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wt.Program != "" {
-		if _, err := s.resolveProgram(wt.Program); err != nil {
+		prog, err := s.resolveProgram(wt.Program)
+		if err != nil {
 			writeErr(w, http.StatusBadRequest, "programa desconhecido: "+wt.Program)
+			return
+		}
+		if pl, ok := s.Pipelines.Get(wt.Pipeline); ok && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, wt.Target) {
+			writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q — um watch recorrente fora do escopo ficaria escaneando indevidamente", wt.Target, prog.Name))
 			return
 		}
 	}
@@ -791,6 +826,10 @@ func (s *Server) createPipelineRun(w http.ResponseWriter, r *http.Request) {
 	prog, err := s.resolveProgram(req.Program)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if prog != nil && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, req.Target) {
+		writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q", req.Target, prog.Name))
 		return
 	}
 	run, err := s.Engine.SubmitPipeline(pl, req.Target, prog)
