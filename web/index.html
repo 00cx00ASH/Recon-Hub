@@ -89,6 +89,19 @@
   .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
   .wrapx{overflow-x:auto}
 
+  .chipwrap{display:flex;flex-wrap:wrap;gap:.35rem;margin:.4rem 0;align-items:center}
+  .chip{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem}
+  .suggcard{border:1px solid var(--border);border-radius:4px;padding:.6rem .7rem;margin-bottom:.5rem;display:flex;flex-direction:column;gap:.3rem}
+  .suggcard .top{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .suggcard .tool{font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .suggcard .reason{color:var(--dim);font-size:12px}
+  .suggcard .ex{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint)}
+  .suggcard button{align-self:flex-start;font-family:"IBM Plex Mono",monospace;font-size:11px;background:none;color:var(--accent-2);border:1px solid color-mix(in srgb,var(--accent-2) 45%,transparent);border-radius:3px;padding:.2rem .6rem;cursor:pointer}
+  .grouprow{cursor:pointer}
+  .grouprow:hover{background:var(--surface)}
+  .anom{color:var(--crit)}
+  #findFilterChip{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);border-radius:999px;padding:.2rem .6rem}
+
   .plrun{max-width:520px;border:1px solid var(--border);border-radius:4px;padding:1rem;background:var(--surface)}
   .plsteps{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim)}
   .plsteps .s{border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem}
@@ -306,7 +319,7 @@ docker compose exec reconhub cat /app/data/token</pre>
     <div class="view" id="view-monitor">
       <p class="muted" style="margin-top:0">Um <b>watch</b> é uma pipeline agendada. Quando termina, o hub compara os findings com a run anterior do mesmo watch e, se houver novos, faz um <code>POST</code> no webhook (Discord).</p>
       <div class="wrapx"><table>
-        <thead><tr><th>watch</th><th>pipeline → alvo</th><th>intervalo</th><th>estado</th><th>última run</th><th>novos</th><th></th></tr></thead>
+        <thead><tr><th>watch</th><th>pipeline → alvo</th><th>intervalo</th><th>canal</th><th>estado</th><th>última run</th><th>novos</th><th>histórico</th><th></th></tr></thead>
         <tbody id="watchRows"></tbody>
       </table></div>
 
@@ -339,6 +352,15 @@ docker compose exec reconhub cat /app/data/token</pre>
             <input id="nwWebhook" placeholder="https://discord.com/api/webhooks/…" spellcheck="false" autocomplete="off">
           </div>
           <div class="field">
+            <label for="nwWebhookType">canal do webhook</label>
+            <select id="nwWebhookType">
+              <option value="">Discord (padrão)</option>
+              <option value="slack">Slack</option>
+              <option value="telegram">Telegram — embuta o chat_id na própria URL</option>
+              <option value="generic">Genérico (JSON simples)</option>
+            </select>
+          </div>
+          <div class="field">
             <label><input type="checkbox" id="nwEnabled" checked> habilitado</label>
           </div>
           <button class="run" id="nwSave">Criar watch</button>
@@ -358,11 +380,13 @@ docker compose exec reconhub cat /app/data/token</pre>
         <label for="findProgram">programa</label>
         <select id="findProgram" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem"><option value="">todos</option></select>
         <a id="findExport" hidden style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar projeto</a>
+        <span id="findFilterChip" hidden title="clique pra limpar o filtro"></span>
         <span style="flex:1"></span>
         <label style="display:flex;align-items:center;gap:.3rem"><input type="checkbox" id="repInfo"> incluir info</label>
         <a id="repMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
         <a id="repHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
       </div>
+      <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
         <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th>triagem</th></tr></thead>
         <tbody id="findingsRows"></tbody>
@@ -405,11 +429,37 @@ docker compose exec reconhub cat /app/data/token</pre>
           <p class="help" id="projSynced" style="margin-top:.7rem"></p>
         </div>
 
+        <div class="plrun" style="max-width:none;margin-bottom:1.2rem">
+          <h2 style="margin-top:0">Copiloto de cobertura</h2>
+          <p class="help" style="margin:0 0 .6rem">O que já rodou nesse programa e o que ainda não — a partir do que foi descoberto até agora.</p>
+          <div class="chipwrap" id="covRan"></div>
+          <div id="covSugg"></div>
+        </div>
+
         <h2>Notas</h2>
         <textarea id="projNotes" rows="10" spellcheck="false" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.6rem;resize:vertical"></textarea>
         <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem">
           <button class="run" id="projNotesSave" style="width:auto;padding:.5rem 1rem">Salvar notas</button>
           <span class="help" id="projNotesMsg"></span>
+        </div>
+
+        <h2 style="margin-top:1.4rem">Autenticação compartilhada</h2>
+        <p class="help" style="margin:0 0 .6rem">Injetada como <code>RECONHUB_AUTH_*</code> só nas requisições cujo host bate com o alvo do job — nunca vaza pra terceiros (buckets, Firebase, APIs de IA, etc). Fica em <code>data/projects/&lt;nome&gt;/auth.json</code>, fora do git.</p>
+        <div class="field">
+          <label for="authCookie">Cookie</label>
+          <input id="authCookie" placeholder="session=...; outro=..." spellcheck="false" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="authBearer">Bearer token</label>
+          <input id="authBearer" placeholder="eyJhbGciOi..." spellcheck="false" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="authHeaders">Headers extras (um por linha, "Nome: valor")</label>
+          <textarea id="authHeaders" rows="3" spellcheck="false" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical" placeholder="X-Api-Key: abc123"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:.6rem">
+          <button class="run" id="authSave" style="width:auto;padding:.5rem 1rem">Salvar auth</button>
+          <span class="help" id="authMsg"></span>
         </div>
       </div>
     </div>
@@ -862,6 +912,104 @@ function renderProjectSummary(sum){
     (sum.last_activity ? ' · última atividade ' + fmtTime(sum.last_activity) : '');
 }
 
+// copiloto de cobertura: o que já rodou nesse programa vs. o que dá pra
+// rodar agora, dado o que já foi descoberto (ver internal/copilot)
+async function renderCoverage(name){
+  const ran = $('#covRan'), sugg = $('#covSugg');
+  ran.innerHTML = '';
+  sugg.innerHTML = '<p class="muted" style="padding:.3rem 0">carregando…</p>';
+  let cov;
+  try {
+    cov = await api('/programs/' + encodeURIComponent(name) + '/coverage');
+  } catch (e) {
+    sugg.innerHTML = '';
+    sugg.append(el('p', { className:'muted', style:'padding:.3rem 0', textContent: 'erro: ' + e.message }));
+    return;
+  }
+
+  if ((cov.ran || []).length) {
+    ran.append(el('span', { style:'font-size:11px;color:var(--faint);margin-right:.3rem', textContent:'já rodou:' }));
+    for (const t of cov.ran) ran.append(el('span', { className:'chip', textContent: t }));
+  } else {
+    ran.append(el('span', { className:'muted', style:'padding:0', textContent:'nada rodado ainda nesse programa' }));
+  }
+
+  sugg.innerHTML = '';
+  const missing = cov.missing || [];
+  if (!missing.length) {
+    sugg.append(el('p', {
+      className:'muted', style:'padding:.3rem 0',
+      textContent:'sem sugestões — ou já rodou tudo aplicável, ou ainda falta descobrir mais assets pra destravar o resto.',
+    }));
+    return;
+  }
+  for (const s of missing) {
+    const card = el('div', { className:'suggcard' });
+    const top = el('div', { className:'top' });
+    top.append(el('span', { className:'tool', textContent: s.tool }));
+    top.append(el('span', { className:'chip', textContent: s.kind }));
+    card.append(top);
+    card.append(el('div', { className:'reason', textContent: s.reason }));
+    if (s.examples && s.examples.length) card.append(el('div', { className:'ex', textContent: 'ex: ' + s.examples.join(', ') }));
+    const btn = el('button', { textContent:'▶ usar nesse job' });
+    btn.addEventListener('click', () => {
+      $('#tool').value = s.tool;
+      renderToolMeta();
+      $('#jobProgram').value = name;
+      if (s.examples && s.examples.length) $('#target').value = s.examples[0];
+      $('#target').focus();
+    });
+    card.append(btn);
+    sugg.append(card);
+  }
+}
+
+/* ---------- auth compartilhada por programa ---------- */
+function parseHeaderLines(s){
+  const out = {};
+  for (const line of (s || '').split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const i = t.indexOf(':');
+    if (i < 0) continue;
+    const k = t.slice(0, i).trim(), v = t.slice(i + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
+function headerLinesFromObj(obj){
+  return Object.entries(obj || {}).map(([k, v]) => k + ': ' + v).join('\n');
+}
+
+async function loadAuthForm(name){
+  $('#authMsg').textContent = '';
+  try {
+    const a = await api('/programs/' + encodeURIComponent(name) + '/auth');
+    $('#authCookie').value = a.cookie || '';
+    $('#authBearer').value = a.bearer || '';
+    $('#authHeaders').value = headerLinesFromObj(a.headers);
+  } catch {
+    $('#authCookie').value = ''; $('#authBearer').value = ''; $('#authHeaders').value = '';
+  }
+}
+
+$('#authSave').addEventListener('click', async () => {
+  if (!currentProject) return;
+  $('#authSave').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject) + '/auth', {
+      method: 'PUT',
+      body: JSON.stringify({
+        cookie: $('#authCookie').value.trim(),
+        bearer: $('#authBearer').value.trim(),
+        headers: parseHeaderLines($('#authHeaders').value),
+      }),
+    });
+    $('#authMsg').textContent = 'salvo ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) { $('#authMsg').textContent = 'erro: ' + e.message; }
+  finally { $('#authSave').disabled = false; }
+});
+
 async function renderProject(name){
   currentProject = name;
   $('#projNoSel').hidden = true;
@@ -882,6 +1030,8 @@ async function renderProject(name){
     $('#projNotes').value = notes || '';
   } catch { $('#projNotes').value = ''; }
   $('#projNotesMsg').textContent = '';
+  renderCoverage(name);
+  loadAuthForm(name);
 }
 
 $('#projSelect').addEventListener('change', () => {
@@ -945,13 +1095,80 @@ async function triageFinding(id, verdict, btn){
   } catch (e) { alert('falha na triagem: ' + e.message); btn.disabled = false; }
 }
 
-async function loadFindings(){
-  syncReportLinks();
-  try {
-    const prog = $('#findProgram').value;
-    const { findings } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
-    const tb = $('#findingsRows'); tb.innerHTML = '';
-    for (const f of findings || []) {
+// hostOf espelha internal/intel/grouping.go:hostOf — precisa bater com o
+// "host" que o servidor já usou pra formar os grupos, senão o clique num
+// grupo não encontraria os findings dele na tabela.
+function hostOf(asset){
+  const a = (asset || '').trim();
+  if (!a) return '';
+  try { const u = new URL(a); if (u.host) return u.host.toLowerCase(); } catch {}
+  let h = a.toLowerCase();
+  const si = h.indexOf('/'); if (si >= 0) h = h.slice(0, si);
+  const ci = h.lastIndexOf(':');
+  if (ci >= 0 && !h.slice(ci + 1).includes(']')) h = h.slice(0, ci);
+  return h;
+}
+
+let FINDINGS_ALL = [];
+let FINDINGS_FILTER = null; // { tool, type, host } | null
+
+function matchesFindFilter(f){
+  if (!FINDINGS_FILTER) return true;
+  return f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host;
+}
+
+function renderGroups(groups){
+  const box = $('#groupsBox');
+  box.innerHTML = '';
+  if (!groups || !groups.length) return;
+  const det = el('details');
+  det.append(el('summary', {
+    style: "cursor:pointer;font-size:12px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace",
+    textContent: `▤ grupos similares (${groups.length}) — mesma ferramenta/tipo/host, clique pra filtrar`,
+  }));
+  const wrap = el('div', { className:'wrapx', style:'margin-top:.5rem' });
+  const table = el('table');
+  table.append(el('thead', {}, el('tr', {}, [
+    el('th', { textContent:'sev' }), el('th', { textContent:'ferramenta' }), el('th', { textContent:'tipo' }),
+    el('th', { textContent:'host' }), el('th', { textContent:'qtd' }), el('th', { textContent:'títulos' }),
+  ])));
+  const tbody = el('tbody');
+  for (const g of groups) {
+    const tr = el('tr', { className:'grouprow' });
+    tr.append(
+      el('td', {}, el('span', { className: 'sev ' + g.severity, textContent: g.severity })),
+      el('td', { className:'mono', textContent: g.tool }),
+      el('td', { className:'mono', textContent: g.type || '—' }),
+      el('td', { className:'mono', textContent: g.host || '—' }),
+      el('td', { className:'mono', textContent: g.total }),
+      el('td', { textContent: (g.titles || []).join(', ') }),
+    );
+    tr.addEventListener('click', () => {
+      FINDINGS_FILTER = { tool: g.tool, type: g.type, host: g.host };
+      renderFindingsTable();
+    });
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  wrap.append(table);
+  det.append(wrap);
+  box.append(det);
+}
+
+$('#findFilterChip').addEventListener('click', () => { FINDINGS_FILTER = null; renderFindingsTable(); });
+
+function renderFindingsTable(){
+  const chip = $('#findFilterChip');
+  if (FINDINGS_FILTER) {
+    chip.hidden = false;
+    chip.textContent = `filtrado: ${FINDINGS_FILTER.tool} · ${FINDINGS_FILTER.type} · ${FINDINGS_FILTER.host}  ✕`;
+  } else {
+    chip.hidden = true;
+  }
+
+  const tb = $('#findingsRows'); tb.innerHTML = '';
+  const list = FINDINGS_ALL.filter(matchesFindFilter);
+  for (const f of list) {
       const tr = el('tr');
       const prioCell = el('span', {
         className: 'sev ' + scoreBucket(f.score),
@@ -981,9 +1198,23 @@ async function loadFindings(){
       );
       tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
       tb.append(tr);
-    }
-    if (!(findings||[]).length) tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'nenhum finding ainda' })));
-  } catch {}
+  }
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
+}
+
+async function loadFindings(){
+  syncReportLinks();
+  FINDINGS_FILTER = null;
+  try {
+    const prog = $('#findProgram').value;
+    const { findings, groups } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
+    FINDINGS_ALL = findings || [];
+    renderGroups(groups);
+    renderFindingsTable();
+  } catch {
+    FINDINGS_ALL = [];
+    renderFindingsTable();
+  }
 }
 $('#findProgram').addEventListener('change', () => { syncExport('#findProgram', '#findExport'); loadFindings(); });
 
@@ -1199,6 +1430,23 @@ async function loadPipelineRuns(){
 /* ---------- monitor (watches) ---------- */
 let watchSel = null;
 
+// watchAnomaly espelha internal/monitor/anomaly.go:detectAnomaly — history
+// já vem com a run mais recente como último elemento (ver Watch.History no
+// backend), então a amostra "anterior" é tudo antes dela.
+function watchAnomaly(history){
+  const h = history || [];
+  if (h.length < 4) return { detected:false }; // precisa de >=3 runs anteriores + a atual
+  const cur = h[h.length - 1].total;
+  const prior = h.slice(0, -1).map(x => x.total);
+  const n = prior.length;
+  const mean = prior.reduce((a, b) => a + b, 0) / n;
+  const variance = prior.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n;
+  const stddev = Math.sqrt(variance);
+  const floor = stddev < 1 ? 1 : stddev;
+  const z = Math.abs(cur - mean) / floor;
+  return { detected: z >= 2.0, mean, stddev, cur };
+}
+
 async function loadWatches(){
   // popula os selects do formulário
   const psel = $('#nwPipeline'); psel.innerHTML = '';
@@ -1210,17 +1458,25 @@ async function loadWatches(){
   const tb = $('#watchRows'); tb.innerHTML = '';
   let watches = [];
   try { watches = (await api('/watches')).watches || []; }
-  catch (e) { tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'erro: ' + e.message }))); return; }
-  if (!watches.length) { tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'nenhum watch. Crie um abaixo.' }))); return; }
+  catch (e) { tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'erro: ' + e.message }))); return; }
+  if (!watches.length) { tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'nenhum watch. Crie um abaixo.' }))); return; }
   for (const w of watches) {
     const tr = el('tr');
+    const an = watchAnomaly(w.history);
+    const histText = (w.history || []).map(h => h.total).join(',');
     tr.append(
       el('td', { className:'mono', textContent: w.name }),
       el('td', { className:'mono', textContent: w.pipeline + ' → ' + w.target + (w.program ? '  ·  ' + w.program : '') }),
       el('td', { className:'mono', textContent: w.every }),
+      el('td', { className:'mono', style:'color:var(--faint)', textContent: w.webhook_type || 'discord' }),
       el('td', {}, el('span', { className:'pill ' + (w.enabled ? 'succeeded' : 'canceled'), textContent: w.enabled ? 'on' : 'off' })),
       el('td', { className:'mono', textContent: w.last_run_at ? fmtTime(w.last_run_at) : '—' }),
-      el('td', { className:'mono', textContent: (w.last_new_findings ?? 0) })
+      el('td', { className:'mono', textContent: (w.last_new_findings ?? 0) }),
+      el('td', {
+        className: 'mono' + (an.detected ? ' anom' : ''),
+        textContent: histText || '—',
+        title: an.detected ? `⚠ anômalo — média ${an.mean.toFixed(1)} ±${an.stddev.toFixed(1)}, agora ${an.cur}` : '',
+      }),
     );
     const act = el('td');
     const runBtn = el('button', { className:'jump', textContent:'rodar agora' });
@@ -1269,6 +1525,7 @@ $('#nwSave').addEventListener('click', async () => {
     program: $('#nwProgram').value,
     every: $('#nwEvery').value.trim() || '24h',
     webhook: $('#nwWebhook').value.trim(),
+    webhook_type: $('#nwWebhookType').value,
     enabled: $('#nwEnabled').checked,
   };
   if (!body.name || !body.pipeline || !body.target) { $('#nwName').focus(); return; }
@@ -1276,6 +1533,7 @@ $('#nwSave').addEventListener('click', async () => {
   try {
     await api('/watches', { method:'POST', body: JSON.stringify(body) });
     $('#nwName').value = $('#nwTarget').value = $('#nwWebhook').value = '';
+    $('#nwWebhookType').value = '';
     $('#newWatch').open = false;
     await loadWatches();
   } catch (e) { alert('falha ao criar watch: ' + e.message); }
