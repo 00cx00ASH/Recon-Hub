@@ -36,6 +36,22 @@
   header .spacer{flex:1}
   header input{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.35rem .5rem;width:230px}
 
+  .searchbox{position:relative;width:min(360px,32vw)}
+  .searchbox input{width:100%}
+  .searchdrop{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:60vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:50}
+  .shit{display:flex;flex-direction:column;gap:.15rem;padding:.55rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)}
+  .shit:last-child{border-bottom:0}
+  .shit:hover{background:var(--surface-2)}
+  .shit .top{display:flex;align-items:center;gap:.4rem;font-size:12.5px}
+  .shit .kind{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:.05rem .4rem;border-radius:999px;border:1px solid var(--border-strong);color:var(--faint);flex:none}
+  .shit .kind.finding{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .shit .kind.asset{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .shit .kind.note{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+  .shit .title{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .shit .detail{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .searchdrop .empty,.searchdrop .hint{padding:.7rem;font-size:12px;color:var(--faint)}
+  @media (max-width:820px){ .searchbox{width:100%;order:3} header{flex-wrap:wrap} }
+
   main{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 49px)}
   @media (max-width:820px){ main{grid-template-columns:1fr} }
 
@@ -157,6 +173,10 @@
 <header>
   <span class="dot" id="health" title="status da API"></span>
   <span class="brand"><b>recon</b>-hub</span>
+  <div class="searchbox">
+    <input id="globalSearch" type="text" placeholder="🔍 buscar em findings, assets e notas… (⌘K)" autocomplete="off" spellcheck="false">
+    <div class="searchdrop" id="searchDrop" hidden></div>
+  </div>
   <span class="spacer"></span>
   <input id="token" type="password" placeholder="cole o bearer token aqui" autocomplete="off" spellcheck="false">
 </header>
@@ -1647,6 +1667,84 @@ $('#nwSave').addEventListener('click', async () => {
     await loadWatches();
   } catch (e) { alert('falha ao criar watch: ' + e.message); }
   finally { $('#nwSave').disabled = false; }
+});
+
+/* ---------- busca global ---------- */
+let searchDebounce = null;
+let searchAbort = null;
+
+function closeSearchDrop(){ $('#searchDrop').hidden = true; $('#searchDrop').innerHTML = ''; }
+
+function kindLabel(k){ return { finding:'finding', asset:'asset', note:'nota' }[k] || k; }
+
+function renderSearchResults(results, query){
+  const drop = $('#searchDrop');
+  drop.innerHTML = '';
+  if (!results.length) {
+    drop.append(el('div', { className:'empty', textContent: `nada encontrado pra "${query}"` }));
+  } else {
+    for (const hit of results) {
+      const row = el('div', { className:'shit' });
+      const top = el('div', { className:'top' });
+      top.append(el('span', { className:'kind ' + hit.kind, textContent: kindLabel(hit.kind) }));
+      top.append(el('span', { className:'title', textContent: hit.title }));
+      row.append(top);
+      if (hit.detail) row.append(el('div', { className:'detail', textContent: hit.detail }));
+      const bits = [];
+      if (hit.program) bits.push(hit.program);
+      if (hit.tool) bits.push(hit.tool);
+      if (bits.length) row.append(el('div', { className:'detail', style:'color:var(--dim)', textContent: bits.join(' · ') }));
+      row.addEventListener('click', () => {
+        closeSearchDrop();
+        $('#globalSearch').value = '';
+        if ((hit.kind === 'finding' || hit.kind === 'asset') && hit.job_id) {
+          selectTab('current');
+          attachJob(hit.job_id);
+        } else if (hit.kind === 'note' && hit.program) {
+          selectTab('projects');
+          $('#projSelect').value = hit.program;
+          renderProject(hit.program);
+        }
+      });
+      drop.append(row);
+    }
+  }
+  drop.hidden = false;
+}
+
+async function runSearch(q){
+  if (searchAbort) searchAbort.abort();
+  searchAbort = new AbortController();
+  try {
+    const r = await fetch('/api/search?q=' + encodeURIComponent(q), { headers: authHeaders(), signal: searchAbort.signal });
+    if (r.status === 401) { setAuthNeeded(true); return; }
+    const { results } = await r.json();
+    renderSearchResults(results || [], q);
+  } catch (e) {
+    if (e.name !== 'AbortError') { const drop = $('#searchDrop'); drop.innerHTML = ''; drop.append(el('div', { className:'empty', textContent:'erro: ' + e.message })); drop.hidden = false; }
+  }
+}
+
+$('#globalSearch').addEventListener('input', () => {
+  const q = $('#globalSearch').value.trim();
+  clearTimeout(searchDebounce);
+  if (q.length < 2) { closeSearchDrop(); return; }
+  const drop = $('#searchDrop');
+  drop.innerHTML = '';
+  drop.append(el('div', { className:'hint', textContent:'buscando…' }));
+  drop.hidden = false;
+  searchDebounce = setTimeout(() => runSearch(q), 250);
+});
+$('#globalSearch').addEventListener('keydown', e => { if (e.key === 'Escape') { closeSearchDrop(); e.target.blur(); } });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.searchbox')) closeSearchDrop();
+});
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    $('#globalSearch').focus();
+    $('#globalSearch').select();
+  }
 });
 
 /* ---------- tabs ---------- */

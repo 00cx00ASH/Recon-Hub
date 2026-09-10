@@ -14,6 +14,7 @@ import (
 	"reconhub/internal/engine"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
+	"reconhub/internal/project"
 	"reconhub/internal/registry"
 	"reconhub/internal/scope"
 	"reconhub/internal/store"
@@ -312,5 +313,56 @@ func TestUpdateAndDeleteProgram(t *testing.T) {
 	// delete de novo -> 404
 	if w := do(h, "DELETE", "/api/programs/acme", nil); w.Code != http.StatusNotFound {
 		t.Fatalf("2º delete: got %d, want 404", w.Code)
+	}
+}
+
+func TestSearch(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg, _ := registry.Load(t.TempDir())
+	eng := engine.New(st, reg, bus.New(), 2)
+	dataDir := t.TempDir()
+
+	progDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(progDir, "acme.json"), []byte(`{"in_scope":["*.acme.com"]}`), 0o644)
+	progs, _ := scope.Load(progDir)
+
+	h := (&Server{Store: st, Reg: reg, Engine: eng, Programs: progs, Token: auth.Token{Source: "disabled"}, DataDir: dataDir}).Handler()
+
+	_, _ = st.AddFinding(&store.Finding{
+		ID: "f1", JobID: "j1", Tool: "scan-cors", Program: "acme",
+		Type: "cors-wildcard", Title: "CORS liberado em api.acme.com", Asset: "api.acme.com",
+		Evidence: "Access-Control-Allow-Origin: *", Severity: "low", CreatedAt: time.Now().UTC(),
+	})
+	_, _ = st.AddAsset(&store.Asset{ID: "a1", JobID: "j1", Tool: "recon-crtsh", Program: "acme", Kind: "subdomain", Value: "staging.acme.com", CreatedAt: time.Now().UTC()})
+	_ = project.Init(dataDir, "acme")
+	_ = project.WriteNotes(dataDir, "acme", "lembrar de checar o painel de staging antes de reportar")
+
+	// acha o finding
+	w := do(h, "GET", "/api/search?q=cors", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"kind":"finding"`) {
+		t.Fatalf("busca por finding: %d %s", w.Code, w.Body.String())
+	}
+
+	// acha o asset (substring de "staging.acme.com", presente tanto no asset quanto na nota)
+	w = do(h, "GET", "/api/search?q=staging", nil)
+	body := w.Body.String()
+	if w.Code != http.StatusOK || !strings.Contains(body, `"kind":"asset"`) || !strings.Contains(body, `"kind":"note"`) {
+		t.Fatalf("busca por staging deveria achar asset E nota: %d %s", w.Code, body)
+	}
+
+	// query curta demais -> vazio, sem escanear nada
+	w = do(h, "GET", "/api/search?q=a", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"results":[]`) {
+		t.Fatalf("query curta deveria devolver vazio: %d %s", w.Code, w.Body.String())
+	}
+
+	// sem match nenhum
+	w = do(h, "GET", "/api/search?q=xyzxyznotfound", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"results":[]`) {
+		t.Fatalf("sem match deveria devolver vazio: %d %s", w.Code, w.Body.String())
 	}
 }

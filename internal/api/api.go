@@ -105,6 +105,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", s.auth(s.cancelJob))
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.authSSE(s.jobEvents))
 	mux.HandleFunc("GET /api/findings", s.auth(s.listFindings))
+	mux.HandleFunc("GET /api/search", s.auth(s.search))
 	mux.HandleFunc("POST /api/findings/{id}/triage", s.auth(s.triageFinding))
 	mux.HandleFunc("GET /api/findings/{id}/draft.md", s.authSSE(s.findingDraft)) // authSSE: baixável por link
 	mux.HandleFunc("GET /api/intel/findings", s.auth(s.intelFindings))
@@ -294,6 +295,105 @@ func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, http.StatusConflict, "job não está em execução")
+}
+
+// searchHit is one match from the global search bar — a finding, an asset,
+// or a hit inside a project's notes. Kind + the id/job_id it carries is
+// enough for the frontend to jump straight to the right tab and row.
+type searchHit struct {
+	Kind    string `json:"kind"` // finding | asset | note
+	Program string `json:"program,omitempty"`
+	Title   string `json:"title"`
+	Detail  string `json:"detail,omitempty"`
+	ID      string `json:"id,omitempty"`
+	JobID   string `json:"job_id,omitempty"`
+	Tool    string `json:"tool,omitempty"`
+}
+
+// search looks across findings, assets and project notes for a substring —
+// case-insensitive, no index, just a linear scan. That's the right trade
+// for what this hub actually holds (one operator's recon data, not a
+// multi-tenant SaaS): simple beats fast here, and it's still instant at
+// the sizes this ever reaches.
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 60
+	}
+	if len(q) < 2 {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []searchHit{}, "query": q})
+		return
+	}
+
+	hits := []searchHit{}
+	fs, _ := s.Store.ListFindings(store.FindingFilter{Limit: 1000000})
+	for _, f := range fs {
+		if len(hits) >= limit {
+			break
+		}
+		if strings.Contains(strings.ToLower(f.Title), q) || strings.Contains(strings.ToLower(f.Type), q) ||
+			strings.Contains(strings.ToLower(f.Asset), q) || strings.Contains(strings.ToLower(f.Evidence), q) {
+			hits = append(hits, searchHit{
+				Kind: "finding", Program: f.Program, Title: f.Title, Detail: f.Asset,
+				ID: f.ID, JobID: f.JobID, Tool: f.Tool,
+			})
+		}
+	}
+	as, _ := s.Store.ListAssets(store.AssetFilter{Limit: 1000000})
+	for _, a := range as {
+		if len(hits) >= limit {
+			break
+		}
+		if strings.Contains(strings.ToLower(a.Value), q) {
+			hits = append(hits, searchHit{
+				Kind: "asset", Program: a.Program, Title: a.Value, Detail: a.Kind,
+				JobID: a.JobID, Tool: a.Tool,
+			})
+		}
+	}
+	if s.Programs != nil {
+		for _, p := range s.Programs.List() {
+			if len(hits) >= limit {
+				break
+			}
+			notes, err := project.ReadNotes(s.DataDir, p.Name)
+			if err != nil || notes == "" {
+				continue
+			}
+			if low := strings.ToLower(notes); strings.Contains(low, q) {
+				hits = append(hits, searchHit{Kind: "note", Program: p.Name, Title: "notas de " + p.Name, Detail: snippetAround(notes, low, q)})
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": hits, "query": q})
+}
+
+// snippetAround pulls ~60 chars of context around the first match, so a
+// note hit shows *where*, not just *that* it matched. low is the
+// lowercased text (already computed by the caller, so the search doesn't
+// lowercase the whole note body twice).
+func snippetAround(text, low, q string) string {
+	i := strings.Index(low, q)
+	if i < 0 {
+		return ""
+	}
+	start := i - 30
+	if start < 0 {
+		start = 0
+	}
+	end := i + len(q) + 30
+	if end > len(text) {
+		end = len(text)
+	}
+	snippet := strings.TrimSpace(text[start:end])
+	if start > 0 {
+		snippet = "…" + snippet
+	}
+	if end < len(text) {
+		snippet += "…"
+	}
+	return snippet
 }
 
 func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
