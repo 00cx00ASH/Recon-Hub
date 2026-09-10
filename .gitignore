@@ -9,3 +9,33 @@ reconhub.db-wal
 *.log
 .DS_Store
 /watches/*.json
+
+# cada tools/<nome>/ é um módulo Go próprio — `go build ./...` sem -o ali
+# gera um binário com o nome da pasta; nunca deve ser versionado.
+tools/example-echo/example-echo
+tools/int-github-audit/int-github-audit
+tools/js-ai-key-hunter/js-ai-key-hunter
+tools/js-bucket-scanner/js-bucket-scanner
+tools/js-firebase-enum/js-firebase-enum
+tools/js-gtm-osint/js-gtm-osint
+tools/js-hunter/js-hunter
+tools/js-jwt-finder/js-jwt-finder
+tools/js-secret-hunter/js-secret-hunter
+tools/js-supabase-probe/js-supabase-probe
+tools/recon-crtsh/recon-crtsh
+tools/recon-infra-enum/recon-infra-enum
+tools/recon-passive-enum/recon-passive-enum
+tools/recon-web-enum/recon-web-enum
+tools/scan-actuator/scan-actuator
+tools/scan-broken-link-hijack/scan-broken-link-hijack
+tools/scan-cache-poisoning/scan-cache-poisoning
+tools/scan-cognito/scan-cognito
+tools/scan-cors/scan-cors
+tools/scan-dep-confusion/scan-dep-confusion
+tools/scan-fuzz/scan-fuzz
+tools/scan-graphql/scan-graphql
+tools/scan-mongodb/scan-mongodb
+tools/scan-open-redirect/scan-open-redirect
+tools/scan-postman-audit/scan-postman-audit
+tools/scan-postman-net/scan-postman-net
+tools/scan-subdomain-takeover/scan-subdomain-takeover
