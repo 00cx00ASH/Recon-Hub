@@ -422,6 +422,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <a id="projReportMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
         <a id="projReportHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
         <a id="projExport" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar tudo .json</a>
+        <button class="cancel" id="projDelete" title="remove só a definição de escopo — jobs/findings/notas ficam guardados">✕ excluir projeto</button>
       </div>
 
       <div id="projNoSel" class="muted">Escolha um projeto acima — ou crie um novo em <b>Job atual → ＋ novo projeto</b>. Cada projeto vira uma pasta em <code>data/projects/&lt;nome&gt;/</code> com notas, snapshot e relatório.</div>
@@ -431,6 +432,23 @@ docker compose exec reconhub cat /app/data/token</pre>
           <h2 style="margin-top:0">Resumo</h2>
           <div id="projStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem"></div>
           <p class="help" id="projSynced" style="margin-top:.7rem"></p>
+        </div>
+
+        <div class="plrun" style="max-width:none;margin-bottom:1.2rem">
+          <h2 style="margin-top:0">Escopo</h2>
+          <p class="help" style="margin:0 0 .6rem">Alvos que as ferramentas podem testar sob esse projeto — um por linha. Editar aqui atualiza o que já existe, não cria outro projeto.</p>
+          <div class="field">
+            <label for="projIn">in scope</label>
+            <textarea id="projIn" rows="3" spellcheck="false" placeholder="*.acme.com&#10;acme.io" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          </div>
+          <div class="field">
+            <label for="projOut">out of scope</label>
+            <textarea id="projOut" rows="2" spellcheck="false" placeholder="blog.acme.com" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <button class="run" id="projScopeSave" style="width:auto;padding:.5rem 1rem">Salvar escopo</button>
+            <span class="help" id="projScopeMsg"></span>
+          </div>
         </div>
 
         <div class="plrun" style="max-width:none;margin-bottom:1.2rem">
@@ -1066,6 +1084,12 @@ async function renderProject(name){
     $('#projNotes').value = notes || '';
   } catch { $('#projNotes').value = ''; }
   $('#projNotesMsg').textContent = '';
+  try {
+    const p = await api('/programs/' + encodeURIComponent(name));
+    $('#projIn').value = (p.in_scope || []).join('\n');
+    $('#projOut').value = (p.out_of_scope || []).join('\n');
+  } catch { $('#projIn').value = ''; $('#projOut').value = ''; }
+  $('#projScopeMsg').textContent = '';
   renderCoverage(name);
   loadAuthForm(name);
 }
@@ -1074,6 +1098,34 @@ $('#projSelect').addEventListener('change', () => {
   const v = $('#projSelect').value;
   if (v) renderProject(v);
   else { currentProject = null; $('#projBox').hidden = true; $('#projNoSel').hidden = false; }
+});
+
+$('#projScopeSave').addEventListener('click', async () => {
+  if (!currentProject) return;
+  const body = { in_scope: lines($('#projIn').value), out_of_scope: lines($('#projOut').value) };
+  $('#projScopeMsg').style.color = 'var(--crit)';
+  if (!body.in_scope.length) { $('#projScopeMsg').textContent = 'in scope não pode ficar vazio'; return; }
+  $('#projScopeSave').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject), { method:'PUT', body: JSON.stringify(body) });
+    $('#projScopeMsg').style.color = 'var(--ok)';
+    $('#projScopeMsg').textContent = '✓ escopo atualizado ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) { $('#projScopeMsg').style.color = 'var(--crit)'; $('#projScopeMsg').textContent = 'erro: ' + e.message; }
+  finally { $('#projScopeSave').disabled = false; }
+});
+
+$('#projDelete').addEventListener('click', async () => {
+  if (!currentProject) return;
+  if (!confirm(`Excluir o projeto "${currentProject}"?\n\nIsso remove só a definição de escopo — jobs, findings, notas e assets já guardados continuam intactos, mas o programa some da lista e novos jobs deixam de ter escopo aplicado até você recriar.`)) return;
+  $('#projDelete').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject), { method:'DELETE' });
+    currentProject = null;
+    $('#projBox').hidden = true;
+    $('#projNoSel').hidden = false;
+    await loadPrograms();
+  } catch (e) { alert('falha ao excluir: ' + e.message); }
+  finally { $('#projDelete').disabled = false; }
 });
 
 $('#projSync').addEventListener('click', async () => {

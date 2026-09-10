@@ -164,9 +164,8 @@ var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 // ValidName reports whether s is a safe program/file name.
 func ValidName(s string) bool { return nameRe.MatchString(s) }
 
-// Save validates p, writes programs/<name>.json and reloads the registry.
-// It refuses to overwrite an existing program.
-func (r *Registry) Save(p Program) error {
+// normalize validates and cleans p in place, ready to write to disk.
+func normalize(p *Program) error {
 	p.Name = strings.ToLower(strings.TrimSpace(p.Name))
 	if !ValidName(p.Name) {
 		return fmt.Errorf("nome inválido (use a-z, 0-9, . _ -; até 63 chars)")
@@ -176,7 +175,15 @@ func (r *Registry) Save(p Program) error {
 	}
 	p.InScope = cleanList(p.InScope)
 	p.OutOfScope = cleanList(p.OutOfScope)
+	return nil
+}
 
+// Save validates p, writes programs/<name>.json and reloads the registry.
+// It refuses to overwrite an existing program — use Update for that.
+func (r *Registry) Save(p Program) error {
+	if err := normalize(&p); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(r.dir, 0o755); err != nil {
 		return err
 	}
@@ -186,6 +193,45 @@ func (r *Registry) Save(p Program) error {
 	}
 	b, _ := json.MarshalIndent(p, "", "  ")
 	if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+		return err
+	}
+	return r.Reload()
+}
+
+// Update overwrites an existing program's scope (in_scope/out_of_scope,
+// platform, url) — the name is fixed by the URL path, not editable here (a
+// rename would orphan every job/finding/asset already tagged with the old
+// program name, so it's deliberately not supported). Refuses to "update"
+// a program that doesn't exist yet — use Save for that.
+func (r *Registry) Update(name string, p Program) error {
+	name = strings.ToLower(strings.TrimSpace(name))
+	path := filepath.Join(r.dir, name+".json")
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("programa %q não existe", name)
+	}
+	p.Name = name
+	if err := normalize(&p); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(p, "", "  ")
+	if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+		return err
+	}
+	return r.Reload()
+}
+
+// Delete removes a program's scope definition (programs/<name>.json) and
+// reloads the registry. It does NOT touch data/projects/<name>/ — jobs,
+// findings and assets already tagged with this program name stay exactly
+// where they are; only the in_scope/out_of_scope definition goes away, so
+// new jobs against that name lose scope enforcement until it's recreated.
+func (r *Registry) Delete(name string) error {
+	name = strings.ToLower(strings.TrimSpace(name))
+	path := filepath.Join(r.dir, name+".json")
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("programa %q não existe", name)
+	}
+	if err := os.Remove(path); err != nil {
 		return err
 	}
 	return r.Reload()

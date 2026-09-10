@@ -121,6 +121,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/programs", s.auth(s.listPrograms))
 	mux.HandleFunc("POST /api/programs", s.auth(s.createProgram))
 	mux.HandleFunc("GET /api/programs/{name}", s.auth(s.getProgram))
+	mux.HandleFunc("PUT /api/programs/{name}", s.auth(s.updateProgram))
+	mux.HandleFunc("DELETE /api/programs/{name}", s.auth(s.deleteProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
 
 	// projeto: pasta física em data/projects/<name>/ — notas + snapshot sincronizado
@@ -634,6 +636,43 @@ func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 	saved, _ := s.Programs.Get(strings.ToLower(strings.TrimSpace(p.Name)))
 	_ = project.Init(s.DataDir, saved.Name) // pasta do projeto — best-effort, um sync futuro a recria de qualquer jeito
 	writeJSON(w, http.StatusCreated, saved)
+}
+
+// updateProgram edits an existing program's scope (in_scope/out_of_scope,
+// platform, url) — the name in the URL is authoritative, so a typo you
+// only notice after creating the project doesn't mean starting over.
+func (s *Server) updateProgram(w http.ResponseWriter, r *http.Request) {
+	if s.Programs == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de programas indisponível")
+		return
+	}
+	name := r.PathValue("name")
+	var p scope.Program
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := s.Programs.Update(name, p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, _ := s.Programs.Get(strings.ToLower(strings.TrimSpace(name)))
+	writeJSON(w, http.StatusOK, saved)
+}
+
+// deleteProgram removes a program's scope definition. Jobs/findings/assets
+// and the data/projects/<name>/ folder already tied to that name are left
+// alone — only the in_scope/out_of_scope definition goes away.
+func (s *Server) deleteProgram(w http.ResponseWriter, r *http.Request) {
+	if s.Programs == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de programas indisponível")
+		return
+	}
+	if err := s.Programs.Delete(r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // --- projeto (pasta física em data/projects/<name>/) ---

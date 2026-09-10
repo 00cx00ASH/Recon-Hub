@@ -279,3 +279,38 @@ func TestFindingDraft(t *testing.T) {
 		t.Fatalf("finding inexistente: got %d, want 404", w.Code)
 	}
 }
+
+func TestUpdateAndDeleteProgram(t *testing.T) {
+	h := newTestServer(t, auth.Token{Source: "disabled"})
+
+	// atualiza o escopo do programa "acme" (já existe via newTestServer)
+	w := doBody(h, "PUT", "/api/programs/acme", `{"in_scope":["*.acme.com","acme.io"]}`, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: got %d %s", w.Code, w.Body.String())
+	}
+	w = do(h, "GET", "/api/programs/acme", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "acme.io") {
+		t.Fatalf("escopo não refletiu o update: %d %s", w.Code, w.Body.String())
+	}
+
+	// update de programa inexistente -> 400 (não existe pra atualizar)
+	w = doBody(h, "PUT", "/api/programs/nope", `{"in_scope":["a.com"]}`, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("update de inexistente: got %d, want 400", w.Code)
+	}
+
+	// delete
+	w = do(h, "DELETE", "/api/programs/acme", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete: got %d %s", w.Code, w.Body.String())
+	}
+	w = do(h, "GET", "/api/programs/acme", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("programa deveria ter sumido: got %d", w.Code)
+	}
+
+	// delete de novo -> 404
+	if w := do(h, "DELETE", "/api/programs/acme", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("2º delete: got %d, want 404", w.Code)
+	}
+}
