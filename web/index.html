@@ -1472,6 +1472,20 @@ async function loadWatches(){
   try { watches = (await api('/watches')).watches || []; }
   catch (e) { tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'erro: ' + e.message }))); return; }
   if (!watches.length) { tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'nenhum watch. Crie um abaixo.' }))); return; }
+  function jsDiffCell(w){
+    const box = el('div', { className:'mono' });
+    box.append(el('span', { textContent: String(w.last_new_findings ?? 0) }));
+    const jsNew = w.last_new_js ?? 0, jsRem = w.last_removed_js ?? 0;
+    if (jsNew || jsRem) {
+      box.append(el('div', {
+        style: 'font-size:10px;color:var(--accent-2)',
+        textContent: `🧩 ${jsNew ? '+' + jsNew : ''}${jsNew && jsRem ? ' / ' : ''}${jsRem ? '-' + jsRem : ''} JS`,
+        title: 'endpoints novos/removidos desde a run anterior deste watch — o site provavelmente shippou JS novo',
+      }));
+    }
+    return box;
+  }
+
   for (const w of watches) {
     const tr = el('tr');
     const an = watchAnomaly(w.history);
@@ -1483,7 +1497,7 @@ async function loadWatches(){
       el('td', { className:'mono', style:'color:var(--faint)', textContent: w.webhook_type || 'discord' }),
       el('td', {}, el('span', { className:'pill ' + (w.enabled ? 'succeeded' : 'canceled'), textContent: w.enabled ? 'on' : 'off' })),
       el('td', { className:'mono', textContent: w.last_run_at ? fmtTime(w.last_run_at) : '—' }),
-      el('td', { className:'mono', textContent: (w.last_new_findings ?? 0) }),
+      el('td', {}, jsDiffCell(w)),
       el('td', {
         className: 'mono' + (an.detected ? ' anom' : ''),
         textContent: histText || '—',

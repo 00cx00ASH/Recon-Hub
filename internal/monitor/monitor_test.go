@@ -70,7 +70,7 @@ func TestRegistrySaveLoadState(t *testing.T) {
 	}
 
 	at := time.Now()
-	r2.setState("acme-nightly", "run123", at, 4, 4)
+	r2.setState("acme-nightly", "run123", at, 4, 4, 0, 0)
 	// persistiu no arquivo?
 	b, _ := os.ReadFile(filepath.Join(dir, "acme-nightly.json"))
 	var onDisk Watch
@@ -99,6 +99,7 @@ type fakeHub struct {
 	mu          sync.Mutex
 	submits     int
 	keysByRun   map[string][]string
+	jsByRun     map[string][]string
 	statusByRun map[string]string
 }
 
@@ -124,6 +125,12 @@ func (h *fakeHub) FindingKeys(id string) []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.keysByRun[id]
+}
+
+func (h *fakeHub) JSAssets(id string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.jsByRun[id]
 }
 
 func itoa(n int) string {
@@ -154,7 +161,7 @@ func TestBuildPayloadDiscordDefault(t *testing.T) {
 	// deve continuar postando exatamente como antes: campo "content".
 	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com"}
 	var p map[string]any
-	_ = json.Unmarshal(buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}), &p)
+	_ = json.Unmarshal(buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}, 0, 0), &p)
 	if _, ok := p["content"]; !ok {
 		t.Error("discord (default) deveria ter campo content")
 	}
@@ -166,7 +173,7 @@ func TestBuildPayloadDiscordDefault(t *testing.T) {
 func TestBuildPayloadSlack(t *testing.T) {
 	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com", WebhookType: "slack"}
 	var p map[string]any
-	_ = json.Unmarshal(buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}), &p)
+	_ = json.Unmarshal(buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}, 0, 0), &p)
 	text, ok := p["text"].(string)
 	if !ok || !strings.Contains(text, "w1") {
 		t.Fatalf("slack deveria ter campo text com a mensagem: %v", p["text"])
@@ -182,7 +189,7 @@ func TestBuildPayloadTelegramIsMinimal(t *testing.T) {
 	// estruturados etc.), que a API do Telegram rejeitaria como parâmetro
 	// desconhecido.
 	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com", WebhookType: "telegram"}
-	body := buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{})
+	body := buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}, 0, 0)
 	var p map[string]any
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatal(err)
@@ -200,7 +207,7 @@ func TestBuildPayloadTelegramIsMinimal(t *testing.T) {
 func TestBuildPayloadGenericHasBoth(t *testing.T) {
 	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com", WebhookType: "generic"}
 	var p map[string]any
-	_ = json.Unmarshal(buildPayload(w, "run1", 1, nil, Anomaly{}), &p)
+	_ = json.Unmarshal(buildPayload(w, "run1", 1, nil, Anomaly{}, 0, 0), &p)
 	if _, ok := p["content"]; !ok {
 		t.Error("generic deveria ter content")
 	}
@@ -271,6 +278,53 @@ func TestFireDiffAndAlert(t *testing.T) {
 	_ = json.Unmarshal(posted[1], &p2)
 	if int(p2["new_findings"].(float64)) != 1 {
 		t.Errorf("2ª run: new_findings = %v (quer 1)", p2["new_findings"])
+	}
+}
+
+func TestFireDetectsJSDiff(t *testing.T) {
+	dir := t.TempDir()
+	reg, _ := Load(dir)
+	_ = reg.Save(Watch{Name: "w1", Pipeline: "p", Target: "t.com", Every: "1h", Enabled: true, Webhook: "http://hook"})
+
+	hub := &fakeHub{keysByRun: map[string][]string{}, jsByRun: map[string][]string{}, statusByRun: map[string]string{}}
+	m := New(reg, hub, 30*time.Second)
+
+	var posted [][]byte
+	m.post = func(url string, body []byte) error { posted = append(posted, body); return nil }
+
+	// 1ª run: sem findings novos (nada pra comparar ainda), mas estabelece o baseline de JS
+	hub.keysByRun["run1"] = nil
+	hub.jsByRun["run1"] = []string{"/api/v1/users", "/api/v1/login"}
+	w1, _ := reg.Get("w1")
+	m.fire(context.Background(), w1)
+	if len(posted) != 0 {
+		t.Fatalf("1ª run sem finding novo não deveria postar (é só o baseline): %d posts", len(posted))
+	}
+
+	// 2ª run: ainda sem finding novo, mas o JS mudou (endpoint novo + um sumiu) -> deve alertar mesmo assim
+	hub.keysByRun["run2"] = nil
+	hub.jsByRun["run2"] = []string{"/api/v1/users", "/api/v2/admin"}
+	w2, _ := reg.Get("w1")
+	m.fire(context.Background(), w2)
+
+	if len(posted) != 1 {
+		t.Fatalf("2ª run com JS mudando deveria alertar mesmo sem finding novo: %d posts", len(posted))
+	}
+	var p map[string]any
+	_ = json.Unmarshal(posted[0], &p)
+	if int(p["js_new"].(float64)) != 1 {
+		t.Errorf("js_new = %v, quer 1 (/api/v2/admin)", p["js_new"])
+	}
+	if int(p["js_removed"].(float64)) != 1 {
+		t.Errorf("js_removed = %v, quer 1 (/api/v1/login)", p["js_removed"])
+	}
+	if !strings.Contains(p["content"].(string), "JS mudou") {
+		t.Errorf("mensagem deveria mencionar a mudança de JS: %v", p["content"])
+	}
+
+	st, _ := reg.Get("w1")
+	if st.LastNewJS != 1 || st.LastRemovedJS != 1 {
+		t.Fatalf("estado do watch não guardou o diff de JS: %+v", st)
 	}
 }
 

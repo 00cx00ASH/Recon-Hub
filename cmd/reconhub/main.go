@@ -373,6 +373,34 @@ func (h monHub) FindingKeys(id string) []string {
 	return out
 }
 
+// jsAssetKinds are the asset kinds tools emit from parsing JS bundles
+// (js-hunter's endpoints, recon-web-enum's crawled urls, …) — what a
+// watch's JS-diff check compares between runs.
+var jsAssetKinds = map[string]bool{"endpoint": true, "url": true}
+
+func (h monHub) JSAssets(id string) []string {
+	run, ok := h.st.GetPipelineRun(id)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range run.Steps {
+		if s.JobID == "" {
+			continue
+		}
+		as, _ := h.st.ListAssets(store.AssetFilter{JobID: s.JobID, Limit: 100000})
+		for _, a := range as {
+			if !jsAssetKinds[a.Kind] || seen[a.Value] {
+				continue
+			}
+			seen[a.Value] = true
+			out = append(out, a.Value)
+		}
+	}
+	return out
+}
+
 var sevWeight = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 func (h monHub) briefs(id string, keys []string) []monitor.FindingBrief {

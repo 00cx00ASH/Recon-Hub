@@ -62,6 +62,11 @@ type Watch struct {
 	LastRunID string     `json:"last_run_id,omitempty"`
 	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 	LastNew   int        `json:"last_new_findings,omitempty"`
+	// LastNewJS/LastRemovedJS is the diff of JS-derived assets (endpoints,
+	// urls) against the previous run of this same watch — a signal that the
+	// site shipped new JS even when nothing new showed up as a finding.
+	LastNewJS     int `json:"last_new_js,omitempty"`
+	LastRemovedJS int `json:"last_removed_js,omitempty"`
 	// History is a short rolling window of recent runs' finding totals —
 	// enough to tell "this run looks normal" from "this run is way off",
 	// see anomaly.go. Capped at anomalyHistoryCap entries.
@@ -197,7 +202,7 @@ func (r *Registry) Save(w Watch) error {
 
 // setState persists the mutable fields after a run, including the rolling
 // history anomaly detection reads.
-func (r *Registry) setState(name, runID string, at time.Time, newCount, total int) {
+func (r *Registry) setState(name, runID string, at time.Time, newCount, total, newJS, removedJS int) {
 	r.mu.Lock()
 	w, ok := r.byID[name]
 	if !ok {
@@ -208,6 +213,8 @@ func (r *Registry) setState(name, runID string, at time.Time, newCount, total in
 	t := at.UTC()
 	w.LastRunAt = &t
 	w.LastNew = newCount
+	w.LastNewJS = newJS
+	w.LastRemovedJS = removedJS
 	w.History = append(w.History, RunStat{At: t, Total: total, New: newCount})
 	if len(w.History) > anomalyHistoryCap {
 		w.History = w.History[len(w.History)-anomalyHistoryCap:]
@@ -237,6 +244,12 @@ type Hub interface {
 	Submit(pl pipeline.Pipeline, target string, prog *scope.Program) (runID string, err error)
 	RunStatus(runID string) (status string, terminal bool)
 	FindingKeys(runID string) []string
+	// JSAssets returns the JS-derived asset values (kind url/endpoint — what
+	// js-hunter and friends extract from a bundle) discovered in a run. Used
+	// to flag "the site's JS changed since last time" even when nothing new
+	// showed up as a finding — a new endpoint often means new code shipped,
+	// which is worth a look on its own.
+	JSAssets(runID string) []string
 }
 
 // FindingBrief is one new finding in a webhook payload.
@@ -370,22 +383,38 @@ func (m *Monitor) fire(ctx context.Context, w Watch) {
 	}
 	sort.Strings(newKeys)
 	anomaly := detectAnomaly(w.History, len(cur))
-	m.reg.setState(w.Name, runID, time.Now(), len(newKeys), len(cur))
 
-	if (len(newKeys) == 0 && !anomaly.Detected) || w.Webhook == "" {
+	curJS := keySet(m.hub.JSAssets(runID))
+	var newJS, removedJS int
+	if prevRun != "" {
+		prevJS := keySet(m.hub.JSAssets(prevRun))
+		for a := range curJS {
+			if !prevJS[a] {
+				newJS++
+			}
+		}
+		for a := range prevJS {
+			if !curJS[a] {
+				removedJS++
+			}
+		}
+	}
+	m.reg.setState(w.Name, runID, time.Now(), len(newKeys), len(cur), newJS, removedJS)
+
+	if (len(newKeys) == 0 && !anomaly.Detected && newJS == 0) || w.Webhook == "" {
 		return
 	}
 	var brief []FindingBrief
 	if m.FindingsForBrief != nil {
 		brief = m.FindingsForBrief(runID, newKeys)
 	}
-	body := buildPayload(w, runID, len(newKeys), brief, anomaly)
+	body := buildPayload(w, runID, len(newKeys), brief, anomaly, newJS, removedJS)
 	_ = m.post(w.Webhook, body)
 }
 
 // renderMessage builds the human-readable notification text, shared across
 // every webhook type (only the JSON field it rides in changes).
-func renderMessage(w Watch, n int, brief []FindingBrief, anomaly Anomaly) string {
+func renderMessage(w Watch, n int, brief []FindingBrief, anomaly Anomaly, newJS, removedJS int) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**recon-hub** · watch `%s` · %d finding(s) novo(s)\n", w.Name, n)
 	fmt.Fprintf(&sb, "pipeline `%s` → `%s`", w.Pipeline, w.Target)
@@ -395,6 +424,9 @@ func renderMessage(w Watch, n int, brief []FindingBrief, anomaly Anomaly) string
 	sb.WriteByte('\n')
 	if anomaly.Detected {
 		fmt.Fprintf(&sb, "⚠️ %s\n", anomaly.Reason)
+	}
+	if newJS > 0 || removedJS > 0 {
+		fmt.Fprintf(&sb, "🧩 JS mudou desde a última run: %d endpoint(s) novo(s), %d removido(s)\n", newJS, removedJS)
 	}
 	max := len(brief)
 	if max > 20 {
@@ -427,8 +459,8 @@ func webhookType(w Watch) string {
 // points at. Discord/Slack (and most custom receivers) read a plain
 // "content"/"text" field; Telegram's sendMessage only looks at "text" (its
 // chat_id travels in the URL itself, see Watch.WebhookType's doc comment).
-func buildPayload(w Watch, runID string, n int, brief []FindingBrief, anomaly Anomaly) []byte {
-	msg := renderMessage(w, n, brief, anomaly)
+func buildPayload(w Watch, runID string, n int, brief []FindingBrief, anomaly Anomaly, newJS, removedJS int) []byte {
+	msg := renderMessage(w, n, brief, anomaly, newJS, removedJS)
 
 	if webhookType(w) == WebhookTelegram {
 		b, _ := json.Marshal(map[string]any{"text": msg, "parse_mode": "Markdown"})
@@ -444,6 +476,8 @@ func buildPayload(w Watch, runID string, n int, brief []FindingBrief, anomaly An
 		"new_findings": n,
 		"findings":     brief,
 		"anomaly":      anomaly,
+		"js_new":       newJS,
+		"js_removed":   removedJS,
 		"generated_at": time.Now().UTC(),
 	}
 	switch webhookType(w) {
