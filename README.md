@@ -302,6 +302,32 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 Config opcional: `./reconhub -config config.json` (veja `config.example.json`).
 
+#### Auto-update (deploy sempre no ar, sozinho)
+
+`restart: unless-stopped` no `docker-compose.yml` já garante que o container
+volta sozinho se cair ou o host reiniciar — mas isso não puxa código novo.
+Pra também atualizar sozinho quando o branch avança (sem você rodar
+`docker compose up -d --build` na mão toda vez), agende
+`scripts/autoupdate.sh` no cron do host onde o `docker compose` roda:
+
+```bash
+crontab -e
+# a cada 5 min: se origin/<branch> avançou, dá git pull + rebuild + restart
+*/5 * * * * cd /caminho/pro/recon-hub && ./scripts/autoupdate.sh >> data/autoupdate.log 2>&1
+```
+
+O script é conservador: se não houver commit novo, não faz nada; se o
+checkout local tiver mudança não commitada ou divergir do remoto, o
+`git merge --ff-only` falha e ele **para sem sobrescrever nada** (só avisa
+no log) — trabalho local nunca é descartado automaticamente. Um `flock`
+evita que duas execuções se sobreponham se o rebuild demorar mais que o
+intervalo do cron. Só há uma janela curta de indisponibilidade durante o
+`docker compose up -d --build` de cada atualização (não é zero-downtime).
+
+Por padrão ele segue o branch atual do checkout; pra fixar um branch
+específico independente de qual está com `git checkout` no momento, defina
+`RECONHUB_AUTOUPDATE_BRANCH=nome-do-branch` antes da linha do cron.
+
 ### Token de acesso
 
 O hub **nasce fechado**. Toda a API (menos `GET /api/health`) exige
