@@ -114,6 +114,28 @@ func TestSQLiteSetFindingTriage(t *testing.T) {
 	}
 }
 
+func TestSQLiteGetFinding(t *testing.T) {
+	s := openTmp(t)
+	f := &Finding{JobID: "j", Tool: "scan-x", Type: "takeover", Title: "t", Asset: "a.acme.com", Severity: "high"}
+	if _, err := s.AddFinding(f); err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := s.ListFindings(FindingFilter{})
+	if len(fs) != 1 {
+		t.Fatalf("esperava 1 finding, veio %d", len(fs))
+	}
+	id := fs[0].ID
+
+	got, ok := s.GetFinding(id)
+	if !ok || got.Title != "t" || got.Asset != "a.acme.com" {
+		t.Fatalf("GetFinding: ok=%v got=%+v", ok, got)
+	}
+
+	if _, ok := s.GetFinding("ghost"); ok {
+		t.Fatal("esperava ok=false para finding inexistente")
+	}
+}
+
 func TestSQLiteDedupSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.db")

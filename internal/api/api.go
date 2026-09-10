@@ -106,6 +106,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.authSSE(s.jobEvents))
 	mux.HandleFunc("GET /api/findings", s.auth(s.listFindings))
 	mux.HandleFunc("POST /api/findings/{id}/triage", s.auth(s.triageFinding))
+	mux.HandleFunc("GET /api/findings/{id}/draft.md", s.authSSE(s.findingDraft)) // authSSE: baixável por link
 	mux.HandleFunc("GET /api/intel/findings", s.auth(s.intelFindings))
 	mux.HandleFunc("GET /api/assets", s.auth(s.listAssets))
 
@@ -309,6 +310,43 @@ func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
 		Limit:    limit,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"findings": fs})
+}
+
+// findingDraft renders ONE finding as a submission-ready report (same
+// engine as /api/report.md — report.Build/Markdown — just scoped to a
+// single item, with includeInfo forced on so even an info-severity finding
+// gets its own full section instead of being silently dropped). It's the
+// "generate a draft I can paste into HackerOne/Intigriti" button next to a
+// finding: no direct integration with either platform (their hacker-facing
+// APIs for creating a report were never confirmed to exist), so this is
+// the honest version of that — draft, not auto-submit.
+func (s *Server) findingDraft(w http.ResponseWriter, r *http.Request) {
+	f, ok := s.Store.GetFinding(r.PathValue("id"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "finding não encontrado")
+		return
+	}
+	all, _ := s.Store.ListFindings(store.FindingFilter{Limit: 1000000})
+	assessment := intel.Assess(f, intel.BuildHistory(all))
+
+	item := report.Item{
+		Type: f.Type, Severity: f.Severity, Title: f.Title, Asset: f.Asset,
+		Evidence: f.Evidence, Tool: f.Tool, Target: f.Target, Count: f.Count,
+		FirstAt: f.CreatedAt, LastAt: f.LastSeen,
+		Meta: report.MetaFromRaw(f.Meta),
+	}
+	rep := report.Build(f.Program, f.Target, []report.Item{item}, true)
+	md := rep.Markdown()
+	md += "---\n\n_Prioridade sugerida pelo recon-hub: " + strconv.Itoa(assessment.Score) + "/100 — " + assessment.Action + "._\n"
+	if assessment.Advice != "" {
+		md += "_" + assessment.Advice + "_\n"
+	}
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	if r.URL.Query().Get("dl") != "" {
+		w.Header().Set("Content-Disposition", `attachment; filename="draft-`+f.ID[:min(8, len(f.ID))]+`.md"`)
+	}
+	_, _ = w.Write([]byte(md))
 }
 
 // triageFinding records the operator's verdict on a finding — this is the

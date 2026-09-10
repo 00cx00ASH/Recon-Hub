@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"reconhub/internal/auth"
 	"reconhub/internal/bus"
@@ -240,5 +241,41 @@ func TestCreateWatchRejectsOutOfScope(t *testing.T) {
 		`{"name":"w2","pipeline":"basic","target":"a.acme.com","program":"acme","every":"1h"}`, nil)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("alvo em escopo: got %d %s, want 201", w.Code, w.Body.String())
+	}
+}
+
+func TestFindingDraft(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg, _ := registry.Load(t.TempDir())
+	eng := engine.New(st, reg, bus.New(), 2)
+	h := (&Server{Store: st, Reg: reg, Engine: eng, Token: auth.Token{Source: "disabled"}}).Handler()
+
+	_, err = st.AddFinding(&store.Finding{
+		ID: "f1", JobID: "j1", Tool: "scan-subdomain-takeover", Program: "acme",
+		Type: "subdomain-takeover", Title: "takeover em old.acme.com", Asset: "old.acme.com",
+		Evidence: "CNAME pra old-acme.herokuapp.com, herokuapp devolve 'No such app'", Severity: "high",
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := do(h, "GET", "/api/findings/f1/draft.md", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("draft: got %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{"Subdomain takeover", "old.acme.com", "Passos para reproduzir", "Correção", "Prioridade sugerida pelo recon-hub"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("draft não contém %q:\n%s", want, body)
+		}
+	}
+
+	if w := do(h, "GET", "/api/findings/ghost/draft.md", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("finding inexistente: got %d, want 404", w.Code)
 	}
 }

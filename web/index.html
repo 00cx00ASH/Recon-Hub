@@ -391,7 +391,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       </div>
       <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
-        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th>triagem</th></tr></thead>
+        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
         <tbody id="findingsRows"></tbody>
       </table></div>
     </div>
@@ -1190,6 +1190,12 @@ function renderFindingsTable(){
         noBtn.addEventListener('click', e => { e.stopPropagation(); triageFinding(f.id, 'false_positive', noBtn); });
         triageCell.append(okBtn, noBtn);
       }
+      const draftLink = el('a', {
+        textContent: '📄', title: 'gerar rascunho de relatório (.md)',
+        href: '/api/findings/' + encodeURIComponent(f.id) + '/draft.md' + tokQS(),
+        target: '_blank', style: 'text-decoration:none',
+      });
+      draftLink.addEventListener('click', e => e.stopPropagation());
       tr.append(
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', {}, prioCell),
@@ -1199,12 +1205,13 @@ function renderFindingsTable(){
         el('td', { className:'mono', textContent: (f.count && f.count > 1) ? '×' + f.count : '' }),
         el('td', { className:'mono', textContent: f.tool }),
         el('td', { className:'mono', textContent: fmtTime(f.last_seen || f.created_at) }),
+        el('td', {}, draftLink),
         el('td', {}, triageCell),
       );
       tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
       tb.append(tr);
   }
-  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:10, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
 }
 
 async function loadFindings(){
