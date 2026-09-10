@@ -182,6 +182,23 @@
   #entryHelp .paste input{flex:1;font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem}
   #entryHelp .paste button{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12px;background:var(--accent);color:#1a1400;border:0;border-radius:3px;padding:0 1rem;cursor:pointer}
 
+  /* ---------- toasts + modal de confirmação (substituem alert()/confirm() nativos) ---------- */
+  #toasts{position:fixed;bottom:1.1rem;right:1.1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem;max-width:min(380px,calc(100vw - 2.2rem))}
+  .toast{background:var(--surface);border:1px solid var(--border-strong);border-left:3px solid var(--info);border-radius:6px;padding:.65rem .8rem;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;gap:.5rem;align-items:flex-start;animation:toastin .18s ease-out}
+  .toast.error{border-left-color:var(--crit)}
+  .toast.ok{border-left-color:var(--ok)}
+  .toast .tmsg{flex:1;word-break:break-word}
+  .toast .tx{background:none;border:0;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:0}
+  @keyframes toastin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+  #confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:210;display:flex;align-items:center;justify-content:center;padding:1rem}
+  #confirmBox{background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:1.2rem 1.3rem;max-width:440px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.4)}
+  #confirmBox p{font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-line;margin:0 0 1rem}
+  #confirmBox .row{display:flex;gap:.6rem;justify-content:flex-end}
+  #confirmBox button{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border-radius:4px;padding:.5rem 1rem;cursor:pointer}
+  #confirmCancel{background:none;border:1px solid var(--border-strong);color:var(--dim)}
+  #confirmOk{background:var(--crit);border:0;color:#1a0a06;font-weight:600}
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -200,6 +217,17 @@
   <b>Precisa do token.</b>
   <span>Abra a URL que o servidor imprime no log (<code>http://127.0.0.1:7878/#token=…</code>), ou copie <code>data/token</code> e cole no campo acima →</span>
   <button class="x" id="authBannerX" title="fechar">✕</button>
+</div>
+
+<div id="toasts"></div>
+<div id="confirmOverlay" hidden>
+  <div id="confirmBox">
+    <p id="confirmMsg"></p>
+    <div class="row">
+      <button id="confirmCancel">Cancelar</button>
+      <button id="confirmOk">Confirmar</button>
+    </div>
+  </div>
 </div>
 
 <div id="entryHelp" hidden>
@@ -544,6 +572,47 @@ const $ = (s, r=document) => r.querySelector(s);
 const el = (t, props={}, kids=[]) => { const n=document.createElement(t); Object.assign(n, props); for(const k of [].concat(kids)) n.append(k); return n; };
 const fmtTime = s => { try { return new Date(s).toLocaleTimeString('pt-BR'); } catch { return s; } };
 
+/* ---------- toast + confirm (substituem alert()/confirm() nativos) ---------- */
+function toast(msg, type){
+  const box = $('#toasts');
+  const t = el('div', { className: 'toast' + (type ? ' ' + type : '') });
+  t.append(el('span', { className:'tmsg', textContent: msg }));
+  const x = el('button', { className:'tx', textContent:'✕', title:'fechar' });
+  const timer = setTimeout(() => t.remove(), 6000);
+  x.addEventListener('click', () => { clearTimeout(timer); t.remove(); });
+  t.append(x);
+  box.append(t);
+  return t;
+}
+function toastError(msg){ return toast(msg, 'error'); }
+function toastOk(msg){ return toast(msg, 'ok'); }
+
+function confirmDialog(message){
+  return new Promise(resolve => {
+    $('#confirmMsg').textContent = message;
+    const overlay = $('#confirmOverlay');
+    overlay.hidden = false;
+    const cleanup = (result) => {
+      overlay.hidden = true;
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      overlay.removeEventListener('click', onOverlay);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const ok = $('#confirmOk'), cancel = $('#confirmCancel');
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    const onOverlay = (e) => { if (e.target === overlay) cleanup(false); };
+    const onKey = (e) => { if (e.key === 'Escape') cleanup(false); if (e.key === 'Enter') cleanup(true); };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    overlay.addEventListener('click', onOverlay);
+    document.addEventListener('keydown', onKey);
+    ok.focus();
+  });
+}
+
 let TOOLS = [];
 let WORDLISTS = [];
 let es = null;          // EventSource atual
@@ -745,7 +814,7 @@ $('#run').addEventListener('click', async () => {
     attachJob(job.id);
     loadJobs();
   } catch (e) {
-    alert('falha ao criar job: ' + e.message);
+    toastError('falha ao criar job: ' + e.message);
   } finally {
     $('#run').disabled = false;
   }
@@ -778,7 +847,7 @@ async function attachJob(id){
   $('#jId').textContent = '#' + id.slice(0,12);
 
   let job;
-  try { const r = await api('/jobs/' + id); job = r.job; } catch (e) { alert(e.message); return; }
+  try { const r = await api('/jobs/' + id); job = r.job; } catch (e) { toastError(e.message); return; }
   $('#jTool').textContent = job.tool;
   $('#jTarget').textContent = '→ ' + job.target + (job.program ? '  ·  ' + job.program : '');
   pill(job.status);
@@ -812,7 +881,7 @@ async function attachJob(id){
 
 $('#jCancel').addEventListener('click', async () => {
   if (!currentJob) return;
-  try { await api('/jobs/' + currentJob + '/cancel', { method: 'POST' }); } catch (e) { alert(e.message); }
+  try { await api('/jobs/' + currentJob + '/cancel', { method: 'POST' }); } catch (e) { toastError(e.message); }
 });
 
 async function refreshJobFindings(id){
@@ -1163,7 +1232,8 @@ $('#projScopeSave').addEventListener('click', async () => {
 
 $('#projDelete').addEventListener('click', async () => {
   if (!currentProject) return;
-  if (!confirm(`Excluir o projeto "${currentProject}"?\n\nIsso remove só a definição de escopo — jobs, findings, notas e assets já guardados continuam intactos, mas o programa some da lista e novos jobs deixam de ter escopo aplicado até você recriar.`)) return;
+  const ok = await confirmDialog(`Excluir o projeto "${currentProject}"?\n\nIsso remove só a definição de escopo — jobs, findings, notas e assets já guardados continuam intactos, mas o programa some da lista e novos jobs deixam de ter escopo aplicado até você recriar.`);
+  if (!ok) return;
   $('#projDelete').disabled = true;
   try {
     await api('/programs/' + encodeURIComponent(currentProject), { method:'DELETE' });
@@ -1171,7 +1241,7 @@ $('#projDelete').addEventListener('click', async () => {
     $('#projBox').hidden = true;
     $('#projNoSel').hidden = false;
     await loadPrograms();
-  } catch (e) { alert('falha ao excluir: ' + e.message); }
+  } catch (e) { toastError('falha ao excluir: ' + e.message); }
   finally { $('#projDelete').disabled = false; }
 });
 
@@ -1179,7 +1249,7 @@ $('#projSync').addEventListener('click', async () => {
   if (!currentProject) return;
   $('#projSync').disabled = true;
   try { renderProjectSummary(await api('/programs/' + encodeURIComponent(currentProject) + '/sync', { method: 'POST' })); }
-  catch (e) { alert('falha ao sincronizar: ' + e.message); }
+  catch (e) { toastError('falha ao sincronizar: ' + e.message); }
   finally { $('#projSync').disabled = false; }
 });
 
@@ -1227,7 +1297,7 @@ async function triageFinding(id, verdict, btn){
   try {
     await api('/findings/' + encodeURIComponent(id) + '/triage', { method: 'POST', body: JSON.stringify({ verdict }) });
     if (row) row.style.opacity = '.45';
-  } catch (e) { alert('falha na triagem: ' + e.message); btn.disabled = false; }
+  } catch (e) { toastError('falha na triagem: ' + e.message); btn.disabled = false; }
 }
 
 // hostOf espelha internal/intel/grouping.go:hostOf — precisa bater com o
@@ -1486,7 +1556,7 @@ $('#plRun').addEventListener('click', async () => {
     const run = await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) });
     openPipelineRun(run.id);
     loadPipelineRuns();
-  } catch (e) { alert('falha ao rodar pipeline: ' + e.message); }
+  } catch (e) { toastError('falha ao rodar pipeline: ' + e.message); }
   finally { $('#plRun').disabled = false; }
 });
 
@@ -1517,7 +1587,7 @@ async function openPipelineRun(id){
   $('#plLog').innerHTML = '';
 
   let run;
-  try { const r = await api('/pipeline-runs/' + id); run = r.run; } catch (e) { alert(e.message); return; }
+  try { const r = await api('/pipeline-runs/' + id); run = r.run; } catch (e) { toastError(e.message); return; }
   $('#plRunName').textContent = run.pipeline;
   $('#plRunTarget').textContent = '→ ' + run.target + (run.program ? '  ·  ' + run.program : '');
   $('#plRunFindings').textContent = (run.findings || 0) + ' finding(s)';
@@ -1544,7 +1614,7 @@ async function openPipelineRun(id){
 
 $('#plCancel').addEventListener('click', async () => {
   if (!currentRun) return;
-  try { await api('/pipeline-runs/' + currentRun + '/cancel', { method:'POST' }); } catch (e) { alert(e.message); }
+  try { await api('/pipeline-runs/' + currentRun + '/cancel', { method:'POST' }); } catch (e) { toastError(e.message); }
 });
 
 async function loadPipelineRuns(){
@@ -1639,7 +1709,7 @@ async function loadWatches(){
     runBtn.addEventListener('click', async (ev) => {
       ev.stopPropagation(); runBtn.disabled = true;
       try { await api('/watches/' + encodeURIComponent(w.name) + '/run', { method:'POST' }); runBtn.textContent = 'disparado ✓'; }
-      catch (e) { alert(e.message); runBtn.disabled = false; }
+      catch (e) { toastError(e.message); runBtn.disabled = false; }
       setTimeout(loadWatches, 1500);
     });
     act.append(runBtn);
@@ -1692,7 +1762,7 @@ $('#nwSave').addEventListener('click', async () => {
     $('#nwWebhookType').value = '';
     $('#newWatch').open = false;
     await loadWatches();
-  } catch (e) { alert('falha ao criar watch: ' + e.message); }
+  } catch (e) { toastError('falha ao criar watch: ' + e.message); }
   finally { $('#nwSave').disabled = false; }
 });
 
