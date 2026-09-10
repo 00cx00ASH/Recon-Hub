@@ -42,6 +42,14 @@ type Engine struct {
 	// coupling the engine to the project package.
 	OnJobDone func(job *store.Job)
 
+	// AuthLookup, when set, resolves extra "KEY=VALUE" environment strings
+	// to inject into a job's subprocess based on its program — a shared
+	// auth context (RECONHUB_AUTH_COOKIE/BEARER/HEADERS) so tools don't scan
+	// anonymously when the interesting surface sits behind login. Same
+	// decoupling as OnJobDone: the engine doesn't need to know this comes
+	// from internal/project.
+	AuthLookup func(program string) []string
+
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc
 }
@@ -159,8 +167,13 @@ func (e *Engine) execute(job *store.Job) *store.Job {
 	_ = e.store.UpdateJob(job)
 	e.emit(job.ID, store.Event{Type: "log", Level: "info", Msg: "job iniciado: " + tool.Name + " → " + job.Target})
 
+	var extraEnv []string
+	if e.AuthLookup != nil && job.Program != "" {
+		extraEnv = e.AuthLookup(job.Program)
+	}
+
 	var findings int
-	res := runner.Run(ctx, tool, job,
+	res := runner.Run(ctx, tool, job, extraEnv,
 		func(ev store.Event) { e.emit(job.ID, ev) },
 		func(f store.Finding) {
 			f.ID = NewID()

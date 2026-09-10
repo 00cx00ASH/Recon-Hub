@@ -98,7 +98,7 @@ func TestSyncFromStoreWritesSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sum, err := SyncFromStore(dataDir, "acme", progs, st)
+	sum, err := SyncFromStore(dataDir, "acme", progs, st, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestSyncFromStoreWritesSnapshot(t *testing.T) {
 	}
 
 	dir := Dir(dataDir, "acme")
-	for _, f := range []string{"summary.json", "report.md", "assets.json", "notes.md"} {
+	for _, f := range []string{"summary.json", "report.md", "assets.json", "notes.md", "coverage.json"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("faltou %s: %v", f, err)
 		}
@@ -126,7 +126,7 @@ func TestSyncFromStoreWritesSnapshot(t *testing.T) {
 
 func TestSyncUnknownProgram(t *testing.T) {
 	dataDir, progs, st := setup(t)
-	if _, err := SyncFromStore(dataDir, "ghost", progs, st); err == nil {
+	if _, err := SyncFromStore(dataDir, "ghost", progs, st, nil); err == nil {
 		t.Fatal("esperava erro para programa desconhecido")
 	}
 }

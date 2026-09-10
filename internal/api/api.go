@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"reconhub/internal/auth"
+	"reconhub/internal/copilot"
 	"reconhub/internal/engine"
 	"reconhub/internal/intel"
 	"reconhub/internal/monitor"
@@ -100,6 +101,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/programs/{name}/sync", s.auth(s.syncProject))
 	mux.HandleFunc("GET /api/programs/{name}/notes", s.auth(s.getNotes))
 	mux.HandleFunc("PUT /api/programs/{name}/notes", s.auth(s.putNotes))
+	mux.HandleFunc("GET /api/programs/{name}/coverage", s.auth(s.programCoverage))
+	mux.HandleFunc("GET /api/programs/{name}/auth", s.auth(s.getAuth))
+	mux.HandleFunc("PUT /api/programs/{name}/auth", s.auth(s.putAuth))
 
 	mux.HandleFunc("GET /api/watches", s.auth(s.listWatches))
 	mux.HandleFunc("POST /api/watches", s.auth(s.createWatch))
@@ -351,7 +355,7 @@ func (s *Server) intelFindings(w http.ResponseWriter, r *http.Request) {
 			Advice: a.Advice, Confidence: a.Confidence, SampleSize: a.SampleSize,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"findings": rows})
+	writeJSON(w, http.StatusOK, map[string]any{"findings": rows, "groups": intel.GroupSimilar(fs)})
 }
 
 // buildReport gathers findings per the request filters and assembles a report.
@@ -510,6 +514,10 @@ func (s *Server) createWatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "pipeline desconhecida: "+wt.Pipeline)
 		return
 	}
+	if !monitor.ValidWebhookType(wt.WebhookType) {
+		writeErr(w, http.StatusBadRequest, "webhook_type inválido — use discord, slack, telegram ou generic")
+		return
+	}
 	if wt.Program != "" {
 		if _, err := s.resolveProgram(wt.Program); err != nil {
 			writeErr(w, http.StatusBadRequest, "programa desconhecido: "+wt.Program)
@@ -565,7 +573,7 @@ func (s *Server) syncProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "programa não encontrado")
 		return
 	}
-	sum, err := project.SyncFromStore(s.DataDir, name, s.Programs, s.Store)
+	sum, err := project.SyncFromStore(s.DataDir, name, s.Programs, s.Store, s.Reg)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -591,6 +599,57 @@ func (s *Server) getNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"program": name, "notes": txt})
+}
+
+// programCoverage reports which tools have run for a program and which
+// applicable ones (given what's been discovered) haven't — the "o que fazer
+// agora" view.
+func (s *Server) programCoverage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	jobs, _ := s.Store.ListJobs(store.JobFilter{Program: name, Limit: 1000000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: name, Limit: 1000000})
+	writeJSON(w, http.StatusOK, copilot.Compute(name, jobs, assets, s.Reg))
+}
+
+// getAuth returns the program's stored auth context (cookie/bearer/extra
+// headers) verbatim — the operator set it themselves, same trust level as
+// their own token protecting this API.
+func (s *Server) getAuth(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	a, err := project.LoadAuth(s.DataDir, name)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+// putAuth stores the auth context that every job run against this program
+// (via the shared session) gets injected as RECONHUB_AUTH_* env vars.
+func (s *Server) putAuth(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	var a project.Auth
+	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.SaveAuth(s.DataDir, name, a); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) putNotes(w http.ResponseWriter, r *http.Request) {

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"log"
@@ -148,9 +149,28 @@ func main() {
 		if strings.TrimSpace(job.Program) == "" {
 			return
 		}
-		if _, err := project.SyncFromStore(cfg.DataDir, job.Program, programs, st); err != nil {
+		if _, err := project.SyncFromStore(cfg.DataDir, job.Program, programs, st, reg); err != nil {
 			log.Printf("project sync (%s): %v", job.Program, err)
 		}
+	}
+	eng.AuthLookup = func(program string) []string {
+		a, err := project.LoadAuth(cfg.DataDir, program)
+		if err != nil || a.Empty() {
+			return nil
+		}
+		var env []string
+		if a.Cookie != "" {
+			env = append(env, "RECONHUB_AUTH_COOKIE="+a.Cookie)
+		}
+		if a.Bearer != "" {
+			env = append(env, "RECONHUB_AUTH_BEARER="+a.Bearer)
+		}
+		if len(a.Headers) > 0 {
+			if b, merr := json.Marshal(a.Headers); merr == nil {
+				env = append(env, "RECONHUB_AUTH_HEADERS="+string(b))
+			}
+		}
+		return env
 	}
 
 	watches, err := monitor.Load(cfg.WatchesDir)

@@ -2,6 +2,7 @@
 /reconhub
 /reconhub-sqlite
 /reconhub-mcp
+/reconhub-cli
 reconhub.db
 reconhub.db-shm
 reconhub.db-wal

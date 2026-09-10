@@ -56,8 +56,11 @@ type stdinPayload struct {
 }
 
 // Run executes tool for job. It blocks until the process exits, the context is
-// canceled, or the tool's timeout elapses.
-func Run(ctx context.Context, tool registry.Tool, job *store.Job, emit Emit, onFinding OnFinding, onAsset OnAsset) Result {
+// canceled, or the tool's timeout elapses. extraEnv is appended to the
+// subprocess environment as-is (KEY=VALUE strings) — used to inject a
+// program's shared auth context (RECONHUB_AUTH_*, see internal/project.Auth)
+// without runner needing to know anything about where that comes from.
+func Run(ctx context.Context, tool registry.Tool, job *store.Job, extraEnv []string, emit Emit, onFinding OnFinding, onAsset OnAsset) Result {
 	ctx, cancel := context.WithTimeout(ctx, tool.TimeoutDur)
 	defer cancel()
 
@@ -76,6 +79,7 @@ func Run(ctx context.Context, tool registry.Tool, job *store.Job, emit Emit, onF
 	for k, v := range job.Params {
 		env = append(env, "RECONHUB_PARAM_"+strings.ToUpper(k)+"="+fmt.Sprint(v))
 	}
+	env = append(env, extraEnv...)
 	cmd.Env = env
 
 	payload, _ := json.Marshal(stdinPayload{Target: job.Target, Params: job.Params, JobID: job.ID})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -69,7 +70,7 @@ func TestRegistrySaveLoadState(t *testing.T) {
 	}
 
 	at := time.Now()
-	r2.setState("acme-nightly", "run123", at, 4)
+	r2.setState("acme-nightly", "run123", at, 4, 4)
 	// persistiu no arquivo?
 	b, _ := os.ReadFile(filepath.Join(dir, "acme-nightly.json"))
 	var onDisk Watch
@@ -135,6 +136,80 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b)
+}
+
+func TestValidWebhookType(t *testing.T) {
+	for _, ok := range []string{"", "discord", "slack", "telegram", "generic"} {
+		if !ValidWebhookType(ok) {
+			t.Errorf("%q deveria ser válido", ok)
+		}
+	}
+	if ValidWebhookType("whatsapp") {
+		t.Error("tipo desconhecido não deveria ser válido")
+	}
+}
+
+func TestBuildPayloadDiscordDefault(t *testing.T) {
+	// Watch sem WebhookType (todo watch criado antes desse campo existir) —
+	// deve continuar postando exatamente como antes: campo "content".
+	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com"}
+	var p map[string]any
+	_ = json.Unmarshal(buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}), &p)
+	if _, ok := p["content"]; !ok {
+		t.Error("discord (default) deveria ter campo content")
+	}
+	if _, ok := p["text"]; ok {
+		t.Error("discord não deveria ter campo text")
+	}
+}
+
+func TestBuildPayloadSlack(t *testing.T) {
+	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com", WebhookType: "slack"}
+	var p map[string]any
+	_ = json.Unmarshal(buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{}), &p)
+	text, ok := p["text"].(string)
+	if !ok || !strings.Contains(text, "w1") {
+		t.Fatalf("slack deveria ter campo text com a mensagem: %v", p["text"])
+	}
+	if _, ok := p["content"]; ok {
+		t.Error("slack não deveria ter campo content (Discord)")
+	}
+}
+
+func TestBuildPayloadTelegramIsMinimal(t *testing.T) {
+	// Telegram sendMessage só olha "text" (chat_id vem embutido na URL do
+	// webhook) — o payload não deveria carregar os campos extras (findings
+	// estruturados etc.), que a API do Telegram rejeitaria como parâmetro
+	// desconhecido.
+	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com", WebhookType: "telegram"}
+	body := buildPayload(w, "run1", 1, []FindingBrief{{Severity: "high", Title: "x"}}, Anomaly{})
+	var p map[string]any
+	if err := json.Unmarshal(body, &p); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p["text"]; !ok {
+		t.Fatal("telegram deveria ter campo text")
+	}
+	for _, unexpected := range []string{"content", "findings", "watch", "pipeline"} {
+		if _, ok := p[unexpected]; ok {
+			t.Errorf("telegram não deveria carregar %q (a API do Telegram rejeita campo desconhecido)", unexpected)
+		}
+	}
+}
+
+func TestBuildPayloadGenericHasBoth(t *testing.T) {
+	w := Watch{Name: "w1", Pipeline: "p", Target: "t.com", WebhookType: "generic"}
+	var p map[string]any
+	_ = json.Unmarshal(buildPayload(w, "run1", 1, nil, Anomaly{}), &p)
+	if _, ok := p["content"]; !ok {
+		t.Error("generic deveria ter content")
+	}
+	if _, ok := p["text"]; !ok {
+		t.Error("generic deveria ter text")
+	}
+	if _, ok := p["findings"]; !ok {
+		t.Error("generic deveria manter os campos estruturados")
+	}
 }
 
 func TestFireDiffAndAlert(t *testing.T) {
