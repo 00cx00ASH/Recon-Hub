@@ -1,0 +1,12 @@
+{
+  "name": "cors-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de CORS mal configurado (reflexão de origem, null, wildcard + credentials, bypasses de regex).",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-cors",
+      "params": { "concurrency": 8 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

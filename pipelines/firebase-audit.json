@@ -1,0 +1,12 @@
+{
+  "name": "firebase-audit",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, procura o firebaseConfig no HTML/JS e testa leitura anônima de Realtime Database, Firestore e Storage.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "js-firebase-enum",
+      "params": { "timeout_ms": 12000 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

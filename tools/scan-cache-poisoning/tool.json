@@ -1,0 +1,23 @@
+{
+  "name": "scan-cache-poisoning",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Web cache poisoning via entradas não-chaveadas: injeta um canary em X-Forwarded-Host / X-Forwarded-Scheme / X-Original-URL / Forwarded / X-Host / … e vê se ele volta refletido numa resposta cacheável — e, pra headers, confirma a persistência com uma 2ª requisição limpa. Cada teste usa um cache-buster único na query, então a resposta envenenada fica presa numa URL que nenhum usuário real acessa.",
+  "guide": "Alvo = uma URL http/https (a raiz do site ou uma página específica). Não usa wordlist. A ferramenta é conservadora: sempre adiciona ?cb=<aleatório> pra isolar o teste do cache real. 'headers' (csv) sobrescreve a lista padrão de 17 entradas. Modos lista/arquivo varrem várias URLs.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "headers", "type": "string", "required": false, "help": "csv de headers a testar (sobrescreve a lista padrão)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 4, "help": "hosts testados em paralelo" },
+    { "name": "delay_ms", "type": "int", "required": false, "default": 150, "help": "pausa entre requisições ao mesmo host" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

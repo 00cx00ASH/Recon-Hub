@@ -1,0 +1,23 @@
+{
+  "name": "scan-mongodb",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Procura MongoDB acessível SEM autenticação. Fala o wire protocol (OP_MSG) direto — sem driver: handshake `hello`, depois `listDatabases`. Se funcionar sem credenciais, lista os bancos e as coleções; com 'sample', lê só as CHAVES de um documento de amostra (nunca os valores). Distingue 'exige auth' (bom) de 'aberto' (crítico).",
+  "guide": "Alvo = um host (IP ou domínio). Portas 27017 e 27018 por padrão — mude em 'ports'. Não usa wordlist. A ferramenta só faz leitura: hello / listDatabases / listCollections e, se 'sample' estiver ligado, um find(limit 1) do qual extrai apenas os nomes de campo. Nunca escreve, nunca lê valores. Modos lista/arquivo varrem vários hosts.",
+  "exec": ["go", "run", "."],
+  "timeout": "12m",
+  "modes": [
+    { "name": "single", "label": "Host único", "help": "testa um host nas portas configuradas", "target_label": "host / IP" },
+    { "name": "list", "label": "Lista colada", "help": "vários hosts, um por linha", "params": ["hosts"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, um host por linha", "params": ["hosts_file"] }
+  ],
+  "params": [
+    { "name": "hosts", "type": "string", "required": false, "help": "hosts por vírgula/linha (modo lista)" },
+    { "name": "hosts_file", "type": "string", "required": false, "help": "arquivo no servidor, um host por linha" },
+    { "name": "ports", "type": "string", "required": false, "default": "27017,27018", "help": "portas a testar" },
+    { "name": "sample", "type": "bool", "required": false, "default": false, "help": "ler os NOMES DE CAMPO de 1 documento de amostra por banco (valores nunca)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 16, "help": "hosts testados em paralelo" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 6000, "help": "timeout por conexão/comando" }
+  ]
+}

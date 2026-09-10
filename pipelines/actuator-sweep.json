@@ -1,0 +1,12 @@
+{
+  "name": "actuator-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, varredura de Spring Boot Actuator exposto sem auth (/env, /heapdump, /jolokia, beans/mappings/…). Confirma pelo corpo da resposta.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 500 } },
+    {
+      "tool": "scan-actuator",
+      "params": { "concurrency": 20, "timeout_ms": 8000 },
+      "feed": { "param": "hosts", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

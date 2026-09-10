@@ -1,0 +1,12 @@
+{
+  "name": "mongodb-sweep",
+  "description": "Enumeração passiva ampla (7 fontes) e, em cada host achado, procura MongoDB sem autenticação nas portas 27017/27018 (wire protocol direto).",
+  "steps": [
+    { "tool": "recon-passive-enum", "params": { "max": 3000, "resolve": true } },
+    {
+      "tool": "scan-mongodb",
+      "params": { "ports": "27017,27018", "concurrency": 16, "timeout_ms": 6000 },
+      "feed": { "param": "hosts", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

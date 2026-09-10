@@ -1,0 +1,12 @@
+{
+  "name": "js-recon",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, recon de JavaScript: reconstrói o código a partir de source maps e extrai a superfície de API (endpoints fetch/axios/XHR, rotas sensíveis).",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 200 } },
+    {
+      "tool": "js-hunter",
+      "params": { "max_js": 60 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

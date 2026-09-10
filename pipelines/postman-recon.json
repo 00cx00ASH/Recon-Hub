@@ -1,0 +1,7 @@
+{
+  "name": "postman-recon",
+  "description": "Busca o alvo na rede pública do Postman: collections e workspaces públicas, segredos embutidos e hosts internos vazados nas requisições.",
+  "steps": [
+    { "tool": "scan-postman-net", "params": { "size": 30 } }
+  ]
+}

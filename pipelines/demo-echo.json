@@ -1,0 +1,12 @@
+{
+  "name": "demo-echo",
+  "description": "Wiring check: roda example-echo duas vezes; o 2º step recebe os assets do 1º no parâmetro subdomains.",
+  "steps": [
+    { "tool": "example-echo", "params": { "count": 3, "delay_ms": 60 } },
+    {
+      "tool": "example-echo",
+      "params": { "count": 2, "delay_ms": 60 },
+      "feed": { "param": "subdomains", "source": "assets", "kind": "demo", "as": "csv" }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "infra-mongo",
+  "description": "Port scan de portas de banco em cada host da enumeração passiva e, nas portas 27017/27018 abertas, checa MongoDB sem autenticação via wire protocol.",
+  "steps": [
+    { "tool": "recon-passive-enum", "params": { "max": 1500, "resolve": true } },
+    {
+      "tool": "recon-infra-enum",
+      "params": { "ports": "27017,27018", "timeout_ms": 1200 },
+      "feed": { "param": "hosts", "source": "assets", "kind": "subdomain", "as": "lines" }
+    },
+    {
+      "tool": "scan-mongodb",
+      "params": { "ports": "27017,27018" },
+      "feed": { "param": "hosts", "source": "assets", "kind": "port", "as": "lines" }
+    }
+  ]
+}

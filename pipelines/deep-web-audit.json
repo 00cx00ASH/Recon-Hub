@@ -1,0 +1,17 @@
+{
+  "name": "deep-web-audit",
+  "description": "Três passos: (1) enumeração passiva por crt.sh; (2) content discovery por wordlist em cada host achado (calibra soft-404); (3) varredura de segredos nas páginas/JS de cada caminho vivo encontrado. Use wordlist pequena — multiplica requisições.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 100 } },
+    {
+      "tool": "scan-fuzz",
+      "params": { "wordlist": "builtin/web-content-common", "concurrency": 25 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    },
+    {
+      "tool": "js-secret-hunter",
+      "params": { "js": true, "maps": false },
+      "feed": { "param": "urls", "source": "assets", "kind": "url", "as": "lines" }
+    }
+  ]
+}

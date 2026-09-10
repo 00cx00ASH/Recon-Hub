@@ -1,0 +1,156 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  go:
+    name: go (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - "."
+          - "tools/scan-subdomain-takeover"
+          - "tools/recon-crtsh"
+          - "tools/js-bucket-scanner"
+          - "tools/scan-fuzz"
+          - "tools/js-secret-hunter"
+          - "tools/scan-actuator"
+          - "tools/scan-open-redirect"
+          - "tools/scan-dep-confusion"
+          - "tools/js-firebase-enum"
+          - "tools/scan-broken-link-hijack"
+          - "tools/scan-cognito"
+          - "tools/recon-passive-enum"
+          - "tools/js-gtm-osint"
+          - "tools/scan-cache-poisoning"
+          - "tools/js-supabase-probe"
+          - "tools/js-jwt-finder"
+          - "tools/scan-mongodb"
+          - "tools/js-ai-key-hunter"
+          - "tools/js-hunter"
+          - "tools/scan-postman-net"
+          - "tools/recon-web-enum"
+          - "tools/recon-infra-enum"
+          - "tools/int-github-audit"
+          - "tools/scan-cors"
+          - "tools/scan-graphql"
+          - "tools/scan-postman-audit"
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: gofmt
+        run: |
+          bad="$(gofmt -l .)"
+          if [ -n "$bad" ]; then
+            echo "::error::arquivos não formatados:"; echo "$bad"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+  sqlite:
+    name: sqlite backend (-tags sqlite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: go.sum
+      - name: build with sqlite tag
+        run: go build -tags sqlite ./cmd/reconhub
+      - name: vet with sqlite tag
+        run: go vet -tags sqlite ./internal/store/
+      - name: test the sqlite store
+        run: go test -tags sqlite -race -count=1 ./internal/store/
+      - name: default build stays dependency-free
+        run: |
+          go build -o /tmp/rh-default ./cmd/reconhub
+          if go list -deps ./cmd/reconhub | grep -q 'modernc.org/sqlite'; then
+            echo "::error::build padrão puxou modernc.org/sqlite"; exit 1
+          fi
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck $(git ls-files '*.sh')
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: reconhub:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: smoke test the image
+        run: |
+          set -e
+          docker run -d --name rh -p 7878:7878 reconhub:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:7878/api/health >/dev/null && ok=1 && break
+            sleep 2
+          done
+          docker logs rh
+          test -n "${ok:-}" || { echo "::error::health não respondeu"; exit 1; }
+
+          # hub nasce fechado
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7878/api/tools)
+          test "$code" = "401" || { echo "::error::/api/tools sem token deu $code, esperava 401"; exit 1; }
+
+          TOKEN=$(docker exec rh cat /app/data/token)
+          H="Authorization: Bearer $TOKEN"
+          curl -sf -H "$H" http://127.0.0.1:7878/api/tools | grep -q scan-subdomain-takeover \
+            || { echo "::error::ferramentas não registradas"; exit 1; }
+
+          # roda um job de verdade (example-echo, sem rede) e confere que terminou
+          JID=$(curl -sf -H "$H" -XPOST http://127.0.0.1:7878/api/jobs \
+            -d '{"tool":"example-echo","target":"ci.local","params":{"count":2,"delay_ms":50}}' \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+          for _ in $(seq 1 20); do
+            st=$(curl -sf -H "$H" "http://127.0.0.1:7878/api/jobs/$JID" \
+              | python3 -c 'import sys,json;print(json.load(sys.stdin)["job"]["status"])')
+            [ "$st" = succeeded ] && break
+            [ "$st" = failed ] && { echo "::error::job falhou"; exit 1; }
+            sleep 1
+          done
+          test "$st" = succeeded || { echo "::error::job não terminou (status=$st)"; exit 1; }
+          echo "job ok: $st"
+
+          docker rm -f rh

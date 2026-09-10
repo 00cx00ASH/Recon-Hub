@@ -1,0 +1,346 @@
+# Guia de uso — recon-hub
+
+Como o sistema funciona, como as peças conversam, o que existe hoje, e os fluxos
+de uso na ordem em que você usaria de verdade num programa de bug bounty.
+
+Referência complementar: [`TOOL_CONTRACT.md`](TOOL_CONTRACT.md) (contrato de
+ferramenta) e o [`README.md`](../README.md) (instalação, auth, catálogo completo).
+
+---
+
+## 1. Modelo mental — 3 camadas
+
+```
+┌─ CLIENTES ────────────────────────────────────────────────┐
+│  dashboard web (/)   ·   API REST+SSE   ·   MCP (Claude)   │
+└───────────────────────────┬───────────────────────────────┘
+                            │  HTTP same-origin + token
+┌─ NÚCLEO (cmd/reconhub) ───┴───────────────────────────────┐
+│  api → engine (fila, concorrência) → runner (spawn)        │
+│         ├─ store   (jobs/findings/assets/runs)  files|sqlite│
+│         ├─ bus     (SSE ao vivo)                            │
+│         ├─ pipeline (grafo de steps)                        │
+│         ├─ scope   (programs/*.json — in/out of scope)      │
+│         ├─ monitor (watches — agendado + webhook)           │
+│         ├─ report  (findings → .md/.html de bounty)         │
+│         └─ wordlist (wordlists/ + SecLists)                 │
+└───────────────────────────┬───────────────────────────────┘
+                            │  stdin JSON + env  →  NDJSON stdout
+┌─ FERRAMENTAS (tools/<nome>/) ─────────────────────────────┐
+│  27 processos externos, cada um módulo Go isolado.         │
+│  O hub NÃO depende delas; elas não incham o hub.           │
+└───────────────────────────────────────────────────────────┘
+```
+
+O ponto central: **o hub não sabe o que cada ferramenta faz**. Ele sabe iniciar
+um processo, mandar um alvo + parâmetros, e ler linhas NDJSON de volta. Todo o
+resto (dashboard, findings normalizados, pipelines, relatório) é construído em
+cima desse contrato.
+
+---
+
+## 2. Como as peças conversam
+
+### O contrato ferramenta ⇄ hub
+
+**Entrada** que a ferramenta recebe ao ser spawnada:
+
+- **stdin**, uma linha:
+  `{"target":"acme.com","params":{"max":3000},"job_id":"a1b2…"}`
+- **env** (pra quem não quer parsear JSON): `RECONHUB_TARGET`,
+  `RECONHUB_JOB_ID`, `RECONHUB_PARAM_MAX=3000`
+
+**Saída** — NDJSON no stdout, uma linha = um evento:
+
+| type       | pra quê                                                              |
+|------------|--------------------------------------------------------------------|
+| `log`      | mensagem (`level` info/warn/error)                                 |
+| `progress` | barra (`data.pct`)                                                 |
+| `finding`  | **vulnerabilidade** — `severity`, `finding_type`, `title`, `asset`, `evidence`, `meta` |
+| `asset`    | **descoberta** — `kind` (subdomain/url/port/…), `value`            |
+| `done` / `error` | fim                                                          |
+
+`finding` = achou algo reportável. `asset` = achou um alvo novo (subdomínio,
+URL, porta). Ferramentas de recon cospem `asset`; scanners cospem `finding`;
+várias fazem os dois.
+
+### O fluxo de um job
+
+1. `POST /api/jobs {tool, target, program, params}` → engine enfileira.
+2. Engine respeita `max_concurrent` (default 4), chama o `runner`.
+3. Runner faz `exec` do processo com working-dir em `tools/<nome>/`, injeta
+   stdin + env.
+4. Cada linha NDJSON → o engine:
+   - `finding` → `store.AddFinding` (com **dedup**, ver abaixo)
+   - `asset` → `store.AddAsset` (dedup por `job|kind|value`)
+   - tudo → `bus` → quem estiver ouvindo `GET /api/jobs/{id}/events` (SSE) vê ao vivo
+5. Processo sai com código 0 = sucesso.
+
+### Dedup (é o que torna re-rodar seguro)
+
+Finding é deduplicado por **`(program, tool, finding_type, asset, title)`**.
+Re-rodar o mesmo recon, ou uma pipeline que passa 2× pelo mesmo host, **não cria
+linha nova** — sobe `count` e `last_seen`. Recon de um programa é idempotente. É
+também o que o `monitor` usa pra detectar "finding novo".
+
+---
+
+## 3. O que fica guardado (modelo de dados)
+
+| entidade         | é                                        | onde                                    |
+|------------------|------------------------------------------|-----------------------------------------|
+| **job**          | uma execução de 1 ferramenta             | `store`                                 |
+| **event**        | linha NDJSON de um job (log/progress/…)  | `store`                                 |
+| **finding**      | vuln normalizada, deduplicada, com `count` | `store`                               |
+| **asset**        | descoberta (subdomínio, porta, URL…)     | `store`                                 |
+| **pipeline run** | execução de uma pipeline + estado de cada step | `store`                            |
+| **program**      | escopo de um alvo (`in_scope`/`out_of_scope` wildcard) | `programs/<nome>.json`     |
+| **watch**        | pipeline agendada + webhook de alerta    | `watches/<nome>.json` (mutável)         |
+
+`store` = **JSON-lines em `./data/`** por padrão (zero deps), ou **SQLite** se
+você compilar com `-tags sqlite`. Mesma interface, os dois.
+
+---
+
+## 4. O que temos hoje
+
+### 27 ferramentas, por grupo
+
+**recon — achar superfície**
+
+| ferramenta          | o que faz                                                              |
+|---------------------|----------------------------------------------------------------------|
+| `recon-passive-enum` | subdomínios de **7 fontes** grátis em paralelo (CT, DNS datasets…) + resolve |
+| `recon-crtsh`        | subdomínios via Certificate Transparency (crt.sh + certspotter, com merge) |
+| `recon-web-enum`     | crawl same-site raso, fingerprint de stack (Server/X-Powered-By/cookies) |
+| `recon-infra-enum`   | port scan TCP + banner + fingerprint. Aceita host/IP/CIDR, presets `top100`/… |
+
+**scan — testar vulnerabilidade**
+
+| ferramenta                | o que faz                                                        |
+|---------------------------|---------------------------------------------------------------|
+| `scan-subdomain-takeover` | CNAME dangling, ~58 fingerprints, confirmação HTTP             |
+| `scan-fuzz`               | content discovery por wordlist, calibra soft-404               |
+| `scan-actuator`           | Spring Boot Actuator exposto (`/env`, `/heapdump`, Jolokia…)   |
+| `scan-open-redirect`      | 17 payloads de bypass em params comuns, confirma pelo destino real |
+| `scan-cors`               | reflexão de origem, `null`, wildcard + credentials             |
+| `scan-graphql`            | acha o endpoint, testa introspection, sinaliza mutations perigosas |
+| `scan-cache-poisoning`    | headers não-chaveados (X-Forwarded-Host…), confirma com 2ª req limpa |
+| `scan-broken-link-hijack` | links externos registráveis (GitHub/npm/S3/20 provedores de PaaS/social) |
+| `scan-dep-confusion`      | npm/PyPI/Cargo/Composer — lê manifesto ou extrai imports, checa registro público |
+| `scan-cognito`            | acha IDs de AWS Cognito, testa se o Identity Pool dá credencial AWS a anônimo |
+| `scan-mongodb`            | MongoDB sem auth — fala OP_MSG direto, lista bancos/coleções (só nomes) |
+| `scan-postman-net`        | busca na rede **pública** do Postman por um termo, varre collections por segredo |
+| `scan-postman-audit`      | auditoria profunda de uma collection que **você aponta** (segredo, PII c/ Luhn, auth hardcoded) |
+
+**js — JavaScript, cloud, segredos** (todas baixam página + `<script src>` + source maps)
+
+| ferramenta          | o que faz                                                              |
+|---------------------|--------------------------------------------------------------------|
+| `js-secret-hunter`  | ~35 padrões de credencial (AWS/GCP/GitHub/Slack/Stripe/…)          |
+| `js-ai-key-hunter`  | chaves de IA (OpenAI sk-proj, Anthropic sk-ant, …), validação read-only |
+| `js-bucket-scanner` | referências a cloud storage em 11 provedores                        |
+| `js-hunter`         | endpoints/rotas escondidas em JS + reconstrói código de source maps |
+| `js-jwt-finder`     | JWTs no HTML/JS, decodifica header + payload, sinaliza `alg:none`/sem-exp/claims sensíveis |
+| `js-firebase-enum`  | `firebaseConfig` → testa Realtime DB / Firestore aberto sem auth   |
+| `js-supabase-probe` | URL + anon key do Supabase → testa PostgREST (lista tabelas, só leitura) |
+| `js-gtm-osint`      | IDs de tracking (GTM/GA4/Ads) + segredos em containers GTM         |
+
+**int — integrações**
+
+| ferramenta         | o que faz                                                              |
+|--------------------|--------------------------------------------------------------------|
+| `int-github-audit` | superfície pública de uma conta/org: repos, arquivos sensíveis (`.env`/`*.pem`), 17 padrões de segredo, workflows do Actions (pwn-request, injeção), gists |
+
+> `example-echo` (Bash) é o stub de referência — emite eventos de exemplo pra
+> testar o hub ponta-a-ponta.
+
+### Subsistemas prontos
+
+- **29 pipelines** — encadeiam ferramentas, passando `asset` de um step como
+  `param` do próximo.
+- **Pipeline DAG / fan-out** — steps ganham `id`, `feed.from`, `needs`; steps sem
+  dependência pendente rodam **em paralelo** (ondas). Step falho marca dependentes
+  `skipped`, ramos independentes seguem.
+- **Monitor (watches)** — pipeline agendada; ao terminar, compara findings com a
+  run anterior do mesmo watch; se tem novo + webhook setado, `POST` estilo Discord.
+- **Relatório de bounty** — `/api/report.md` e `.html`: cada finding vira seção
+  com título, severidade, asset, **passos de repro** (`curl` gerados do `meta`),
+  impacto, correção, refs — de uma base de ~40 templates, com fallback honesto
+  ("revisar antes de submeter") pros tipos sem template.
+- **Programas / escopo** — `programs/<nome>.json` com wildcard; tag `program` em
+  job/finding/asset; filtro de escopo no feed das pipelines.
+- **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
+  selecionáveis no param `wordlist`.
+- **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
+- **MCP** — `cmd/reconhub-mcp`, 12 tools, deixa o Claude dirigir o hub.
+- **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
+- **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +
+  job sqlite.
+
+---
+
+## 5. Como usar bem — fluxos concretos
+
+### a) Subir e entrar
+
+```bash
+go run ./cmd/reconhub
+```
+
+Pega no log a linha `http://127.0.0.1:7878/#token=…` e abre inteira no navegador
+(o token fica no fragmento, o dashboard adota e limpa a URL). Pra API/CLI:
+
+```bash
+export H="Authorization: Bearer $(cat data/token)"
+curl -s -H "$H" localhost:7878/api/tools | python3 -m json.tool
+```
+
+### b) Rodar uma ferramenta só
+
+Dashboard: aba **Job atual** → escolhe ferramenta → o form mostra os params (e o
+`guide` — o que pôr no Alvo). Ou API:
+
+```bash
+curl -s -H "$H" -XPOST localhost:7878/api/jobs \
+  -d '{"tool":"js-secret-hunter","target":"https://app.acme.com","program":"acme"}'
+```
+
+Acompanha ao vivo: aba do job no dashboard, ou `GET /api/jobs/{id}/events` (SSE).
+
+### c) Criar o programa PRIMEIRO (é o jeito certo pra um alvo real)
+
+Antes de disparar qualquer coisa, cria o escopo. Assim todo finding nasce com
+`program:"acme"`, o dedup funciona certo, o filtro de escopo corta subdomínio
+fora do alvo no meio da pipeline, e o relatório sai escopado.
+
+Dashboard: **＋ novo projeto**. Ou `POST /api/programs`:
+
+```bash
+curl -s -H "$H" -XPOST localhost:7878/api/programs -d '{
+  "name":"acme",
+  "in_scope":["*.acme.com","acme.io"],
+  "out_of_scope":["blog.acme.com","*.dev.acme.com"]
+}'
+```
+
+### d) Pipelines — o motor de verdade
+
+Rodar:
+
+```bash
+curl -s -H "$H" -XPOST localhost:7878/api/pipeline-runs \
+  -d '{"pipeline":"full-recon","target":"acme.com","program":"acme"}'
+```
+
+As que valem conhecer:
+
+| pipeline             | o que faz                                                                                  | quando                              |
+|----------------------|-------------------------------------------------------------------------------------------|-------------------------------------|
+| **`full-recon`**     | 3 ondas: enum passiva → **~18 scans em paralelo** sobre os subdomínios → port scan → MongoDB nas portas 27017/8 | primeiro contato com um programa novo |
+| **`passive-takeover`** | enum passiva (7 fontes) → subdomain takeover                                            | rápido, alto valor, bom pra watch   |
+| **`js-suite`**       | crt.sh → 8 ferramentas js-* + `scan-cors` em paralelo nos mesmos hosts                    | alvo é SPA / muito JavaScript       |
+| **`web-enum-sweep`**, `infra-sweep`, `cors-sweep`, `graphql-sweep`, `redirect-hunt`, `secret-sweep`… | um vetor específico, mais fundo                        | quando você já sabe o que quer olhar |
+
+O `feed` é o encadeamento:
+`{"param":"urls","from":"recon","kind":"subdomain","as":"lines"}` = "pega os
+assets `subdomain` do step `recon` e entrega no param `urls` deste step, um por
+linha". `full-recon` mostra fan-out real — 18 steps com `from:"recon"` rodam
+juntos.
+
+### e) Findings → relatório
+
+Depois de rodar:
+
+```bash
+curl -s -H "$H" "localhost:7878/api/findings?program=acme&severity=high"
+# relatório pronto pra colar no HackerOne/Intigriti:
+curl -s -H "$H" "localhost:7878/api/report.md?program=acme" -o acme-report.md
+# versão HTML imprimível em PDF:
+curl -s "localhost:7878/api/report.html?program=acme&access_token=$(cat data/token)"
+```
+
+No dashboard: aba **Findings** → **⬇ relatório .md** / **↗ relatório .html**.
+Filtros na query: `program`, `target`, `tool`, `type`, `severity`,
+`include_info=1`.
+
+### f) Monitoramento contínuo (watches)
+
+Um watch = pipeline + agenda + alerta de finding novo:
+
+```bash
+curl -s -H "$H" -XPOST localhost:7878/api/watches -d '{
+  "name":"acme-nightly", "pipeline":"passive-takeover",
+  "target":"acme.com", "program":"acme", "every":"24h",
+  "webhook":"https://discord.com/api/webhooks/…", "enabled":true
+}'
+```
+
+Scheduler acorda a cada 30s; quando o watch está "due" roda a pipeline; se
+aparecer finding que não existia na run anterior **daquele watch** e tiver
+webhook, dispara um `POST` (formato nativo do Discord). Bom pra takeover,
+dep-confusion, secrets — coisas que mudam sozinhas.
+
+### g) Com o Claude (MCP)
+
+`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 12 tools
+(`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_get_report`…). Aí
+você conversa: "roda `full-recon` no acme.com no programa acme e me resume os
+findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
+`RECONHUB_TOKEN`).
+
+### h) SQLite — quando trocar
+
+Fica no FileStore enquanto `data/*.jsonl` estiver confortável. Troca quando
+quiser query / volume:
+
+```bash
+make build-sqlite
+./reconhub-sqlite -migrate-store        # importa o ./data/ atual, uma vez
+./reconhub-sqlite -store sqlite          # daí em diante
+```
+
+Detalhes em [`README.md` → Backend de armazenamento](../README.md#backend-de-armazenamento).
+
+---
+
+## 6. Fluxo recomendado num programa novo
+
+1. **`POST /api/programs`** — cria `acme` com in/out of scope. (sempre primeiro)
+2. **`full-recon`** com `program:"acme"` — deixa rodar (é longo; são 3 ondas e
+   ~18 scans paralelos).
+3. Aba **Findings** filtrando por `severity=high,critical` — triagem.
+4. Pros que parecem reais: re-roda a ferramenta específica sozinha naquele host
+   pra confirmar (idempotente, só sobe `count`).
+5. **`/api/report.md?program=acme`** — gera o rascunho, revisa os passos de
+   repro, ajusta, submete.
+6. **Cria um watch** `passive-takeover` ou `secret-sweep` diário no programa com
+   webhook — pega regressão / superfície nova sem você olhar.
+7. `GET /api/programs/acme/export` — bundle JSON com tudo (jobs + runs + findings
+   + assets) pro seu arquivo.
+
+---
+
+## 7. Rotas da API (referência rápida)
+
+| método | rota                                   | o quê                                  |
+|--------|----------------------------------------|----------------------------------------|
+| GET    | `/api/health`                          | aberto, sem token                      |
+| GET    | `/api/tools` · `/api/tools/{name}` · `/api/tools/{name}/readme` | catálogo    |
+| POST   | `/api/jobs`                            | dispara 1 ferramenta                   |
+| GET    | `/api/jobs` · `/api/jobs/{id}`         | lista / detalhe                        |
+| POST   | `/api/jobs/{id}/cancel`                | cancela                                |
+| GET    | `/api/jobs/{id}/events`                | SSE ao vivo                            |
+| GET    | `/api/findings` · `/api/assets`        | com filtros `?program=…&severity=…`    |
+| GET    | `/api/report` · `/api/report.md` · `/api/report.html` | relatório de bounty     |
+| GET    | `/api/programs/{name}/report.md` · `.html` | idem, escopado                     |
+| GET/POST | `/api/programs` · `/api/programs/{name}` | escopo                            |
+| GET    | `/api/programs/{name}/export`          | bundle JSON completo                   |
+| GET/POST | `/api/pipelines` · `/api/pipeline-runs` · `/api/pipeline-runs/{id}[/cancel|/events]` | pipelines |
+| GET/POST | `/api/watches` · `/api/watches/{name}[/run]` | monitoramento                 |
+| GET    | `/api/wordlists`                       | wordlists indexadas                    |
+| GET    | `/api/docs`                            | o README renderizado no dashboard      |
+
+Auth: header `Authorization: Bearer <token>` em tudo (menos `/api/health`). As
+rotas baixáveis por link (`report.md`, `report.html`, `export`) também aceitam
+`?access_token=<token>`.

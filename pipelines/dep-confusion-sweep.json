@@ -1,0 +1,12 @@
+{
+  "name": "dep-confusion-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, extrai os módulos que o front importa (import/require no JS) e checa cada nome no registro npm público — dependency confusion.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 200 } },
+    {
+      "tool": "scan-dep-confusion",
+      "params": { "mode": "site", "ecosystem": "npm", "concurrency": 8 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

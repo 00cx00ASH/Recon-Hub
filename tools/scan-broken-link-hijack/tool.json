@@ -1,0 +1,22 @@
+{
+  "name": "scan-broken-link-hijack",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Broken Link Hijacking: extrai os links/recursos externos de uma página (a/script/iframe/form, opcionalmente img/link) e checa quais apontam pra algo sequestrável — usuário/repo GitHub inexistente, pacote npm publicável, bucket S3 NoSuchBucket, subdomínio de Heroku/Netlify/Vercel/Surge/… não reclamado, handle de rede social livre, ou domínio que nem resolve (NXDOMAIN).",
+  "guide": "Alvo = a URL de uma página (ex https://blog.exemplo.com). A ferramenta baixa o HTML, acha os links externos e testa cada um. Não usa wordlist. 'include_subresources' liga também <img>/<link> (mais ruído). Modos lista/arquivo varrem várias páginas. Só faz GET — não registra nada, só diz o que é registrável.",
+  "exec": ["go", "run", "."],
+  "timeout": "12m",
+  "modes": [
+    { "name": "single", "label": "Página única", "help": "checa os links da URL do Alvo", "target_label": "URL da página" },
+    { "name": "list", "label": "Lista colada", "help": "várias páginas, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs de página por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL de página por linha" },
+    { "name": "include_subresources", "type": "bool", "required": false, "default": false, "help": "também checar <img> e <link> (favicon, css, sprites)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 12, "help": "checagens simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

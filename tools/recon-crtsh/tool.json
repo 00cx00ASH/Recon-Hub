@@ -1,0 +1,37 @@
+{
+  "name": "recon-crtsh",
+  "version": "0.2.0",
+  "language": "Go",
+  "category": "recon",
+  "summary": "Enumeração passiva de subdomínios via Certificate Transparency (crt.sh + certspotter, com merge e degradação graciosa). Emite eventos asset kind=subdomain — feito para alimentar outras ferramentas numa pipeline.",
+  "guide": "Alvo = domínio RAIZ (ex: exemplo.com), sem http:// e sem www. Não usa wordlist — a fonte é Certificate Transparency (crt.sh + certspotter). Produz assets kind=subdomain, não findings.",
+  "exec": [
+    "go",
+    "run",
+    "."
+  ],
+  "timeout": "3m",
+  "params": [
+    {
+      "name": "timeout_ms",
+      "type": "int",
+      "required": false,
+      "default": 30000,
+      "help": "timeout da chamada ao crt.sh (ele é lento)"
+    },
+    {
+      "name": "wildcards",
+      "type": "bool",
+      "required": false,
+      "default": false,
+      "help": "incluir entradas *.x como x"
+    },
+    {
+      "name": "max",
+      "type": "int",
+      "required": false,
+      "default": 5000,
+      "help": "teto de subdomínios emitidos"
+    }
+  ]
+}

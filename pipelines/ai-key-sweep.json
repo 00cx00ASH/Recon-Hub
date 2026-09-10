@@ -1,0 +1,12 @@
+{
+  "name": "ai-key-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, caça de credenciais de provedores de IA/ML no HTML + JS + source maps (OpenAI, Anthropic, Groq, HuggingFace, Google AI, …). Sem validação (offline).",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "js-ai-key-hunter",
+      "params": { "validate": false, "min_len": 16 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# Modo dev: o repositório é montado por cima de /app e o hub roda via `go run`,
+# então editar qualquer .go (hub ou ferramenta) reflete sem rebuild da imagem.
+# O hub recompila no `docker compose restart reconhub`; as ferramentas
+# recompilam a cada job.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# O volume nomeado reconhub-data continua montado em /app/data, então o ./data
+# do repositório no host NÃO é tocado.
+
+services:
+  reconhub:
+    entrypoint: []
+    command: ["go", "run", "./cmd/reconhub", "-addr", "0.0.0.0:7878"]
+    volumes:
+      - .:/app
+      - reconhub-data:/app/data
+    environment:
+      GOFLAGS: -mod=mod
+      GOTOOLCHAIN: local

@@ -1,0 +1,16 @@
+{
+  "name": "js-suite",
+  "description": "Suíte JS/cloud (fan-out): a partir dos subdomínios do crt.sh, roda EM PARALELO js-secret-hunter, js-ai-key-hunter, js-bucket-scanner, js-hunter, js-firebase-enum, js-supabase-probe, js-jwt-finder, js-gtm-osint e scan-cors sobre os mesmos hosts.",
+  "steps": [
+    { "id": "recon", "tool": "recon-crtsh", "params": { "max": 250 } },
+    { "id": "secrets", "tool": "js-secret-hunter", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "aikeys",  "tool": "js-ai-key-hunter", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "buckets", "tool": "js-bucket-scanner", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "endpoints", "tool": "js-hunter", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "firebase", "tool": "js-firebase-enum", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "supabase", "tool": "js-supabase-probe", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "jwt", "tool": "js-jwt-finder", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "gtm", "tool": "js-gtm-osint", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } },
+    { "id": "cors", "tool": "scan-cors", "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" } }
+  ]
+}

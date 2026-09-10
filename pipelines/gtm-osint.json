@@ -1,0 +1,12 @@
+{
+  "name": "gtm-osint",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, OSINT de Google Tag Manager: IDs de rastreamento, dissecação do container gtm.js, tags de HTML customizado e segredos hardcoded.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 200 } },
+    {
+      "tool": "js-gtm-osint",
+      "params": { "timeout_ms": 12000 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

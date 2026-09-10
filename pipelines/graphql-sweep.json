@@ -1,0 +1,12 @@
+{
+  "name": "graphql-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, descoberta de endpoints GraphQL + teste de introspection, campos sensíveis, mutations perigosas e misconfigs (GET/batching/sugestão de campos/erro vazando).",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 250 } },
+    {
+      "tool": "scan-graphql",
+      "params": { "timeout_ms": 12000 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

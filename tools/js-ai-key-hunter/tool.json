@@ -1,0 +1,24 @@
+{
+  "name": "js-ai-key-hunter",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "js",
+  "summary": "Caça credenciais de provedores de IA/ML no HTML + JS + source maps: OpenAI (sk-proj/legacy), Anthropic (sk-ant-api03), Groq, Mistral, Perplexity, Replicate, HuggingFace, OpenRouter, Together, Fireworks, Cohere, Google AI/Gemini, Azure OpenAI, ElevenLabs, Deepgram, AssemblyAI, LangSmith, Pinecone, W&B, Vertex/GCP service account, AWS Bedrock. Filtro de entropia de Shannon + denylist de placeholders. Validação read-only OPCIONAL (1 GET ao endpoint de metadados do provedor).",
+  "guide": "Alvo = a URL de uma página (ex https://app.exemplo.com). Baixa a página + <script src> + os .js.map. 'validate' (padrão OFF) faz UM GET read-only por chave (ex api.openai.com/v1/models) só pra dizer se está ativa — a chave já está pública no JS do alvo; nada é escrito nem consome créditos. Sem wordlist. Modos lista/arquivo varrem várias URLs.",
+  "exec": ["go", "run", "."],
+  "timeout": "12m",
+  "modes": [
+    { "name": "single", "label": "Página única", "help": "varre a URL do Alvo", "target_label": "URL da página" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "validate", "type": "bool", "required": false, "default": false, "help": "checar cada chave com 1 GET read-only ao provedor" },
+    { "name": "no_js", "type": "bool", "required": false, "default": false, "help": "não baixar os <script src>" },
+    { "name": "no_maps", "type": "bool", "required": false, "default": false, "help": "não tentar os source maps" },
+    { "name": "min_len", "type": "int", "required": false, "default": 16, "help": "tamanho mínimo do valor pra reportar" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" }
+  ]
+}

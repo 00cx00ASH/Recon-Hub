@@ -1,0 +1,11 @@
+/data/
+/reconhub
+/reconhub-sqlite
+/reconhub-mcp
+reconhub.db
+reconhub.db-shm
+reconhub.db-wal
+/config.json
+*.log
+.DS_Store
+/watches/*.json

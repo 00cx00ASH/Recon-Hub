@@ -1,0 +1,166 @@
+[
+  { "service": "GitHub Pages", "cname": ["github.io", "github.map.fastly.net"],
+    "fingerprint": ["there isn't a github pages site here", "for root urls (like http://example.com/) you must provide an index.html file"] },
+
+  { "service": "AWS/S3", "cname": ["amazonaws.com", "s3-website", "s3.dualstack", "s3-external", "s3-accelerate"],
+    "fingerprint": ["the specified bucket does not exist", "nosuchbucket"] },
+
+  { "service": "AWS Elastic Beanstalk", "cname": ["elasticbeanstalk.com"], "fingerprint": [], "nxdomain": true },
+
+  { "service": "AWS CloudFront", "cname": ["cloudfront.net"],
+    "fingerprint": ["err_ssl_unrecognized_name_alert"] },
+
+  { "service": "Heroku", "cname": ["herokudns.com", "herokuapp.com", "herokussl.com"],
+    "fingerprint": ["no such app", "herokucdn.com/error-pages/no-such-app.html"] },
+
+  { "service": "Netlify", "cname": ["netlify.app", "netlify.com"],
+    "fingerprint": ["not found - request id"] },
+
+  { "service": "Vercel", "cname": ["vercel-dns.com", "vercel.app", "now.sh", "zeit-cname.com", "vercel.com"],
+    "fingerprint": ["the deployment could not be found", "deployment_not_found"] },
+
+  { "service": "Microsoft Azure", "cname": ["azurewebsites.net", "cloudapp.net", "cloudapp.azure.com", "trafficmanager.net", "blob.core.windows.net", "azure-api.net", "azurehdinsight.net", "azureedge.net", "azurefd.net", "azurecontainer.io", "database.windows.net", "azuredatalakestore.net", "search.windows.net", "azurecr.io", "redis.cache.windows.net", "servicebus.windows.net", "visualstudio.com", "azurestaticapps.net"],
+    "fingerprint": ["404 web site not found"], "nxdomain": true },
+
+  { "service": "Fastly", "cname": ["fastly.net"],
+    "fingerprint": ["fastly error: unknown domain", "please check that this domain has been added to a service"] },
+
+  { "service": "Shopify", "cname": ["myshopify.com"],
+    "fingerprint": ["sorry, this shop is currently unavailable"] },
+
+  { "service": "Zendesk", "cname": ["zendesk.com"],
+    "fingerprint": ["help center closed", "this help center no longer exists"] },
+
+  { "service": "Ghost", "cname": ["ghost.io"],
+    "fingerprint": ["the thing you were looking for is no longer here", "failed to resolve dns path for this host"] },
+
+  { "service": "Tumblr", "cname": ["domains.tumblr.com"],
+    "fingerprint": ["whatever you were looking for doesn't currently exist at this address"] },
+
+  { "service": "WordPress.com", "cname": ["wordpress.com"], "fingerprint": ["do you want to register"] },
+
+  { "service": "Bitbucket", "cname": ["bitbucket.io"],
+    "fingerprint": ["repository not found", "the page you have requested does not exist"] },
+
+  { "service": "Pantheon", "cname": ["pantheonsite.io", "pantheon.io"],
+    "fingerprint": ["the gods are wise, but do not know of the site which you seek", "404 error unknown site!"] },
+
+  { "service": "Surge.sh", "cname": ["surge.sh"],
+    "fingerprint": ["project not found", "sorry but there's nothing here"] },
+
+  { "service": "Readme.io", "cname": ["readme.io", "readmessl.com"],
+    "fingerprint": ["project doesnt exist... yet!"] },
+
+  { "service": "Cargo Collective", "cname": ["cargocollective.com"],
+    "fingerprint": ["if you're moving your domain away from cargo"] },
+
+  { "service": "Unbounce", "cname": ["unbouncepages.com"],
+    "fingerprint": ["the requested url was not found on this server"] },
+
+  { "service": "Help Scout", "cname": ["helpscoutdocs.com"],
+    "fingerprint": ["no settings were found for this company"] },
+
+  { "service": "Anima", "cname": ["animaapp.io"],
+    "fingerprint": ["if this is your website and you've just created it"] },
+
+  { "service": "Webflow", "cname": ["proxy-ssl.webflow.com", "proxy.webflow.com", "website-files.com"],
+    "fingerprint": ["the page you are looking for doesn't exist or has been moved"] },
+
+  { "service": "Wix", "cname": ["wixdns.net"], "fingerprint": ["error connectyourdomain occurred"] },
+
+  { "service": "Intercom", "cname": ["custom.intercom.help"],
+    "fingerprint": ["this page is reserved for artistic dogs", "uh oh. that page doesn't exist"] },
+
+  { "service": "Kajabi", "cname": ["endpoint.mykajabi.com"],
+    "fingerprint": ["the page you were looking for doesn't exist"] },
+
+  { "service": "Teamwork", "cname": ["teamwork.com"],
+    "fingerprint": ["oops - we didn't find your site"] },
+
+  { "service": "Helpjuice", "cname": ["helpjuice.com"],
+    "fingerprint": ["we could not find what you're looking for"] },
+
+  { "service": "HelpRace", "cname": ["helprace.com"], "fingerprint": [], "nxdomain": true },
+
+  { "service": "Ngrok", "cname": ["ngrok.io"],
+    "fingerprint": ["ngrok.io not found", "tunnel *.ngrok.io not found"] },
+
+  { "service": "Pingdom", "cname": ["stats.pingdom.com"],
+    "fingerprint": ["this public report page has not been activated by the user"] },
+
+  { "service": "UptimeRobot", "cname": ["stats.uptimerobot.com"],
+    "fingerprint": ["this public status page is not activated"] },
+
+  { "service": "Strikingly", "cname": ["s.strikinglydns.com", "strikinglycdn.com"],
+    "fingerprint": ["but if you're looking to build your own website"] },
+
+  { "service": "UserVoice", "cname": ["uservoice.com"],
+    "fingerprint": ["this uservoice subdomain is currently available"] },
+
+  { "service": "Acquia", "cname": ["acquia-sites.com"],
+    "fingerprint": ["if you are an acquia cloud customer and expect to see your site at this address"] },
+
+  { "service": "AgileCRM", "cname": ["agilecrm.com"],
+    "fingerprint": ["sorry, this page is no longer available"] },
+
+  { "service": "AnnounceKit", "cname": ["announcekit.app"],
+    "fingerprint": ["error 404 - page not found · announcekit"] },
+
+  { "service": "AfterShip", "cname": ["aftership.com"],
+    "fingerprint": ["oops.</h2><p class=\"text-muted text-tight\">the page you're looking for doesn't exist"] },
+
+  { "service": "Brightcove", "cname": ["bcvp0rtal.com", "brightcovegallery.com", "gallery.video"],
+    "fingerprint": ["<p class=\"bc-gallery-error-code\">error code: 404"] },
+
+  { "service": "Big Cartel", "cname": ["bigcartel.com"],
+    "fingerprint": ["<h1>oops! we couldn&#8217;t find that page.</h1>"] },
+
+  { "service": "Campaign Monitor", "cname": ["createsend.com"],
+    "fingerprint": ["trying to access your account?"] },
+
+  { "service": "Canny", "cname": ["cname.canny.io"],
+    "fingerprint": ["company not found", "there is no such company. did you enter the right url?"] },
+
+  { "service": "FeedPress", "cname": ["redirect.feedpress.me"],
+    "fingerprint": ["the feed has not been found"] },
+
+  { "service": "Gemfury", "cname": ["furyns.com"],
+    "fingerprint": ["404: this page could not be found."] },
+
+  { "service": "GetResponse", "cname": ["gr8.com"],
+    "fingerprint": ["with getresponse landing pages, lead generation has never been easier"] },
+
+  { "service": "Hatena Blog", "cname": ["hatenablog.com"],
+    "fingerprint": ["404 blog is not found"] },
+
+  { "service": "LaunchRock", "cname": ["launchrock.com"],
+    "fingerprint": ["it looks like you may have taken a wrong turn somewhere"] },
+
+  { "service": "Proposify", "cname": ["proposify.biz"],
+    "fingerprint": ["if you need immediate assistance, please contact <a href=\"mailto:support@proposify.biz"] },
+
+  { "service": "SimpleBooklet", "cname": ["simplebooklet.com"],
+    "fingerprint": ["we can't find this <a href=\"https://simplebooklet.com"] },
+
+  { "service": "Thinkific", "cname": ["thinkific.com"],
+    "fingerprint": ["you may have mistyped the address or the page may have moved"] },
+
+  { "service": "Worksites", "cname": ["worksites.net"],
+    "fingerprint": ["hello! sorry, but the website you&rsquo;re looking for doesn&rsquo;t exist"] },
+
+  { "service": "WP Engine", "cname": ["wpengine.com"],
+    "fingerprint": ["the site you were looking for couldn't be found"] },
+
+  { "service": "Airee.ru", "cname": ["airee.ru"], "fingerprint": [], "nxdomain": true },
+
+  { "service": "Tave", "cname": ["hosted.tave.com"], "fingerprint": [], "nxdomain": true },
+
+  { "service": "Tilda", "cname": ["tilda.ws"],
+    "fingerprint": ["please renew your subscription"] },
+
+  { "service": "SmugMug", "cname": ["domains.smugmug.com"], "fingerprint": [] },
+
+  { "service": "Frontify", "cname": ["frontify.com"], "fingerprint": [] },
+
+  { "service": "Readthedocs", "cname": ["readthedocs.io"], "fingerprint": [] }
+]

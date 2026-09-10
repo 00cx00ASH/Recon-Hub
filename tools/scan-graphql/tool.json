@@ -1,0 +1,21 @@
+{
+  "name": "scan-graphql",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Descobre endpoints GraphQL (16 caminhos comuns), testa introspection e enumera queries/mutations/subscriptions, marca campos de nome sensível (password/token/ssn/…) e mutations perigosas (delete/impersonate/updateRole/…), e checa misconfigs: queries por GET (CSRF), batching de operações (brute force/DoS), sugestão de campos (\"Did you mean\") e vazamento de stack trace nas mensagens de erro.",
+  "guide": "Alvo = a URL base do site OU o endpoint GraphQL direto. Com discovery ligado (padrão), tenta /graphql, /api/graphql, /query, /graphiql, … a partir da base. Não usa wordlist. Só faz queries de leitura (__typename, introspection, um campo inexistente) — nenhuma mutation é executada. Modos lista/arquivo varrem várias bases.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "base ou endpoint", "target_label": "URL base ou /graphql" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "no_discover", "type": "bool", "required": false, "default": false, "help": "usar o Alvo como está, sem tentar os caminhos comuns" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" }
+  ]
+}

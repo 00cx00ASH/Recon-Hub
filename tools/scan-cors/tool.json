@@ -1,0 +1,21 @@
+{
+  "name": "scan-cors",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Testa CORS mal configurado: reflexão da origem do atacante em Access-Control-Allow-Origin, origem 'null', wildcard '*' com Access-Control-Allow-Credentials: true, e bypasses de regex (sufixo <alvo>.evil, prefixo evil<alvo>, hífen no subdomínio, downgrade http, subdomínio arbitrário do domínio registrável). Faz um GET com Origin: <atacante> e lê os headers da resposta.",
+  "guide": "Alvo = uma URL http/https — de preferência um endpoint de API que devolva dados (ex https://api.exemplo.com/me). Não usa wordlist. Cada URL testa ~9 origens forjadas. O finding crítico é reflexão da origem + credentials: true (leitura autenticada cross-origin). Modos lista/arquivo varrem várias URLs.",
+  "exec": ["go", "run", "."],
+  "timeout": "12m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL (endpoint de API)" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 8, "help": "URLs testadas em paralelo" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

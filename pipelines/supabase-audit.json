@@ -1,0 +1,12 @@
+{
+  "name": "supabase-audit",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, procura credenciais Supabase no HTML/JS e testa leitura anônima das tabelas via PostgREST (RLS ausente/fraca), decodificando o JWT.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "js-supabase-probe",
+      "params": { "max_tables": 40 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

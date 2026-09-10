@@ -1,0 +1,16 @@
+{
+  "name": "scan-postman-net",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Busca na rede PÚBLICA do Postman por um termo (domínio, nome da empresa, produto), lista as collections e workspaces públicas, baixa o JSON de cada collection (run.pstmn.io) e varre por segredos (AWS, Google, GitHub, Slack, Stripe, OpenAI, chave privada, Bearer, basic-auth em URL, api_key genérica com filtro de entropia) e hosts internos/staging/dev.",
+  "guide": "Alvo = o termo de busca. Um domínio (exemplo.com) liga a marcação de hosts relacionados. Não usa wordlist. Não autentica no Postman — usa a API pública de busca. 'no_deep' pula o download das collections (só lista). Emite as collections como assets kind=url e os hosts internos como kind=subdomain.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "params": [
+    { "name": "size", "type": "int", "required": false, "default": 25, "help": "número de resultados da busca" },
+    { "name": "no_deep", "type": "bool", "required": false, "default": false, "help": "só listar, não baixar o JSON das collections" },
+    { "name": "match_domain", "type": "string", "required": false, "help": "domínio p/ marcar hosts relacionados (default: o termo, se parecer domínio)" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 15000, "help": "timeout por requisição" }
+  ]
+}

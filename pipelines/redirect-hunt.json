@@ -1,0 +1,12 @@
+{
+  "name": "redirect-hunt",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de open redirect nos nomes de parâmetro comuns (url, next, return_to, callback, …) com payloads de bypass. Confirma pelo destino real da resposta apontando pro canary example.com.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-open-redirect",
+      "params": { "wordlist": "builtin/open-redirect-params", "max_params": 40, "concurrency": 20 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

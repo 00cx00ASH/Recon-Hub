@@ -1,0 +1,22 @@
+{
+  "name": "js-gtm-osint",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "js",
+  "summary": "OSINT de Google Tag Manager: acha os IDs de rastreamento numa página (GTM, GA4 G-, UA-, Ads AW-, GT-, Floodlight DC-), baixa o container gtm.js PÚBLICO de cada GTM-ID e o disseca — versão, contagem de tags/triggers/variáveis, tags de HTML customizado (com heurística de suspeita: document.write/eval/atob/script externo), pixels de terceiros (Facebook, LinkedIn, TikTok, Hotjar…), outros IDs de rastreamento referenciados, e segredos hardcoded no container.",
+  "guide": "Alvo = a URL de uma página (ex https://exemplo.com). Baixa a página + os <script src> e extrai os IDs; pra cada GTM-XXXX, baixa https://www.googletagmanager.com/gtm.js?id=... (recurso público, não é intrusivo). Já tem o ID? Passe em params.gtm_id e deixe o Alvo vazio. Sem wordlist. Modos lista/arquivo varrem várias páginas.",
+  "exec": ["go", "run", "."],
+  "timeout": "8m",
+  "modes": [
+    { "name": "single", "label": "Página única", "help": "extrai os IDs da URL e disseca os containers", "target_label": "URL da página" },
+    { "name": "id", "label": "GTM-ID direto", "help": "informe o GTM-XXXX em 'gtm_id'", "params": ["gtm_id"] },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "gtm_id", "type": "string", "required": false, "help": "GTM-XXXX (um ou vários, separados por vírgula)" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs de página por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL de página por linha" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" }
+  ]
+}

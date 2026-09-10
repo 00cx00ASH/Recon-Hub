@@ -1,0 +1,16 @@
+{
+  "name": "int-github-audit",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "int",
+  "summary": "Audita a superfície PÚBLICA de uma conta/org do GitHub (ou um repo owner/repo): enumera os repos (não-forks, mais recentes), pega a árvore de arquivos, sinaliza nomes sensíveis (.env, *.pem, id_rsa, .npmrc, *.tfstate, serviceaccount*.json…), baixa e varre esses arquivos + os workflows por 17 padrões de segredo (AWS, GitHub PAT, GCP SA, Slack, Stripe, chave privada, connection string com senha…), e analisa os workflows do Actions por pwn-request (pull_request_target + checkout), injeção de shell (${{ github.event.* }} em run:) e runner self-hosted. Também olha os gists públicos. github_token opcional sobe o rate limit de 60 p/ 5000 req/h.",
+  "guide": "Alvo = o login de uma org ou usuário (ex 'acme-corp'), ou 'owner/repo'. Não usa wordlist. Só lê a API pública — nenhuma escrita. Sem token, o rate limit do GitHub é 60 req/h; passe params.github_token (ou a env GITHUB_TOKEN) pra 5000. A ferramenta para sozinha se o rate limit acabar.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "params": [
+    { "name": "github_token", "type": "string", "required": false, "help": "Personal Access Token (read-only) — sobe o rate limit" },
+    { "name": "max_repos", "type": "int", "required": false, "default": 25, "help": "teto de repositórios inspecionados" },
+    { "name": "no_gists", "type": "bool", "required": false, "default": false, "help": "não inspecionar os gists públicos" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 15000, "help": "timeout por requisição" }
+  ]
+}

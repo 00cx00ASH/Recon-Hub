@@ -1,0 +1,12 @@
+{
+  "name": "cache-poison-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de web cache poisoning via headers não-chaveados (X-Forwarded-Host, X-Original-URL, …), isolado por cache-buster.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 200 } },
+    {
+      "tool": "scan-cache-poisoning",
+      "params": { "concurrency": 4, "delay_ms": 150 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

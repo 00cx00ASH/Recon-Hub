@@ -1,0 +1,24 @@
+{
+  "name": "recon-infra-enum",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "recon",
+  "summary": "Port scan TCP (connect) + banner grab + fingerprint de serviço. Aceita host, IP ou CIDR (com teto). Presets top100 (~120 portas curadas com nome de serviço), top1000, web, db, ou csv/ranges (22,80,8000-8100). Grava banner de SSH/SMTP/FTP/HTTP/Redis/Memcached/MySQL e marca serviços sensíveis expostos (redis, mongodb, docker API, kube-apiserver, kubelet, etcd, elasticsearch, rdp, vnc, winrm, mssql/mysql/postgres, jmx, java-rmi…).",
+  "guide": "Alvo = um host, IP, ou CIDR (ex 10.0.0.0/24 — limitado por max_hosts). 'ports' escolhe o conjunto. Não usa wordlist. É um connect scan (TCP handshake completo, sem SYN raw) — barulhento mas confiável e não precisa de root. Emite as portas abertas como assets kind=port. Use com responsabilidade e só em alvos autorizados.",
+  "exec": ["go", "run", "."],
+  "timeout": "20m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "host / IP / CIDR", "target_label": "host, IP ou CIDR" },
+    { "name": "list", "label": "Lista colada", "help": "vários alvos, um por linha", "params": ["hosts"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, um alvo por linha", "params": ["hosts_file"] }
+  ],
+  "params": [
+    { "name": "hosts", "type": "string", "required": false, "help": "alvos por vírgula/linha (modo lista)" },
+    { "name": "hosts_file", "type": "string", "required": false, "help": "arquivo no servidor, um alvo por linha" },
+    { "name": "ports", "type": "string", "required": false, "default": "top100", "help": "top100 | top1000 | web | db | csv/ranges" },
+    { "name": "no_banner", "type": "bool", "required": false, "default": false, "help": "não fazer banner grab (só descobrir portas abertas)" },
+    { "name": "max_hosts", "type": "int", "required": false, "default": 1024, "help": "teto de hosts ao expandir um CIDR" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 300, "help": "conexões simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 1500, "help": "timeout por conexão" }
+  ]
+}

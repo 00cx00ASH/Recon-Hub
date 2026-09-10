@@ -1,0 +1,23 @@
+{
+  "name": "js-secret-hunter",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "js",
+  "summary": "Baixa a página + <script src> + source maps e procura credenciais: ~35 padrões (AWS/GCP/GitHub/Slack/Stripe/Twilio/OpenAI/Anthropic, JWT, chaves privadas PEM, URLs de banco com senha, atribuições genéricas com filtro de entropia).",
+  "guide": "Alvo = uma URL http(s), ex https://app.exemplo.com. Sem http:// ele assume https://. Não usa wordlist. Os valores saem redigidos (pontas visíveis). Modos lista/arquivo varrem várias URLs.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "URL única", "help": "varre a URL do campo Alvo", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs (uma por linha)", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com uma URL por linha (no servidor)", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "caminho de um arquivo, uma URL por linha" },
+    { "name": "js", "type": "bool", "required": false, "default": true, "help": "baixar e varrer os <script src>" },
+    { "name": "maps", "type": "bool", "required": false, "default": true, "help": "tentar os .js.map (source maps)" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" },
+    { "name": "min_len", "type": "int", "required": false, "default": 12, "help": "tamanho mínimo do valor pra reportar" }
+  ]
+}

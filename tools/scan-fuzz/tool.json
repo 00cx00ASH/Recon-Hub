@@ -1,0 +1,25 @@
+{
+  "name": "scan-fuzz",
+  "version": "0.2.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Content discovery (dir/arquivo) por wordlist: calibra o soft-404 do alvo, testa cada palavra (+ extensões) e reporta os hits por status. Estilo ffuf/gobuster. Aceita 1 URL ou uma lista.",
+  "guide": "Alvo = a URL base, ex https://app.exemplo.com. Escolha a wordlist no seletor (traz as embutidas; configure seclists_dir p/ ter o SecLists inteiro). Ele calibra o 404 do alvo pra não gerar lixo. extensions = .php,.bak,~ etc. Nos modos lista/arquivo varre várias URLs base.",
+  "exec": ["go", "run", "."],
+  "timeout": "30m",
+  "modes": [
+    { "name": "single", "label": "URL única", "help": "varre a URL do campo Alvo", "target_label": "URL base" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs base (uma por linha)", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com uma URL base por linha (no servidor)", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "wordlist", "type": "wordlist", "required": true, "help": "wordlist a usar (nome do /api/wordlists ou caminho)" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs base por vírgula/linha" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "caminho de um arquivo, uma URL base por linha" },
+    { "name": "extensions", "type": "string", "required": false, "help": "extensões extra, ex: .php,.bak,.old,~" },
+    { "name": "match_codes", "type": "string", "required": false, "default": "200,204,301,302,307,401,403", "help": "status HTTP que contam como hit" },
+    { "name": "filter_size", "type": "int", "required": false, "help": "esconder respostas com exatamente esse tamanho (bytes)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 30, "help": "requisições simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 7000, "help": "timeout por requisição" }
+  ]
+}

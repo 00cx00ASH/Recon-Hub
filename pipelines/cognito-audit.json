@@ -1,0 +1,12 @@
+{
+  "name": "cognito-audit",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, procura AWS Cognito no HTML/JS e testa se o Identity Pool entrega credenciais AWS a usuários não autenticados (confirma via sts:GetCallerIdentity).",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-cognito",
+      "params": { "timeout_ms": 12000 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# Uso:
+#   docker compose up -d --build
+#   docker compose logs -f reconhub      # pega a URL http://0.0.0.0:7878/#token=...
+#                                        # abra no host como http://127.0.0.1:7878/#token=...
+#
+# O token é gerado no 1º start e persiste no volume reconhub-data (em /app/data/token).
+# Para fixar o seu:  RECONHUB_TOKEN=... docker compose up -d   (ou num .env)
+
+services:
+  reconhub:
+    build:
+      context: .
+      # store em arquivos por padrão (zero deps). Para o backend SQLite:
+      #   RECONHUB_SQLITE=sqlite docker compose up -d --build
+      # e passe -store sqlite abaixo (ou RECONHUB_STORE=sqlite).
+      args:
+        RECONHUB_SQLITE: "${RECONHUB_SQLITE:-}"
+    image: reconhub:local
+    container_name: reconhub
+    ports:
+      - "127.0.0.1:7878:7878"   # só no loopback do host
+    volumes:
+      - reconhub-data:/app/data
+      - reconhub-watches:/app/watches   # pipelines agendadas criadas pela API
+    environment:
+      RECONHUB_TOKEN: "${RECONHUB_TOKEN:-}"
+      RECONHUB_STORE: "${RECONHUB_STORE:-}"
+    restart: unless-stopped
+
+volumes:
+  reconhub-data:
+  reconhub-watches:

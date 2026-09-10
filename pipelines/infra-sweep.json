@@ -1,0 +1,12 @@
+{
+  "name": "infra-sweep",
+  "description": "Enumeração passiva ampla (7 fontes) e, em cada host achado, port scan TCP + banner grab + fingerprint de serviço, marcando serviços sensíveis expostos (redis, mongodb, docker API, elastic, rdp…).",
+  "steps": [
+    { "tool": "recon-passive-enum", "params": { "max": 2000, "resolve": true } },
+    {
+      "tool": "recon-infra-enum",
+      "params": { "ports": "top100", "concurrency": 300, "timeout_ms": 1200 },
+      "feed": { "param": "hosts", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

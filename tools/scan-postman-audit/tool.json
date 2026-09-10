@@ -1,0 +1,19 @@
+{
+  "name": "scan-postman-audit",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Auditoria PROFUNDA de uma collection do Postman que você aponta (por id, URL pública, ou todas as collections de um workspace público). Baixa o JSON completo (run.pstmn.io), inventaria os requests (método + URL → assets), e varre por segredos (18 padrões com entropia), PII (e-mail, CPF, SSN, cartão validado por Luhn, IBAN, telefone — redigidos), credenciais hardcoded nos blocos `auth` (bearer/apikey/basic com valor literal, não `{{variável}}`), e hosts internos/staging.",
+  "guide": "Alvo = o id de uma collection (ex 12345-uuid), a URL pública dela (www.postman.com/<handle>/<workspace>/collection/<id>), ou a URL de um workspace público (audita todas as collections dele). Não usa wordlist. Não autentica no Postman. Diferente do scan-postman-net (que BUSCA por um termo), aqui você já sabe qual collection quer auditar a fundo. 'collections' aceita vários por vírgula/linha.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "single", "label": "Uma collection/workspace", "help": "id, URL da collection, ou URL do workspace", "target_label": "id ou URL do Postman" },
+    { "name": "list", "label": "Vários", "help": "vários ids/URLs, um por linha", "params": ["collections"] }
+  ],
+  "params": [
+    { "name": "collections", "type": "string", "required": false, "help": "ids/URLs por vírgula/linha (modo list)" },
+    { "name": "match_domain", "type": "string", "required": false, "help": "domínio p/ marcar hosts relacionados como internos" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 15000, "help": "timeout por requisição" }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "name": "js-bucket-scanner",
+  "version": "0.2.0",
+  "language": "Go",
+  "category": "js",
+  "summary": "Acha referências a cloud storage (S3, GCS, Azure Blob, R2, DO Spaces, Wasabi, Backblaze B2, Linode, Scaleway, Alibaba OSS, IBM COS) no HTML/JS/source maps de uma página e testa cada bucket: LIST anônimo, privado ou inexistente (takeover).",
+  "guide": "Alvo = uma URL http(s) (ex: https://app.exemplo.com), ou lista/arquivo de URLs. Não usa wordlist — extrai referências a buckets do HTML/JS/source maps da página e testa cada um. Sem http:// ele assume https://.",
+  "exec": [
+    "go",
+    "run",
+    "."
+  ],
+  "timeout": "15m",
+  "modes": [
+    {
+      "name": "single",
+      "label": "URL única",
+      "help": "varre a URL do campo Alvo",
+      "target_label": "URL"
+    },
+    {
+      "name": "list",
+      "label": "Lista colada",
+      "help": "cola várias URLs (vírgula ou uma por linha)",
+      "params": [
+        "urls"
+      ]
+    },
+    {
+      "name": "file",
+      "label": "De arquivo",
+      "help": "caminho de um arquivo com uma URL por linha (no servidor)",
+      "params": [
+        "urls_file"
+      ]
+    }
+  ],
+  "params": [
+    {
+      "name": "urls",
+      "type": "string",
+      "required": false,
+      "help": "lista de URLs por vírgula/linha"
+    },
+    {
+      "name": "urls_file",
+      "type": "string",
+      "required": false,
+      "help": "caminho de um arquivo, uma URL por linha"
+    },
+    {
+      "name": "js",
+      "type": "bool",
+      "required": false,
+      "default": true,
+      "help": "baixar e varrer os <script src>"
+    },
+    {
+      "name": "maps",
+      "type": "bool",
+      "required": false,
+      "default": true,
+      "help": "tentar os .js.map (source maps)"
+    },
+    {
+      "name": "concurrency",
+      "type": "int",
+      "required": false,
+      "default": 10,
+      "help": "workers para o probe de buckets"
+    },
+    {
+      "name": "timeout_ms",
+      "type": "int",
+      "required": false,
+      "default": 10000,
+      "help": "timeout por requisição HTTP"
+    },
+    {
+      "name": "only_exposed",
+      "type": "bool",
+      "required": false,
+      "default": false,
+      "help": "só reportar bucket aberto ou inexistente (esconde os privados)"
+    }
+  ]
+}

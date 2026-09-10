@@ -1,0 +1,29 @@
+{
+  "name": "example-echo",
+  "version": "0.1.0",
+  "language": "Bash",
+  "category": "int",
+  "summary": "Stub de referência: emite eventos NDJSON de exemplo para validar o orquestrador ponta-a-ponta.",
+  "guide": "Stub de referência. Alvo = qualquer string. Emite eventos de exemplo (log/progress/finding/asset). Serve pra testar o hub e como molde de ferramenta.",
+  "exec": [
+    "bash",
+    "./run.sh"
+  ],
+  "timeout": "2m",
+  "params": [
+    {
+      "name": "count",
+      "type": "int",
+      "required": false,
+      "default": 3,
+      "help": "quantos findings de exemplo emitir"
+    },
+    {
+      "name": "delay_ms",
+      "type": "int",
+      "required": false,
+      "default": 300,
+      "help": "pausa entre passos, em milissegundos"
+    }
+  ]
+}

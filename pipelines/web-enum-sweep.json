@@ -1,0 +1,12 @@
+{
+  "name": "web-enum-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, recon web leve: crawl raso, fingerprint da stack e sondagem de caminhos administrativos/sensíveis com calibração de soft-404.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 150 } },
+    {
+      "tool": "recon-web-enum",
+      "params": { "depth": 1, "max_pages": 30 },
+      "feed": { "param": "target", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

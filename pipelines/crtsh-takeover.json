@@ -1,0 +1,12 @@
+{
+  "name": "crtsh-takeover",
+  "description": "Enumeração passiva por Certificate Transparency (crt.sh) e, em cima dos subdomínios achados, varredura de subdomain takeover.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 2000 } },
+    {
+      "tool": "scan-subdomain-takeover",
+      "params": { "concurrency": 25, "only_confirmed": false },
+      "feed": { "param": "subdomains", "source": "assets", "kind": "subdomain", "as": "csv" }
+    }
+  ]
+}

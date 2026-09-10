@@ -1,0 +1,25 @@
+{
+  "name": "scan-cognito",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Acha identificadores de AWS Cognito no HTML/JS (User Pool ID, Identity Pool ID, app client IDs, aws-exports do Amplify) e testa — só leitura — se o Identity Pool entrega credenciais AWS temporárias a usuários NÃO autenticados (GetId → GetCredentialsForIdentity), confirmando via sts:GetCallerIdentity (ARN + conta). Opcional: detecta se o User Pool aceita SignUp anônimo (sem criar conta).",
+  "guide": "Alvo = a URL da página (ex https://app.exemplo.com). A ferramenta baixa a página + os <script src> e extrai os IDs. Se você já tem os IDs, passe em params.user_pool_id / identity_pool_id (+ region se não estiver no ID) e deixe o Alvo vazio. Sem wordlist. GetId/GetCredentialsForIdentity criam só uma identidade guest efêmera (comportamento normal do SDK) e sts:GetCallerIdentity é read-only. 'test_signup' (padrão off) manda um SignUp com senha inválida — NÃO cria conta, só revela se o client aceita cadastro.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "single", "label": "Página única", "help": "extrai os IDs da URL do Alvo e testa", "target_label": "URL da página" },
+    { "name": "ids", "label": "IDs colados", "help": "informe user_pool_id / identity_pool_id", "params": ["user_pool_id", "identity_pool_id", "region"] },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "user_pool_id", "type": "string", "required": false, "help": "ex us-east-1_AbC123 (pula a extração)" },
+    { "name": "identity_pool_id", "type": "string", "required": false, "help": "ex us-east-1:uuid (pula a extração)" },
+    { "name": "region", "type": "string", "required": false, "help": "região AWS, se não estiver embutida no pool id" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs de página por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL de página por linha" },
+    { "name": "test_signup", "type": "bool", "required": false, "default": false, "help": "checar se o app client aceita SignUp anônimo (não cria conta)" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" }
+  ]
+}

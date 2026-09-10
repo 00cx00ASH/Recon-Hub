@@ -1,0 +1,13 @@
+{
+  "addr": "127.0.0.1:7878",
+  "tools_dir": "./tools",
+  "pipelines_dir": "./pipelines",
+  "programs_dir": "./programs",
+  "wordlists_dir": "./wordlists",
+  "seclists_dir": "",
+  "data_dir": "./data",
+  "web_dir": "./web",
+  "docs_file": "./README.md",
+  "token": "",
+  "max_concurrent": 4
+}

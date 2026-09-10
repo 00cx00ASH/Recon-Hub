@@ -1,0 +1,21 @@
+{
+  "name": "scan-actuator",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Spring Boot Actuator exposto sem auth: índice, /env (com detecção de secrets nas propriedades), /heapdump (confirma o download do dump), Jolokia, beans/mappings/loggers/… Tenta os caminhos prefixados (/actuator/*) e os antigos.",
+  "guide": "Alvo = a URL base do app, ex https://api.exemplo.com. Sem http:// assume https://. Não usa wordlist (lista de caminhos fixa). Modos lista/arquivo varrem vários alvos.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "checa a URL do campo Alvo", "target_label": "URL base" },
+    { "name": "list", "label": "Lista colada", "help": "vários alvos (um por linha)", "params": ["hosts"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com um alvo por linha (no servidor)", "params": ["hosts_file"] }
+  ],
+  "params": [
+    { "name": "hosts", "type": "string", "required": false, "help": "alvos por vírgula/linha" },
+    { "name": "hosts_file", "type": "string", "required": false, "help": "caminho de um arquivo, um alvo por linha" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 15, "help": "requisições simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 8000, "help": "timeout por requisição" }
+  ]
+}

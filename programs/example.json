@@ -1,0 +1,13 @@
+{
+  "name": "example",
+  "platform": "hackerone",
+  "url": "https://hackerone.com/example",
+  "in_scope": [
+    "*.example.com",
+    "example.org"
+  ],
+  "out_of_scope": [
+    "blog.example.com",
+    "*.internal.example.com"
+  ]
+}

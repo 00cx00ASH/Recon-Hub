@@ -1,0 +1,27 @@
+{
+  "name": "scan-dep-confusion",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Dependency confusion multi-ecossistema (npm, PyPI, Cargo, Composer): lê um manifesto (package.json, requirements.txt, pyproject.toml, Cargo.toml, composer.json) OU varre uma página web pelos módulos que ela importa, e checa cada nome no registro público. Nome ausente = build interno sequestrável por um pacote público homônimo.",
+  "guide": "Escolha o modo. 'url': Alvo = URL crua de um manifesto (ex .../raw/main/package.json). 'site': Alvo = URL de uma página; a ferramenta baixa a página + os <script src> e extrai os imports bare (trata como npm). 'paste': cole o manifesto em params.manifest. 'file': caminho no servidor em params.manifest_file. O ecossistema é detectado pelo nome/conteúdo; force em params.ecosystem se precisar. Não usa wordlist. Não publica nada — só faz GET nos registros públicos.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "url", "label": "Manifesto por URL", "help": "Alvo = URL crua do manifesto", "target_label": "URL do manifesto" },
+    { "name": "site", "label": "Varrer página web", "help": "Alvo = URL da página; extrai os imports do JS", "target_label": "URL da página" },
+    { "name": "site-list", "label": "Varrer várias páginas", "help": "várias URLs de página, uma por linha", "params": ["urls"] },
+    { "name": "paste", "label": "Manifesto colado", "help": "cole o conteúdo em 'manifest'", "params": ["manifest", "ecosystem"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor", "params": ["manifest_file", "ecosystem"] }
+  ],
+  "params": [
+    { "name": "manifest", "type": "string", "required": false, "help": "conteúdo do manifesto (modo paste)" },
+    { "name": "manifest_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor (modo file)" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs de página por vírgula/linha (modo site-list)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor com uma URL de página por linha" },
+    { "name": "ecosystem", "type": "string", "required": false, "help": "npm | pypi | cargo | composer (força a detecção)" },
+    { "name": "no_dev", "type": "bool", "required": false, "default": false, "help": "ignorar dev/optional/peer dependencies" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 8, "help": "consultas simultâneas aos registros" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

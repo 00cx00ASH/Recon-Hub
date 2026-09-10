@@ -1,0 +1,12 @@
+{
+  "name": "bucket-hunt",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, busca de referências a cloud storage (S3/GCS/Azure/R2/Spaces) com teste de exposição.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "js-bucket-scanner",
+      "params": { "concurrency": 15, "only_exposed": true },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "jwt-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, procura JWTs no HTML/JS, decodifica sem verificar assinatura, aponta problemas (alg=none, sem exp, claims sensíveis) e tenta quebrar o segredo HS* com a lista embutida.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "js-jwt-finder",
+      "params": { "timeout_ms": 12000 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

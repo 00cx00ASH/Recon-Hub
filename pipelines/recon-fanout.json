@@ -1,0 +1,22 @@
+{
+  "name": "recon-fanout",
+  "description": "Enumeração passiva (crt.sh) e, EM PARALELO sobre os mesmos subdomínios: subdomain takeover, CORS mal configurado e recon de JavaScript (source maps + endpoints). Demonstra o fan-out do grafo de pipeline.",
+  "steps": [
+    { "id": "recon", "tool": "recon-crtsh", "params": { "max": 200 } },
+    {
+      "id": "takeover", "tool": "scan-subdomain-takeover",
+      "params": { "concurrency": 25 },
+      "feed": { "param": "subdomains", "from": "recon", "source": "assets", "kind": "subdomain", "as": "csv" }
+    },
+    {
+      "id": "cors", "tool": "scan-cors",
+      "params": { "concurrency": 8 },
+      "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" }
+    },
+    {
+      "id": "js", "tool": "js-hunter",
+      "params": { "max_js": 40 },
+      "feed": { "param": "urls", "from": "recon", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

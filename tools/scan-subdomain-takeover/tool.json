@@ -1,0 +1,80 @@
+{
+  "name": "scan-subdomain-takeover",
+  "version": "0.2.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Subdomain takeover por CNAME dangling: segue a cadeia de CNAME com DNS direto, casa contra ~58 fingerprints de serviços (GitHub Pages, S3, Heroku, Netlify, Vercel, Azure, Fastly, Shopify, Zendesk, Ghost, Webflow, Kajabi, Canny, Brightcove…) e confirma pelo corpo HTTP.",
+  "guide": "Alvo = um host (modo \"Alvo único\"), ou uma lista/arquivo de hosts nos outros modos. Não usa wordlist — casa o CNAME contra ~58 fingerprints embutidos. Ótimo como 2º step depois de recon-crtsh.",
+  "exec": [
+    "go",
+    "run",
+    "."
+  ],
+  "timeout": "15m",
+  "modes": [
+    {
+      "name": "single",
+      "label": "Alvo único",
+      "help": "checa só o host do campo Alvo",
+      "target_label": "Host"
+    },
+    {
+      "name": "list",
+      "label": "Lista colada",
+      "help": "cola vários hosts (vírgula ou uma por linha)",
+      "params": [
+        "subdomains"
+      ]
+    },
+    {
+      "name": "file",
+      "label": "De arquivo",
+      "help": "caminho de um arquivo com um host por linha (no servidor)",
+      "params": [
+        "subdomains_file"
+      ]
+    }
+  ],
+  "params": [
+    {
+      "name": "subdomains",
+      "type": "string",
+      "required": false,
+      "help": "lista separada por vírgula ou quebra de linha"
+    },
+    {
+      "name": "subdomains_file",
+      "type": "string",
+      "required": false,
+      "help": "caminho de um arquivo, um host por linha"
+    },
+    {
+      "name": "concurrency",
+      "type": "int",
+      "required": false,
+      "default": 20,
+      "help": "workers simultâneos"
+    },
+    {
+      "name": "timeout_ms",
+      "type": "int",
+      "required": false,
+      "default": 7000,
+      "help": "timeout por requisição DNS/HTTP"
+    },
+    {
+      "name": "http",
+      "type": "bool",
+      "required": false,
+      "default": true,
+      "help": "confirmar o fingerprint com um GET no host"
+    },
+    {
+      "name": "only_confirmed",
+      "type": "bool",
+      "required": false,
+      "default": false,
+      "help": "só reportar takeover/dangling confirmado (esconde os avisos low)"
+    }
+  ]
+}

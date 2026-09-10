@@ -1,0 +1,12 @@
+{
+  "name": "blh-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, Broken Link Hijacking: links/recursos externos apontando pra GitHub/npm/S3/Heroku/… não reclamado ou domínio que não resolve.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-broken-link-hijack",
+      "params": { "concurrency": 12 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

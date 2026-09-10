@@ -1,0 +1,12 @@
+{
+  "name": "passive-takeover",
+  "description": "Enumeração passiva ampla (7 fontes) e, em cima dos subdomínios achados, varredura de subdomain takeover (CNAME dangling + fingerprints).",
+  "steps": [
+    { "tool": "recon-passive-enum", "params": { "max": 5000 } },
+    {
+      "tool": "scan-subdomain-takeover",
+      "params": { "concurrency": 25, "only_confirmed": false },
+      "feed": { "param": "subdomains", "source": "assets", "kind": "subdomain", "as": "csv" }
+    }
+  ]
+}

@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>recon-hub · console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#131311; --surface:#1b1a16; --surface-2:#24221d; --border:#35312a; --border-strong:#4a443a;
+    --text:#e9e4d7; --dim:#9a9384; --faint:#75705f;
+    --accent:#e8a33d; --accent-2:#7bbace;
+    --ok:#6fbf73; --warn:#e0a138; --crit:#dd7b68; --info:#7bbace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f3f0e7; --surface:#fbf9f3; --surface-2:#ece7d9; --border:#dbd4c2; --border-strong:#c6bca3;
+      --text:#26241e; --dim:#6b6558; --faint:#928b7b;
+      --accent:#a65e0c; --accent-2:#1f6a80;
+      --ok:#3f8f4e; --warn:#9a6a12; --crit:#af442d; --info:#1f6a80;
+    }
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5}
+  a{color:var(--accent-2)}
+  code,kbd,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+  header{display:flex;align-items:center;gap:1rem;padding:.7rem 1.1rem;border-bottom:1px solid var(--border);background:var(--surface)}
+  header .brand{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:1rem;letter-spacing:.02em}
+  header .brand b{color:var(--accent)}
+  header .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+  header .dot.up{background:var(--ok)} header .dot.down{background:var(--crit)}
+  header .spacer{flex:1}
+  header input{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.35rem .5rem;width:230px}
+
+  main{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 49px)}
+  @media (max-width:820px){ main{grid-template-columns:1fr} }
+
+  .panel{padding:1.1rem;border-right:1px solid var(--border);background:var(--surface)}
+  .panel h2,.content h2{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 .7rem}
+  .field{display:flex;flex-direction:column;gap:.3rem;margin-bottom:.9rem}
+  .field label{font-size:12px;color:var(--dim)}
+  .field input,.field select{font-family:"IBM Plex Mono",monospace;font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem}
+  .field .help{font-size:11px;color:var(--faint)}
+  #params:empty{display:none}
+  #params{border-top:1px dashed var(--border);padding-top:.9rem;margin-top:.2rem}
+  button.run{width:100%;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;letter-spacing:.04em;background:var(--accent);color:#1a1400;border:0;border-radius:3px;padding:.65rem;cursor:pointer}
+  button.run:disabled{opacity:.5;cursor:not-allowed}
+  .summary{font-size:12px;color:var(--dim)}
+  .summary .k{color:var(--faint)}
+
+  .content{padding:1.1rem 1.3rem;min-width:0}
+  .tabs{display:flex;gap:.3rem;margin-bottom:1rem;flex-wrap:wrap}
+  .tabs button{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.3rem .8rem;cursor:pointer}
+  .tabs button[aria-selected="true"]{color:var(--text);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+  .view{display:none}
+  .view.active{display:block}
+
+  .jobhead{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem}
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:.18rem .5rem;border-radius:2px;border:1px solid var(--border-strong);color:var(--dim)}
+  .pill.queued{color:var(--faint)} .pill.running{color:var(--accent);border-color:var(--accent)}
+  .pill.succeeded{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .pill.failed{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .pill.canceled{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .jobhead .mono{font-size:12px;color:var(--dim)}
+  .jobhead .cancel{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;background:transparent;color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);border-radius:3px;padding:.2rem .55rem;cursor:pointer}
+
+  .bar{height:4px;background:var(--surface-2);border-radius:2px;overflow:hidden;margin-bottom:.9rem}
+  .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+
+  .log{font-family:"IBM Plex Mono",monospace;font-size:12px;line-height:1.6;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:.7rem .8rem;height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .log .t{color:var(--faint)}
+  .log .info{color:var(--dim)} .log .warn{color:var(--warn)} .log .error{color:var(--crit)}
+  .log .progress{color:var(--accent-2)} .log .finding{color:var(--text)} .log .done{color:var(--ok)}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--surface)}
+  td.mono{font-family:"IBM Plex Mono",monospace;color:var(--dim)}
+  .sev{font-family:"IBM Plex Mono",monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:.1rem .4rem;border-radius:2px;border:1px solid var(--border-strong);color:var(--dim)}
+  .sev.critical,.sev.high{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .sev.medium{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .sev.low,.sev.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
+  .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
+  .wrapx{overflow-x:auto}
+
+  .plrun{max-width:520px;border:1px solid var(--border);border-radius:4px;padding:1rem;background:var(--surface)}
+  .plsteps{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim)}
+  .plsteps .s{border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem}
+  .plsteps .arrow{color:var(--faint)}
+  .plsteplist{list-style:none;margin:.6rem 0 0;padding:0;display:flex;flex-direction:column;gap:.4rem}
+  .plsteplist li{display:flex;align-items:center;gap:.6rem;font-size:12.5px;padding:.4rem .6rem;border:1px solid var(--border);border-radius:3px;background:var(--surface)}
+  .plsteplist .n{font-family:"IBM Plex Mono",monospace;color:var(--faint);font-size:11px}
+  .plsteplist .tool{font-family:"IBM Plex Mono",monospace}
+  .plsteplist .fed{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint)}
+  .plsteplist .jump{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent-2);background:none;border:0;cursor:pointer;text-decoration:underline}
+  .log .step_start,.log .step_end{color:var(--accent-2)}
+  .log .asset{color:var(--ok)}
+
+  .md{max-width:78ch;font-size:13.5px;line-height:1.65}
+  .md h1,.md h2,.md h3,.md h4{font-family:"IBM Plex Mono",monospace;line-height:1.25;margin:1.8em 0 .6em;color:var(--text);text-transform:none;letter-spacing:0}
+  .md h1{font-size:1.5rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
+  .md h2{font-size:1.2rem;border-bottom:1px solid var(--border);padding-bottom:.25em}
+  .md h3{font-size:1rem} .md h4{font-size:.85rem;color:var(--dim)}
+  .md p{margin:.7em 0} .md ul,.md ol{margin:.7em 0;padding-left:1.4em} .md li{margin:.25em 0}
+  .md a{text-decoration:underline}
+  .md code{background:var(--surface-2);border:1px solid var(--border);border-radius:3px;padding:.05em .35em;font-size:.9em}
+  .md pre{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.9rem 1rem;overflow-x:auto;margin:1em 0}
+  .md pre code{background:none;border:0;padding:0;font-size:12px;line-height:1.55;color:var(--dim);white-space:pre}
+  .md hr{border:0;border-top:1px solid var(--border);margin:2em 0}
+  .md table{margin:1em 0;font-size:12px}
+  .md th,.md td{border:1px solid var(--border)}
+  .md blockquote{margin:1em 0;padding:.2em 1em;border-left:3px solid var(--border-strong);color:var(--dim)}
+  #docsBody{padding-bottom:3rem}
+
+  #authBanner{background:color-mix(in srgb,var(--crit) 14%,var(--surface));border-bottom:1px solid color-mix(in srgb,var(--crit) 40%,transparent);color:var(--text);font-size:12.5px;padding:.5rem 1.1rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+  #authBanner code{font-family:"IBM Plex Mono",monospace;background:var(--bg);border:1px solid var(--border-strong);border-radius:3px;padding:.05rem .4rem}
+  #authBanner .x{margin-left:auto;background:none;border:0;color:var(--dim);cursor:pointer;font-size:15px;line-height:1}
+  header input.needtoken{border-color:var(--crit);box-shadow:0 0 0 2px color-mix(in srgb,var(--crit) 25%,transparent)}
+
+  #entryHelp{max-width:640px;margin:2.5rem auto;padding:1.6rem 1.8rem;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
+  #entryHelp h2{font-family:"IBM Plex Mono",monospace;font-size:1.15rem;letter-spacing:0;text-transform:none;color:var(--text);margin:0 0 .3rem}
+  #entryHelp .sub{color:var(--dim);font-size:13px;margin-bottom:1.3rem}
+  #entryHelp ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:1rem}
+  #entryHelp li{font-size:13.5px;line-height:1.6}
+  #entryHelp b{color:var(--text)}
+  #entryHelp pre{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.7rem .9rem;margin:.5rem 0 0;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.55;color:var(--dim);white-space:pre}
+  #entryHelp code{font-family:"IBM Plex Mono",monospace;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:.05rem .35rem;font-size:.92em;color:var(--accent)}
+  #entryHelp .paste{display:flex;gap:.5rem;margin-top:.5rem}
+  #entryHelp .paste input{flex:1;font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem}
+  #entryHelp .paste button{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12px;background:var(--accent);color:#1a1400;border:0;border-radius:3px;padding:0 1rem;cursor:pointer}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="health" title="status da API"></span>
+  <span class="brand"><b>recon</b>-hub</span>
+  <span class="spacer"></span>
+  <input id="token" type="password" placeholder="cole o bearer token aqui" autocomplete="off" spellcheck="false">
+</header>
+<div id="authBanner" hidden>
+  <b>Precisa do token.</b>
+  <span>Abra a URL que o servidor imprime no log (<code>http://127.0.0.1:7878/#token=…</code>), ou copie <code>data/token</code> e cole no campo acima →</span>
+  <button class="x" id="authBannerX" title="fechar">✕</button>
+</div>
+
+<div id="entryHelp" hidden>
+  <h2>Como entrar</h2>
+  <p class="sub">O recon-hub nasce fechado. Você precisa do <b>token de acesso</b> uma única vez (o navegador guarda depois).</p>
+  <p id="entryStale" class="sub" hidden style="color:var(--warn)">⚠ O token guardado foi <b>rejeitado</b>. Provável: o servidor reiniciou e gerou outro. Pegue o novo abaixo.</p>
+  <ol>
+    <li>
+      No <b>terminal onde o servidor está rodando</b>, procure estas linhas no log:
+      <pre>token gerado e salvo em /.../recon-hub/data/token
+┌─────────────────────────────────────────────
+│ abra no navegador:  http://127.0.0.1:7878/#token=&lt;SEU_TOKEN&gt;
+└─────────────────────────────────────────────</pre>
+    </li>
+    <li>
+      <b>Jeito mais fácil:</b> copie a linha <code>http://127.0.0.1:7878/#token=…</code> inteira e abra no navegador. Pronto — o hub guarda o token e limpa a URL.
+    </li>
+    <li>
+      <b>Ou</b> pegue o token e cole aqui:
+      <pre># local:
+cat data/token
+# docker:
+docker compose exec reconhub cat /app/data/token</pre>
+      <div class="paste">
+        <input id="entryToken" type="password" placeholder="cole o token aqui" autocomplete="off" spellcheck="false">
+        <button id="entrySave">Entrar</button>
+      </div>
+    </li>
+  </ol>
+</div>
+
+<main>
+  <section class="panel">
+    <h2>Novo job</h2>
+    <div class="field">
+      <label for="tool">Ferramenta</label>
+      <select id="tool"></select>
+      <span class="help" id="toolHelp"></span>
+      <span class="help" id="toolGuide" style="color:var(--dim);border-left:2px solid var(--border-strong);padding-left:.5rem;margin-top:.2rem"></span>
+      <details id="toolDoc" style="margin-top:.35rem">
+        <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">ℹ ajuda completa</summary>
+        <div class="md" id="toolDocBody" style="font-size:12px;max-width:none;margin-top:.4rem"><p class="muted" style="padding:.3rem 0">carregando…</p></div>
+      </details>
+    </div>
+    <div class="field" id="modeField" hidden>
+      <label for="toolMode">Modo</label>
+      <select id="toolMode"></select>
+      <span class="help" id="modeHelp"></span>
+    </div>
+    <div class="field">
+      <label for="target" id="targetLabel">Alvo</label>
+      <input id="target" placeholder="exemplo.com" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="jobProgram">Projeto / escopo</label>
+      <select id="jobProgram"><option value="">— sem projeto —</option></select>
+      <details id="newProg" style="margin-top:.35rem">
+        <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">＋ novo projeto</summary>
+        <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem">
+          <input id="npName" placeholder="nome (ex: acme)" spellcheck="false" autocomplete="off">
+          <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          <textarea id="npOut" rows="2" placeholder="out of scope (opcional):&#10;blog.acme.com" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          <button id="npSave" class="run" style="padding:.45rem">Criar projeto</button>
+          <span class="help" id="npMsg"></span>
+        </div>
+      </details>
+    </div>
+    <div id="params"></div>
+    <button class="run" id="run" disabled>Rodar job</button>
+    <p class="summary" id="regSummary"><span class="k">registro:</span> carregando…</p>
+  </section>
+
+  <section class="content">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-view="current">Job atual</button>
+      <button role="tab" aria-selected="false" data-view="jobs">Jobs</button>
+      <button role="tab" aria-selected="false" data-view="pipelines">Pipelines</button>
+      <button role="tab" aria-selected="false" data-view="monitor">Monitor</button>
+      <button role="tab" aria-selected="false" data-view="findings">Findings</button>
+      <button role="tab" aria-selected="false" data-view="assets">Assets</button>
+      <button role="tab" aria-selected="false" data-view="docs">Docs</button>
+    </div>
+
+    <div class="view active" id="view-current">
+      <div id="noJob" class="muted">Nenhum job selecionado. Dispare um pela esquerda ou escolha um na aba <b>Jobs</b>.</div>
+      <div id="jobBox" hidden>
+        <div class="jobhead">
+          <span class="pill" id="jStatus">—</span>
+          <span class="mono" id="jTool"></span>
+          <span class="mono" id="jTarget"></span>
+          <span class="mono" id="jId"></span>
+          <button class="cancel" id="jCancel" hidden>cancelar</button>
+        </div>
+        <div class="bar"><i id="jBar"></i></div>
+        <h2>Stream</h2>
+        <div class="log" id="log"></div>
+        <h2 style="margin-top:1.1rem">Findings deste job (<span id="jFCount">0</span>)</h2>
+        <div class="wrapx"><table id="jFindings"><tbody></tbody></table></div>
+        <h2 style="margin-top:1.1rem">Assets descobertos (<span id="jACount">0</span>)</h2>
+        <p class="muted" id="jANote" style="padding:.2rem 0" hidden>Ferramentas de recon (ex: <code>recon-crtsh</code>) produzem <b>assets</b>, não findings.</p>
+        <div class="wrapx"><table id="jAssets"><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-jobs">
+      <div class="wrapx"><table>
+        <thead><tr><th>quando</th><th>ferramenta</th><th>alvo</th><th>status</th><th>findings</th><th>id</th></tr></thead>
+        <tbody id="jobsRows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="view" id="view-pipelines">
+      <div class="plrun">
+        <div class="field">
+          <label for="plSelect">Pipeline</label>
+          <select id="plSelect"></select>
+          <span class="help" id="plHelp"></span>
+        </div>
+        <div class="field">
+          <label for="plTarget">Alvo</label>
+          <input id="plTarget" placeholder="exemplo.com" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="plProgram">Programa (escopo)</label>
+          <select id="plProgram"><option value="">— sem programa —</option></select>
+          <span class="help">com escopo, o feed entre steps só passa hosts in-scope</span>
+        </div>
+        <div id="plSteps" class="plsteps"></div>
+        <button class="run" id="plRun" disabled>Rodar pipeline</button>
+      </div>
+
+      <h2 style="margin-top:1.4rem">Run atual</h2>
+      <div id="plNoRun" class="muted">Nenhuma run selecionada. Dispare uma acima ou escolha na lista.</div>
+      <div id="plRunBox" hidden>
+        <div class="jobhead">
+          <span class="pill" id="plStatus">—</span>
+          <span class="mono" id="plRunName"></span>
+          <span class="mono" id="plRunTarget"></span>
+          <span class="mono" id="plRunFindings"></span>
+          <button class="cancel" id="plCancel" hidden>cancelar</button>
+        </div>
+        <ol id="plStepList" class="plsteplist"></ol>
+        <h2 style="margin-top:1rem">Stream</h2>
+        <div class="log" id="plLog"></div>
+      </div>
+
+      <h2 style="margin-top:1.4rem">Histórico</h2>
+      <div class="wrapx"><table>
+        <thead><tr><th>quando</th><th>pipeline</th><th>alvo</th><th>status</th><th>findings</th><th>steps</th></tr></thead>
+        <tbody id="plRows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="view" id="view-monitor">
+      <p class="muted" style="margin-top:0">Um <b>watch</b> é uma pipeline agendada. Quando termina, o hub compara os findings com a run anterior do mesmo watch e, se houver novos, faz um <code>POST</code> no webhook (Discord).</p>
+      <div class="wrapx"><table>
+        <thead><tr><th>watch</th><th>pipeline → alvo</th><th>intervalo</th><th>estado</th><th>última run</th><th>novos</th><th></th></tr></thead>
+        <tbody id="watchRows"></tbody>
+      </table></div>
+
+      <details id="newWatch" style="margin-top:1rem">
+        <summary style="cursor:pointer;font-size:12px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">＋ novo watch</summary>
+        <div class="plrun" style="margin-top:.6rem">
+          <div class="field">
+            <label for="nwName">nome</label>
+            <input id="nwName" placeholder="acme-nightly" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="nwPipeline">pipeline</label>
+            <select id="nwPipeline"></select>
+          </div>
+          <div class="field">
+            <label for="nwTarget">alvo</label>
+            <input id="nwTarget" placeholder="acme.com" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="nwProgram">programa (escopo)</label>
+            <select id="nwProgram"><option value="">— sem programa —</option></select>
+          </div>
+          <div class="field">
+            <label for="nwEvery">intervalo</label>
+            <input id="nwEvery" value="24h" spellcheck="false" autocomplete="off">
+            <span class="help">Go duration: 30m, 6h, 24h (mín 1m)</span>
+          </div>
+          <div class="field">
+            <label for="nwWebhook">webhook (opcional)</label>
+            <input id="nwWebhook" placeholder="https://discord.com/api/webhooks/…" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="field">
+            <label><input type="checkbox" id="nwEnabled" checked> habilitado</label>
+          </div>
+          <button class="run" id="nwSave">Criar watch</button>
+        </div>
+      </details>
+
+      <h2 style="margin-top:1.4rem">Runs do watch <span class="mono" id="watchRunsName"></span></h2>
+      <div id="watchNoSel" class="muted">Clique num watch acima pra ver o histórico dele.</div>
+      <div class="wrapx" id="watchRunsBox" hidden><table>
+        <thead><tr><th>quando</th><th>status</th><th>findings</th><th>steps</th></tr></thead>
+        <tbody id="watchRunRows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="view" id="view-findings">
+      <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.8rem;font-size:12px;color:var(--dim)">
+        <label for="findProgram">programa</label>
+        <select id="findProgram" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem"><option value="">todos</option></select>
+        <a id="findExport" hidden style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar projeto</a>
+        <span style="flex:1"></span>
+        <label style="display:flex;align-items:center;gap:.3rem"><input type="checkbox" id="repInfo"> incluir info</label>
+        <a id="repMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
+        <a id="repHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
+      </div>
+      <div class="wrapx"><table>
+        <thead><tr><th>sev</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th></tr></thead>
+        <tbody id="findingsRows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="view" id="view-assets">
+      <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.8rem;font-size:12px;color:var(--dim);flex-wrap:wrap">
+        <label for="assetProgram">programa</label>
+        <select id="assetProgram" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem"><option value="">todos</option></select>
+        <a id="assetExport" hidden style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar projeto</a>
+        <label for="assetKind">tipo</label>
+        <select id="assetKind" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem">
+          <option value="">todos</option><option>subdomain</option><option>url</option><option>bucket</option><option>endpoint</option><option>ip</option>
+        </select>
+      </div>
+      <div class="wrapx"><table>
+        <thead><tr><th>tipo</th><th>valor</th><th>ferramenta</th><th>programa</th><th>quando</th></tr></thead>
+        <tbody id="assetsRows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="view" id="view-docs">
+      <div class="md" id="docsBody"><p class="muted">carregando README…</p></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, props={}, kids=[]) => { const n=document.createElement(t); Object.assign(n, props); for(const k of [].concat(kids)) n.append(k); return n; };
+const fmtTime = s => { try { return new Date(s).toLocaleTimeString('pt-BR'); } catch { return s; } };
+
+let TOOLS = [];
+let WORDLISTS = [];
+let es = null;          // EventSource atual
+let currentJob = null;
+
+const tokenInput = $('#token');
+
+// The server prints  http://host:port/#token=<t>  when it generates/loads a
+// token. The fragment never leaves the browser and is not logged; grab it,
+// persist it, then scrub it from the address bar.
+(function adoptTokenFromURL(){
+  const src = (location.hash.slice(1) || location.search.slice(1));
+  const m = new URLSearchParams(src).get('token') || new URLSearchParams(src).get('access_token');
+  if (m) {
+    try { localStorage.setItem('rh_token', m.trim()); } catch {}
+    history.replaceState(null, '', location.pathname);
+  }
+})();
+
+tokenInput.value = (() => { try { return localStorage.getItem('rh_token') || ''; } catch { return ''; } })();
+
+function applyToken(v){
+  v = (v || '').trim();
+  tokenInput.value = v;
+  try { localStorage.setItem('rh_token', v); } catch {}
+  if (v) setAuthNeeded(false);
+  loadTools(); loadPrograms();
+}
+tokenInput.addEventListener('change', () => applyToken(tokenInput.value));
+$('#entrySave').addEventListener('click', () => applyToken($('#entryToken').value));
+$('#entryToken').addEventListener('keydown', e => { if (e.key === 'Enter') applyToken($('#entryToken').value); });
+
+function setAuthNeeded(need){
+  // Toda vez que a API responde 401 (sem token OU token velho — o servidor
+  // reinicia e gera outro), mostra a tela "Como entrar" no lugar da UI.
+  $('#entryHelp').hidden = !need;
+  $('main').hidden = !!need;
+  $('#authBanner').hidden = true;
+  tokenInput.classList.toggle('needtoken', !!need);
+  const stale = need && tokenInput.value.trim();
+  $('#entryStale').hidden = !stale;
+  if (stale && !$('#entryToken').value) $('#entryToken').value = tokenInput.value.trim();
+}
+
+function authHeaders(extra={}) {
+  const t = tokenInput.value.trim();
+  return Object.assign({}, extra, t ? { Authorization: 'Bearer ' + t } : {});
+}
+async function api(path, opts={}) {
+  opts.headers = authHeaders(Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {}));
+  const r = await fetch('/api' + path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { setAuthNeeded(true); throw new Error(j.error || 'token inválido ou ausente'); }
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  setAuthNeeded(false);
+  return j;
+}
+
+/* ---------- health ---------- */
+async function pingHealth() {
+  try { await fetch('/api/health'); $('#health').className = 'dot up'; }
+  catch { $('#health').className = 'dot down'; }
+}
+pingHealth(); setInterval(pingHealth, 10000);
+
+/* ---------- tools ---------- */
+async function loadTools() {
+  try {
+    const { tools } = await api('/tools');
+    TOOLS = tools || [];
+    const sel = $('#tool');
+    sel.innerHTML = '';
+    if (!TOOLS.length) { sel.append(el('option', { value:'', textContent:'nenhuma ferramenta registrada' })); }
+    for (const t of TOOLS) sel.append(el('option', { value: t.name, textContent: `${t.name}  ·  ${t.language || '?'}` }));
+    renderToolMeta();
+    $('#regSummary').innerHTML = `<span class="k">registro:</span> ${TOOLS.length} ferramenta(s)`;
+    $('#run').disabled = !TOOLS.length;
+  } catch (e) {
+    $('#regSummary').innerHTML = `<span class="k">registro:</span> erro — ${e.message}`;
+  }
+}
+function currentTool() { return TOOLS.find(t => t.name === $('#tool').value); }
+function currentMode() {
+  const t = currentTool();
+  if (!t || !t.modes || !t.modes.length) return null;
+  return t.modes.find(m => m.name === $('#toolMode').value) || t.modes[0];
+}
+
+let toolDocLoadedFor = null;
+function renderToolMeta() {
+  const t = currentTool();
+  $('#toolHelp').textContent = t ? (t.summary || '') : '';
+  $('#toolGuide').textContent = (t && t.guide) || '';
+  $('#toolGuide').hidden = !(t && t.guide);
+
+  // ajuda completa (README da ferramenta) — carrega ao abrir o <details>
+  const doc = $('#toolDoc');
+  doc.open = false;
+  doc.hidden = !t;
+  if (t && toolDocLoadedFor !== t.name) {
+    $('#toolDocBody').innerHTML = '<p class="muted" style="padding:.3rem 0">carregando…</p>';
+    toolDocLoadedFor = null;
+  }
+
+  // seletor de modo
+  const modes = (t && t.modes) || [];
+  const mf = $('#modeField');
+  mf.hidden = modes.length === 0;
+  if (modes.length) {
+    const sel = $('#toolMode'), cur = sel.value;
+    sel.innerHTML = '';
+    for (const m of modes) sel.append(el('option', { value: m.name, textContent: m.label || m.name }));
+    if (modes.some(m => m.name === cur)) sel.value = cur;
+  }
+  renderModeAndParams();
+}
+
+function renderModeAndParams() {
+  const t = currentTool();
+  const mode = currentMode();
+  $('#modeHelp').textContent = mode ? (mode.help || '') : '';
+  $('#targetLabel').textContent = (mode && mode.target_label) ? mode.target_label : 'Alvo';
+
+  // params: os "de modo" (aparecem em algum modo) só mostram no modo atual
+  const modeParams = new Set();
+  for (const m of (t && t.modes) || []) for (const p of (m.params || [])) modeParams.add(p);
+  const allow = new Set(mode ? (mode.params || []) : []);
+
+  const box = $('#params');
+  box.innerHTML = '';
+  for (const p of (t && t.params) || []) {
+    if (modeParams.has(p.name) && !allow.has(p.name)) continue; // param de outro modo
+    const id = 'p_' + p.name;
+    const f = el('div', { className: 'field' });
+    f.append(el('label', { htmlFor: id, textContent: `${p.name}  (${p.type})${p.required ? ' *' : ''}` }));
+    let input;
+    if (p.type === 'bool') {
+      input = el('select', { id });
+      input.append(el('option', { value: 'true', textContent: 'true' }), el('option', { value: 'false', textContent: 'false' }));
+      input.value = String(p.default ?? false);
+    } else if (p.type === 'wordlist') {
+      input = el('select', { id });
+      input.append(el('option', { value: '', textContent: (WORDLISTS.length ? '— escolha —' : 'nenhuma wordlist indexada') }));
+      for (const wl of WORDLISTS) {
+        input.append(el('option', { value: wl.name, textContent: `${wl.name}  (${wl.lines >= 0 ? wl.lines + ' linhas' : 'grande'})` }));
+      }
+    } else {
+      input = el('input', { id, type: p.type === 'int' ? 'number' : 'text', value: p.default ?? '' });
+    }
+    input.dataset.pname = p.name; input.dataset.ptype = p.type;
+    f.append(input);
+    if (p.help) f.append(el('span', { className: 'help', textContent: p.help }));
+    box.append(f);
+  }
+}
+$('#tool').addEventListener('change', renderToolMeta);
+$('#toolMode').addEventListener('change', renderModeAndParams);
+$('#toolDoc').addEventListener('toggle', async () => {
+  const t = currentTool();
+  if (!$('#toolDoc').open || !t || toolDocLoadedFor === t.name) return;
+  try {
+    const r = await fetch('/api/tools/' + encodeURIComponent(t.name) + '/readme', { headers: authHeaders() });
+    const body = $('#toolDocBody');
+    body.innerHTML = r.ok ? renderMarkdown(await r.text())
+                          : '<p class="muted" style="padding:.3rem 0">esta ferramenta não tem README.md — veja o campo acima.</p>';
+    toolDocLoadedFor = t.name;
+  } catch (e) {
+    $('#toolDocBody').innerHTML = '<p class="muted">erro: ' + e.message + '</p>';
+  }
+});
+
+function collectParams() {
+  const out = {};
+  const m = currentMode();
+  if (m) out.mode = m.name;
+  for (const input of $('#params').querySelectorAll('[data-pname]')) {
+    const name = input.dataset.pname, type = input.dataset.ptype;
+    let v = input.value;
+    if (v === '' || v == null) continue;
+    if (type === 'int') { const n = Number(v); if (!Number.isNaN(n)) out[name] = n; }
+    else if (type === 'bool') out[name] = v === 'true';
+    else out[name] = v;
+  }
+  return out;
+}
+
+/* ---------- run ---------- */
+$('#run').addEventListener('click', async () => {
+  const tool = $('#tool').value;
+  const target = $('#target').value.trim();
+  const program = $('#jobProgram').value;
+  if (!tool || !target) { $('#target').focus(); return; }
+  $('#run').disabled = true;
+  try {
+    const job = await api('/jobs', { method: 'POST', body: JSON.stringify({ tool, target, program, params: collectParams() }) });
+    selectTab('current');
+    attachJob(job.id);
+    loadJobs();
+  } catch (e) {
+    alert('falha ao criar job: ' + e.message);
+  } finally {
+    $('#run').disabled = false;
+  }
+});
+
+/* ---------- job stream ---------- */
+function pill(status){ const p = $('#jStatus'); p.textContent = status; p.className = 'pill ' + status; }
+function logLine(ev, box){
+  box = box || $('#log');
+  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+  const label = ev.type === 'log' ? (ev.level || 'info') : ev.type;
+  const line = el('div');
+  line.append(el('span',{className:'t',textContent: fmtTime(ev.time) + '  '}));
+  line.append(el('span',{className: label, textContent: `[${label}] ` + (ev.msg || '')}));
+  box.append(line);
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+function setBar(ev){
+  if (ev.type === 'progress' && ev.data){
+    try { const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data; if (typeof d.pct === 'number') $('#jBar').style.width = Math.max(0,Math.min(100,d.pct)) + '%'; } catch {}
+  }
+  if (ev.type === 'done') $('#jBar').style.width = '100%';
+}
+
+async function attachJob(id){
+  if (es) { es.close(); es = null; }
+  currentJob = id;
+  $('#noJob').hidden = true; $('#jobBox').hidden = false;
+  $('#log').innerHTML = ''; $('#jBar').style.width = '0';
+  $('#jId').textContent = '#' + id.slice(0,12);
+
+  let job;
+  try { const r = await api('/jobs/' + id); job = r.job; } catch (e) { alert(e.message); return; }
+  $('#jTool').textContent = job.tool;
+  $('#jTarget').textContent = '→ ' + job.target + (job.program ? '  ·  ' + job.program : '');
+  pill(job.status);
+  refreshJobFindings(id);
+  refreshJobAssets(id);
+
+  const terminal = new Set(['succeeded','failed','canceled']);
+  $('#jCancel').hidden = terminal.has(job.status);
+  if (terminal.has(job.status)) {
+    try { const r = await api('/jobs/' + id); (r.events||[]).forEach(ev => { logLine(ev); setBar(ev); }); } catch {}
+    return;
+  }
+
+  const t = tokenInput.value.trim();
+  const qs = t ? ('?access_token=' + encodeURIComponent(t)) : '';
+  es = new EventSource('/api/jobs/' + id + '/events' + qs);
+  es.onmessage = (m) => {
+    let ev; try { ev = JSON.parse(m.data); } catch { return; }
+    logLine(ev); setBar(ev);
+    if (ev.type === 'finding') refreshJobFindings(id);
+    if (ev.type === 'asset') refreshJobAssets(id);
+    if (ev.type === 'done') {
+      es.close(); es = null;
+      api('/jobs/' + id).then(r => { pill(r.job.status); $('#jCancel').hidden = true; }).catch(()=>{});
+      refreshJobFindings(id); refreshJobAssets(id);
+      loadJobs();
+    }
+  };
+  es.onerror = () => { /* EventSource reconecta sozinho; Last-Event-ID evita duplicatas */ };
+}
+
+$('#jCancel').addEventListener('click', async () => {
+  if (!currentJob) return;
+  try { await api('/jobs/' + currentJob + '/cancel', { method: 'POST' }); } catch (e) { alert(e.message); }
+});
+
+async function refreshJobFindings(id){
+  try {
+    const { findings } = await api('/findings?job=' + id);
+    $('#jFCount').textContent = (findings || []).length;
+    const tb = $('#jFindings').querySelector('tbody');
+    tb.innerHTML = '';
+    for (const f of findings || []) {
+      const tr = el('tr');
+      tr.append(
+        el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
+        el('td', { className:'mono', textContent: f.type || '—' }),
+        el('td', { textContent: f.title || '' }),
+        el('td', { className:'mono', textContent: f.asset || '' }),
+      );
+      tb.append(tr);
+      if (f.evidence) {
+        const er = el('tr'); er.append(el('td',{}), el('td',{colSpan:3, className:'mono', style:'color:var(--faint)', textContent: f.evidence}));
+        tb.append(er);
+      }
+    }
+  } catch {}
+}
+
+async function refreshJobAssets(id){
+  try {
+    const { assets } = await api('/assets?job=' + id);
+    const list = assets || [];
+    $('#jACount').textContent = list.length;
+    // dica quando o job só gerou assets (ferramenta de recon)
+    const nF = Number($('#jFCount').textContent || 0);
+    $('#jANote').hidden = !(list.length && nF === 0);
+    const tb = $('#jAssets').querySelector('tbody');
+    tb.innerHTML = '';
+    for (const a of list) {
+      tb.append(el('tr', {}, [
+        el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }),
+        el('td', { className:'mono', textContent: a.value }),
+      ]));
+    }
+  } catch {}
+}
+
+/* ---------- assets tab ---------- */
+async function loadAssets(){
+  try {
+    const q = new URLSearchParams({ limit: '2000' });
+    if ($('#assetProgram').value) q.set('program', $('#assetProgram').value);
+    if ($('#assetKind').value) q.set('kind', $('#assetKind').value);
+    const { assets } = await api('/assets?' + q);
+    const tb = $('#assetsRows'); tb.innerHTML = '';
+    for (const a of assets || []) {
+      const tr = el('tr');
+      tr.append(
+        el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }),
+        el('td', { className:'mono', textContent: a.value }),
+        el('td', { className:'mono', textContent: a.tool }),
+        el('td', { className:'mono', textContent: a.program || '' }),
+        el('td', { className:'mono', textContent: fmtTime(a.created_at) }),
+      );
+      tr.addEventListener('click', () => { selectTab('current'); attachJob(a.job_id); });
+      tb.append(tr);
+    }
+    if (!(assets||[]).length) tb.append(el('tr', {}, el('td', { colSpan:5, className:'muted', textContent:'nenhum asset ainda' })));
+  } catch {}
+}
+function syncExport(sel, link){
+  const p = $(sel).value;
+  const a = $(link);
+  a.hidden = !p;
+  if (p) { a.href = exportURL(p); a.setAttribute('download', p + '-export.json'); }
+}
+$('#assetProgram').addEventListener('change', () => { syncExport('#assetProgram', '#assetExport'); loadAssets(); });
+$('#assetKind').addEventListener('change', loadAssets);
+
+/* ---------- jobs tab ---------- */
+async function loadJobs(){
+  try {
+    const { jobs } = await api('/jobs?limit=200');
+    const tb = $('#jobsRows'); tb.innerHTML = '';
+    for (const j of jobs || []) {
+      const tr = el('tr');
+      tr.append(
+        el('td', { className:'mono', textContent: fmtTime(j.created_at) }),
+        el('td', { className:'mono', textContent: j.tool }),
+        el('td', { className:'mono', textContent: j.target }),
+        el('td', {}, el('span', { className: 'pill ' + j.status, textContent: j.status })),
+        el('td', { className:'mono', textContent: j.findings ?? 0 }),
+        el('td', { className:'mono', textContent: j.id.slice(0,12) }),
+      );
+      tr.addEventListener('click', () => { selectTab('current'); attachJob(j.id); });
+      tb.append(tr);
+    }
+    if (!(jobs||[]).length) tb.append(el('tr', {}, el('td', { colSpan:6, className:'muted', textContent:'nenhum job ainda' })));
+  } catch {}
+}
+
+/* ---------- programs / projetos ---------- */
+let PROGRAMS = [];
+async function loadPrograms(){
+  let programs = [];
+  try { ({ programs } = await api('/programs')); } catch {}
+  PROGRAMS = programs || [];
+  for (const sel of ['#jobProgram', '#plProgram', '#findProgram', '#assetProgram']) {
+    const s = $(sel), keep = s.firstElementChild, cur = s.value;
+    s.innerHTML = ''; s.append(keep);
+    for (const p of programs || []) s.append(el('option', { value: p.name, textContent: p.name }));
+    if ([...s.options].some(o => o.value === cur)) s.value = cur;
+  }
+}
+
+const lines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
+$('#npSave').addEventListener('click', async () => {
+  const body = {
+    name: $('#npName').value.trim(),
+    in_scope: lines($('#npIn').value),
+    out_of_scope: lines($('#npOut').value),
+  };
+  if (!body.name || !body.in_scope.length) { $('#npMsg').textContent = 'nome e ao menos 1 linha de in-scope'; return; }
+  $('#npSave').disabled = true;
+  try {
+    const p = await api('/programs', { method:'POST', body: JSON.stringify(body) });
+    $('#npMsg').textContent = 'criado: ' + p.name;
+    $('#npName').value = $('#npIn').value = $('#npOut').value = '';
+    $('#newProg').open = false;
+    await loadPrograms();
+    $('#jobProgram').value = p.name;
+  } catch (e) { $('#npMsg').textContent = 'erro: ' + e.message; }
+  finally { $('#npSave').disabled = false; }
+});
+
+function exportURL(program){
+  const t = tokenInput.value.trim();
+  return '/api/programs/' + encodeURIComponent(program) + '/export' + (t ? '?access_token=' + encodeURIComponent(t) : '');
+}
+
+/* ---------- findings tab ---------- */
+function reportURL(ext, dl){
+  const prog = $('#findProgram').value;
+  const t = tokenInput.value.trim();
+  const qs = new URLSearchParams();
+  if (prog) qs.set('program', prog);
+  if ($('#repInfo').checked) qs.set('include_info', '1');
+  if (t) qs.set('access_token', t);
+  if (dl) qs.set('dl', '1');
+  return '/api/report.' + ext + (qs.toString() ? '?' + qs.toString() : '');
+}
+function syncReportLinks(){
+  const prog = $('#findProgram').value || 'todos';
+  $('#repMd').href = reportURL('md', false);
+  $('#repMd').setAttribute('download', 'report-' + prog + '.md');
+  $('#repHtml').href = reportURL('html', false);
+}
+$('#repInfo').addEventListener('change', syncReportLinks);
+
+async function loadFindings(){
+  syncReportLinks();
+  try {
+    const prog = $('#findProgram').value;
+    const { findings } = await api('/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
+    const tb = $('#findingsRows'); tb.innerHTML = '';
+    for (const f of findings || []) {
+      const tr = el('tr');
+      tr.append(
+        el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
+        el('td', { className:'mono', textContent: f.type || '—' }),
+        el('td', { textContent: f.title || '' }),
+        el('td', { className:'mono', textContent: f.asset || '' }),
+        el('td', { className:'mono', textContent: (f.count && f.count > 1) ? '×' + f.count : '' }),
+        el('td', { className:'mono', textContent: f.tool }),
+        el('td', { className:'mono', textContent: fmtTime(f.last_seen || f.created_at) }),
+      );
+      tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
+      tb.append(tr);
+    }
+    if (!(findings||[]).length) tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'nenhum finding ainda' })));
+  } catch {}
+}
+$('#findProgram').addEventListener('change', () => { syncExport('#findProgram', '#findExport'); loadFindings(); });
+
+/* ---------- docs tab ---------- */
+function renderMarkdown(src){
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+  const slug = s => s.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
+  const inline = s => esc(s)
+    .replace(/`([^`]+)`/g, (_, c) => '<code>' + c + '</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
+      '<a href="' + u + '"' + (/^https?:/.test(u) ? ' target="_blank" rel="noopener"' : '') + '>' + t + '</a>');
+
+  const lines = src.replace(/\r\n/g, '\n').split('\n');
+  let html = '', i = 0;
+  const isBlock = ln => /^(#{1,4}\s|```)/.test(ln) || /^\s*\|.*\|\s*$/.test(ln)
+    || /^(-{3,}|\*{3,})\s*$/.test(ln) || /^\s*([-*]|\d+\.)\s+/.test(ln);
+
+  while (i < lines.length) {
+    const ln = lines[i];
+    if (/^```/.test(ln)) {
+      const body = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
+      i++;
+      html += '<pre><code>' + esc(body.join('\n')) + '</code></pre>';
+      continue;
+    }
+    let m = ln.match(/^(#{1,4})\s+(.*)$/);
+    if (m) {
+      const lvl = m[1].length, txt = m[2].replace(/\s*#+\s*$/, '');
+      html += `<h${lvl} id="${slug(txt)}">${inline(txt)}</h${lvl}>`;
+      i++; continue;
+    }
+    if (/^(-{3,}|\*{3,})\s*$/.test(ln)) { html += '<hr>'; i++; continue; }
+    if (/^\s*\|.*\|\s*$/.test(ln) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      const row = s => s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      const head = row(ln); i += 2;
+      let t = '<table><thead><tr>' + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>';
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+        t += '<tr>' + row(lines[i]).map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>';
+        i++;
+      }
+      html += t + '</tbody></table>'; continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s+/.test(ln)) {
+      const ordered = /^\s*\d+\.\s+/.test(ln);
+      let list = ordered ? '<ol>' : '<ul>';
+      while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) {
+        let item = lines[i].replace(/^\s*([-*]|\d+\.)\s+/, '');
+        i++;
+        while (i < lines.length && /^\s+\S/.test(lines[i])
+          && !/^\s*([-*]|\d+\.)\s+/.test(lines[i]) && !isBlock(lines[i].trim())) {
+          item += ' ' + lines[i].trim();
+          i++;
+        }
+        list += '<li>' + inline(item) + '</li>';
+      }
+      html += list + (ordered ? '</ol>' : '</ul>'); continue;
+    }
+    if (/^\s*$/.test(ln)) { i++; continue; }
+    const buf = [];
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !isBlock(lines[i])) buf.push(lines[i++]);
+    if (buf.length) html += '<p>' + inline(buf.join(' ')) + '</p>';
+  }
+  return html;
+}
+
+async function loadDocs(){
+  const box = $('#docsBody');
+  if (box.dataset.loaded) return;
+  try {
+    const r = await fetch('/api/docs', { headers: authHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    box.innerHTML = renderMarkdown(await r.text());
+    box.dataset.loaded = '1';
+  } catch (e) {
+    box.innerHTML = '<p class="muted">não deu para carregar o README: ' + e.message + '</p>';
+  }
+}
+
+/* ---------- pipelines ---------- */
+let PIPELINES = [];
+let pes = null;          // pipeline EventSource
+let currentRun = null;
+
+async function loadPipelines(){
+  try {
+    const { pipelines } = await api('/pipelines');
+    PIPELINES = pipelines || [];
+    const sel = $('#plSelect');
+    sel.innerHTML = '';
+    if (!PIPELINES.length) sel.append(el('option', { value:'', textContent:'nenhuma pipeline em ./pipelines' }));
+    for (const p of PIPELINES) sel.append(el('option', { value: p.name, textContent: p.name }));
+    renderPipelineMeta();
+    $('#plRun').disabled = !PIPELINES.length;
+  } catch (e) {
+    $('#plHelp').textContent = 'erro: ' + e.message;
+  }
+  loadPipelineRuns();
+}
+function currentPipeline(){ return PIPELINES.find(p => p.name === $('#plSelect').value); }
+function renderPipelineMeta(){
+  const p = currentPipeline();
+  $('#plHelp').textContent = p ? (p.description || '') : '';
+  const box = $('#plSteps'); box.innerHTML = '';
+  (p ? p.steps : []).forEach((s, i) => {
+    if (i) box.append(el('span', { className:'arrow', textContent:'→' }));
+    const id = s.id || ('s' + (i + 1));
+    const chip = el('span', { className:'s', textContent: s.tool });
+    const bits = [];
+    if (s.feed && s.feed.param) bits.push(`${s.feed.param}⇐${s.feed.from || (p.steps[i-1] ? (p.steps[i-1].id || 's'+i) : '?')}`);
+    if (s.needs && s.needs.length) bits.push('needs ' + s.needs.join('+'));
+    if (bits.length) chip.textContent += ` [${id}: ${bits.join(', ')}]`;
+    else chip.textContent += ` [${id}]`;
+    box.append(chip);
+  });
+}
+$('#plSelect').addEventListener('change', renderPipelineMeta);
+$('#plTarget').addEventListener('keydown', e => { if (e.key === 'Enter') $('#plRun').click(); });
+
+$('#plRun').addEventListener('click', async () => {
+  const pipeline = $('#plSelect').value, target = $('#plTarget').value.trim();
+  const program = $('#plProgram').value;
+  if (!pipeline || !target) { $('#plTarget').focus(); return; }
+  $('#plRun').disabled = true;
+  try {
+    const run = await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) });
+    openPipelineRun(run.id);
+    loadPipelineRuns();
+  } catch (e) { alert('falha ao rodar pipeline: ' + e.message); }
+  finally { $('#plRun').disabled = false; }
+});
+
+function plPill(status){ const p = $('#plStatus'); p.textContent = status; p.className = 'pill ' + status; }
+
+function renderStepList(run){
+  const ol = $('#plStepList'); ol.innerHTML = '';
+  for (const s of run.steps || []) {
+    const li = el('li');
+    li.append(el('span', { className:'n', textContent: (s.id || ('s' + (s.index + 1))) }));
+    li.append(el('span', { className:'tool', textContent: s.tool }));
+    li.append(el('span', { className:'pill ' + s.status, textContent: s.status }));
+    if (s.needs && s.needs.length) li.append(el('span', { className:'fed', textContent: '⇐ ' + s.needs.join('+') }));
+    if (s.fed) li.append(el('span', { className:'fed', textContent: 'fed ' + s.fed }));
+    if (s.job_id) {
+      const b = el('button', { className:'jump', textContent:'ver job' });
+      b.addEventListener('click', () => { selectTab('current'); attachJob(s.job_id); });
+      li.append(b);
+    }
+    ol.append(li);
+  }
+}
+
+async function openPipelineRun(id){
+  if (pes) { pes.close(); pes = null; }
+  currentRun = id;
+  $('#plNoRun').hidden = true; $('#plRunBox').hidden = false;
+  $('#plLog').innerHTML = '';
+
+  let run;
+  try { const r = await api('/pipeline-runs/' + id); run = r.run; } catch (e) { alert(e.message); return; }
+  $('#plRunName').textContent = run.pipeline;
+  $('#plRunTarget').textContent = '→ ' + run.target + (run.program ? '  ·  ' + run.program : '');
+  $('#plRunFindings').textContent = (run.findings || 0) + ' finding(s)';
+  plPill(run.status);
+  renderStepList(run);
+
+  const terminal = new Set(['succeeded','failed','canceled']);
+  $('#plCancel').hidden = terminal.has(run.status);
+  if (terminal.has(run.status)) return;
+
+  const t = tokenInput.value.trim();
+  const qs = t ? ('?access_token=' + encodeURIComponent(t)) : '';
+  pes = new EventSource('/api/pipeline-runs/' + id + '/events' + qs);
+  pes.onmessage = async (m) => {
+    let ev; try { ev = JSON.parse(m.data); } catch { return; }
+    logLine(ev, $('#plLog'));
+    if (ev.type === 'step_start' || ev.type === 'step_end' || ev.type === 'done') {
+      try { const r = await api('/pipeline-runs/' + id); renderStepList(r.run); plPill(r.run.status); $('#plRunFindings').textContent = (r.run.findings||0) + ' finding(s)'; } catch {}
+    }
+    if (ev.type === 'done') { pes.close(); pes = null; $('#plCancel').hidden = true; loadPipelineRuns(); }
+  };
+  pes.onerror = () => {};
+}
+
+$('#plCancel').addEventListener('click', async () => {
+  if (!currentRun) return;
+  try { await api('/pipeline-runs/' + currentRun + '/cancel', { method:'POST' }); } catch (e) { alert(e.message); }
+});
+
+async function loadPipelineRuns(){
+  try {
+    const { runs } = await api('/pipeline-runs?limit=100');
+    const tb = $('#plRows'); tb.innerHTML = '';
+    for (const r of runs || []) {
+      const done = (r.steps || []).filter(s => s.status === 'succeeded').length;
+      const tr = el('tr');
+      tr.append(
+        el('td', { className:'mono', textContent: fmtTime(r.created_at) }),
+        el('td', { className:'mono', textContent: r.pipeline }),
+        el('td', { className:'mono', textContent: r.target }),
+        el('td', {}, el('span', { className:'pill ' + r.status, textContent: r.status })),
+        el('td', { className:'mono', textContent: r.findings ?? 0 }),
+        el('td', { className:'mono', textContent: done + '/' + (r.steps ? r.steps.length : 0) }),
+      );
+      tr.addEventListener('click', () => openPipelineRun(r.id));
+      tb.append(tr);
+    }
+    if (!(runs||[]).length) tb.append(el('tr', {}, el('td', { colSpan:6, className:'muted', textContent:'nenhuma run ainda' })));
+  } catch {}
+}
+
+/* ---------- monitor (watches) ---------- */
+let watchSel = null;
+
+async function loadWatches(){
+  // popula os selects do formulário
+  const psel = $('#nwPipeline'); psel.innerHTML = '';
+  for (const p of (PIPELINES.length ? PIPELINES : (await api('/pipelines')).pipelines || [])) psel.append(el('option', { value:p.name, textContent:p.name }));
+  const gsel = $('#nwProgram');
+  gsel.innerHTML = '<option value="">— sem programa —</option>';
+  for (const g of PROGRAMS || []) gsel.append(el('option', { value:g.name, textContent:g.name }));
+
+  const tb = $('#watchRows'); tb.innerHTML = '';
+  let watches = [];
+  try { watches = (await api('/watches')).watches || []; }
+  catch (e) { tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'erro: ' + e.message }))); return; }
+  if (!watches.length) { tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'nenhum watch. Crie um abaixo.' }))); return; }
+  for (const w of watches) {
+    const tr = el('tr');
+    tr.append(
+      el('td', { className:'mono', textContent: w.name }),
+      el('td', { className:'mono', textContent: w.pipeline + ' → ' + w.target + (w.program ? '  ·  ' + w.program : '') }),
+      el('td', { className:'mono', textContent: w.every }),
+      el('td', {}, el('span', { className:'pill ' + (w.enabled ? 'succeeded' : 'canceled'), textContent: w.enabled ? 'on' : 'off' })),
+      el('td', { className:'mono', textContent: w.last_run_at ? fmtTime(w.last_run_at) : '—' }),
+      el('td', { className:'mono', textContent: (w.last_new_findings ?? 0) })
+    );
+    const act = el('td');
+    const runBtn = el('button', { className:'jump', textContent:'rodar agora' });
+    runBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation(); runBtn.disabled = true;
+      try { await api('/watches/' + encodeURIComponent(w.name) + '/run', { method:'POST' }); runBtn.textContent = 'disparado ✓'; }
+      catch (e) { alert(e.message); runBtn.disabled = false; }
+      setTimeout(loadWatches, 1500);
+    });
+    act.append(runBtn);
+    tr.append(act);
+    tr.addEventListener('click', () => showWatchRuns(w.name));
+    tb.append(tr);
+  }
+  if (watchSel) showWatchRuns(watchSel);
+}
+
+async function showWatchRuns(name){
+  watchSel = name;
+  $('#watchRunsName').textContent = name;
+  $('#watchNoSel').hidden = true; $('#watchRunsBox').hidden = false;
+  const tb = $('#watchRunRows'); tb.innerHTML = '';
+  try {
+    const { runs } = await api('/watches/' + encodeURIComponent(name));
+    for (const r of runs || []) {
+      const done = (r.steps || []).filter(s => s.status === 'succeeded').length;
+      const tr = el('tr');
+      tr.append(
+        el('td', { className:'mono', textContent: fmtTime(r.created_at) }),
+        el('td', {}, el('span', { className:'pill ' + r.status, textContent: r.status })),
+        el('td', { className:'mono', textContent: r.findings ?? 0 }),
+        el('td', { className:'mono', textContent: done + '/' + (r.steps ? r.steps.length : 0) })
+      );
+      tr.addEventListener('click', () => { selectTab('pipelines'); openPipelineRun(r.id); });
+      tb.append(tr);
+    }
+    if (!(runs||[]).length) tb.append(el('tr', {}, el('td', { colSpan:4, className:'muted', textContent:'sem runs ainda' })));
+  } catch (e) { tb.append(el('tr', {}, el('td', { colSpan:4, className:'muted', textContent:'erro: ' + e.message }))); }
+}
+
+$('#nwSave').addEventListener('click', async () => {
+  const body = {
+    name: $('#nwName').value.trim(),
+    pipeline: $('#nwPipeline').value,
+    target: $('#nwTarget').value.trim(),
+    program: $('#nwProgram').value,
+    every: $('#nwEvery').value.trim() || '24h',
+    webhook: $('#nwWebhook').value.trim(),
+    enabled: $('#nwEnabled').checked,
+  };
+  if (!body.name || !body.pipeline || !body.target) { $('#nwName').focus(); return; }
+  $('#nwSave').disabled = true;
+  try {
+    await api('/watches', { method:'POST', body: JSON.stringify(body) });
+    $('#nwName').value = $('#nwTarget').value = $('#nwWebhook').value = '';
+    $('#newWatch').open = false;
+    await loadWatches();
+  } catch (e) { alert('falha ao criar watch: ' + e.message); }
+  finally { $('#nwSave').disabled = false; }
+});
+
+/* ---------- tabs ---------- */
+function selectTab(view){
+  for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
+  for (const v of document.querySelectorAll('.view')) v.classList.toggle('active', v.id === 'view-' + view);
+  if (view === 'jobs') loadJobs();
+  if (view === 'pipelines') loadPipelines();
+  if (view === 'monitor') loadWatches();
+  if (view === 'findings') loadFindings();
+  if (view === 'assets') loadAssets();
+  if (view === 'docs') loadDocs();
+}
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.view)));
+
+$('#target').addEventListener('keydown', e => { if (e.key === 'Enter') $('#run').click(); });
+
+// sem token guardado: já abre a tela "Como entrar" (não espera o 1º 401)
+if (!tokenInput.value.trim()) setAuthNeeded(true);
+
+async function loadWordlists(){
+  try { const { wordlists } = await api('/wordlists'); WORDLISTS = wordlists || []; } catch { WORDLISTS = []; }
+  if (currentTool()) renderModeAndParams();
+}
+
+loadTools();
+loadPrograms();
+loadWordlists();
+</script>
+</body>
+</html>

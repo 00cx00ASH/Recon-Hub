@@ -1,0 +1,12 @@
+{
+  "name": "content-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, content discovery por wordlist (calibra soft-404). Escolha uma wordlist pequena — isto multiplica requisições por host.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 100 } },
+    {
+      "tool": "scan-fuzz",
+      "params": { "wordlist": "builtin/web-content-common", "concurrency": 25 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

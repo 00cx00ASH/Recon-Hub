@@ -1,0 +1,21 @@
+{
+  "name": "recon-web-enum",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "recon",
+  "summary": "Recon web leve: crawl same-site raso (segue links a/script/iframe), identifica a stack (Server/X-Powered-By/cookies + markers WordPress/Drupal/Next/Nuxt/Laravel/Rails/Shopify + CDN/WAF Cloudflare/CloudFront/Fastly/Akamai/Sucuri), coleta formulários (marca os de login) e parâmetros, e sonda ~46 caminhos administrativos/sensíveis (/admin, /.env, /.git/config, /server-status, /phpinfo.php, /actuator, /swagger.json, /graphql…) com calibração de soft-404.",
+  "guide": "Alvo = a URL raiz do site (ex https://exemplo.com). Não usa wordlist — a lista de caminhos é fixa e curada. 'depth' controla o crawl (2 por padrão), 'max_pages' o teto. 'no_probe' desliga a sondagem de caminhos e faz só o crawl+fingerprint. Emite as URLs como assets kind=url.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "Site único", "help": "crawl + fingerprint + probe da URL raiz", "target_label": "URL raiz" }
+  ],
+  "params": [
+    { "name": "roots", "type": "string", "required": false, "help": "várias URLs raiz (vírgula/linha) — o feed de pipeline também injeta aqui" },
+    { "name": "depth", "type": "int", "required": false, "default": 2, "help": "profundidade do crawl same-site" },
+    { "name": "max_pages", "type": "int", "required": false, "default": 60, "help": "teto de páginas no crawl" },
+    { "name": "no_probe", "type": "bool", "required": false, "default": false, "help": "só crawl + fingerprint, sem sondar caminhos" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 10, "help": "requisições simultâneas na sondagem" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

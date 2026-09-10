@@ -1,0 +1,24 @@
+{
+  "name": "js-firebase-enum",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "js",
+  "summary": "Acha o firebaseConfig no HTML/JS de uma página e testa o que dá pra ler sem autenticar: Realtime Database (.json?shallow=true), Firestore (documents.list em ~18 coleções comuns, com a apiKey do próprio site) e Storage (listagem do bucket). Só leitura — nunca escreve.",
+  "guide": "Alvo = a URL da página (ex https://app.exemplo.com). A ferramenta baixa a página + os <script src> e extrai apiKey/projectId/databaseURL/storageBucket. Se o databaseURL não estiver no config, ela deriva os endpoints padrão a partir do projectId. Sem wordlist. Se você já tem o firebaseConfig, cole em params.config e deixe o Alvo vazio. Modos lista/arquivo varrem várias páginas.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "single", "label": "Página única", "help": "extrai o config da URL do Alvo e sonda", "target_label": "URL da página" },
+    { "name": "config", "label": "firebaseConfig colado", "help": "cole o config em 'config' (Alvo vazio)", "params": ["config"] },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "config", "type": "string", "required": false, "help": "firebaseConfig colado (JSON ou trecho JS)" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor, uma URL por linha" },
+    { "name": "no_firestore", "type": "bool", "required": false, "default": false, "help": "não sondar Firestore" },
+    { "name": "no_storage", "type": "bool", "required": false, "default": false, "help": "não sondar Storage" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" }
+  ]
+}

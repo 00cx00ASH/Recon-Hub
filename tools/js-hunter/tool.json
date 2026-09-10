@@ -1,0 +1,22 @@
+{
+  "name": "js-hunter",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "js",
+  "summary": "Recon de JavaScript: baixa a página + os <script src>, tenta os source maps (.js.map declarado + o palpite <js>.map) e RECONSTRÓI o código-fonte original a partir do sourcesContent. Depois extrai endpoints de API de tudo (fetch/axios/XHR/constantes url/uri/endpoint + caminhos /api /v1 /graphql /internal /admin), deduplica e marca os interessantes (/admin, /graphql, /actuator, /debug, /.env, /token, /oauth, /export…).",
+  "guide": "Alvo = a URL de uma página (ex https://app.exemplo.com). Sem wordlist. Source map exposto vira finding de baixa severidade (revela o código não-minificado). Os endpoints saem como assets kind=endpoint; os sensíveis viram finding medium. Bom para achar a superfície de API antes de fuzzar. Modos lista/arquivo varrem várias páginas.",
+  "exec": ["go", "run", "."],
+  "timeout": "12m",
+  "modes": [
+    { "name": "single", "label": "Página única", "help": "analisa o JS da URL", "target_label": "URL da página" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "no_maps", "type": "bool", "required": false, "default": false, "help": "não tentar os source maps" },
+    { "name": "max_js", "type": "int", "required": false, "default": 60, "help": "teto de arquivos JS por página" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 12000, "help": "timeout por requisição" }
+  ]
+}

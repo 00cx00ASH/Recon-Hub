@@ -1,0 +1,10 @@
+# keep the build context small; the image only needs source + assets
+.git
+.github
+data
+/reconhub
+tools/scan-subdomain-takeover/scan-subdomain-takeover
+tools/recon-crtsh/recon-crtsh
+tools/js-bucket-scanner/js-bucket-scanner
+*.log
+.DS_Store
