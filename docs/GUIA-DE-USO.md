@@ -91,7 +91,7 @@ também o que o `monitor` usa pra detectar "finding novo".
 |------------------|------------------------------------------|-----------------------------------------|
 | **job**          | uma execução de 1 ferramenta             | `store`                                 |
 | **event**        | linha NDJSON de um job (log/progress/…)  | `store`                                 |
-| **finding**      | vuln normalizada, deduplicada, com `count` | `store`                               |
+| **finding**      | vuln normalizada, deduplicada, com `count` e `triage` (feedback do operador) | `store` |
 | **asset**        | descoberta (subdomínio, porta, URL…)     | `store`                                 |
 | **pipeline run** | execução de uma pipeline + estado de cada step | `store`                            |
 | **program**      | escopo de um alvo (`in_scope`/`out_of_scope` wildcard) | `programs/<nome>.json`     |
@@ -171,6 +171,13 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
   ("revisar antes de submeter") pros tipos sem template.
 - **Programas / escopo** — `programs/<nome>.json` com wildcard; tag `program` em
   job/finding/asset; filtro de escopo no feed das pipelines.
+- **Projeto por alvo** — cada programa ganha uma pasta em `data/projects/<nome>/`
+  (notas + snapshot sincronizado sozinho a cada job). Ver seção 6.1.
+- **Priorização de findings (intel)** — cada finding recebe pontuação 0-100 +
+  ação ("reportar agora"…), combinando conhecimento de segurança embutido com
+  o que você mesmo confirma/descarta (`POST /api/findings/{id}/triage`) — o
+  hub aprende com o seu feedback, sem depender de nenhum modelo treinado. Ver
+  seção 6.2.
 - **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
   selecionáveis no param `wordlist`.
 - **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
@@ -327,10 +334,11 @@ Detalhes em [`README.md` → Backend de armazenamento](../README.md#backend-de-a
 
 ## 6.1. Projeto = pasta por alvo
 
-Cada programa que você cria em **6.1** já ganha, automaticamente, uma pasta em
-`data/projects/<nome>/`:
+Cada programa que você cria no passo 1 acima já ganha, automaticamente, uma
+pasta em `data/projects/<nome>/`. O escopo em si **não é duplicado** aqui —
+continua vivendo só em `programs/<nome>.json`, que é a fonte da verdade. O que
+tem na pasta é o que só existe ali:
 
-- `project.json` — o escopo (`in_scope`/`out_of_scope`), pra pasta ser autocontida
 - `summary.json` — contagens (jobs por status, findings por severidade, assets
   por tipo, última atividade) — sempre fresco: toda leitura resincroniza
 - `report.md` — o mesmo relatório de bounty, já escopado pra esse programa
@@ -356,6 +364,39 @@ sem precisar montar filtro nenhum manualmente.
 
 ---
 
+## 6.2. Priorização — "o que fazer com cada achado"
+
+Recon gera muito achado; nem todo achado merece a mesma atenção. `internal/intel`
+calcula, pra cada finding, uma pontuação (0-100) e uma ação — sem precisar de
+modelo treinado nem GPU, só o núcleo Go de sempre:
+
+1. **Conhecimento embutido** — uma tabela em `internal/intel/intel.go` com o
+   mesmo julgamento que um revisor experiente aplicaria de cara: um MongoDB
+   sem auth ou uma chave de IA validada já entram com prioridade alta; um
+   open redirect isolado ou um CORS wildcard sem credentials já entram
+   baixos. Funciona **desde o primeiro finding**, sem nenhuma triagem sua.
+2. **Seu histórico** — toda vez que você marca um finding como confirmado ou
+   falso positivo, isso entra numa contagem por `(ferramenta, tipo)`. Quanto
+   mais você triagem de um tipo, mais o *seu* ambiente pesa sobre o prior
+   genérico — pra cima (se você confirma muito) ou pra baixo (se costuma
+   descartar). É aprendizado de verdade, só que estatístico e transparente,
+   não uma caixa-preta.
+
+```bash
+# achados ordenados por urgência, com a ação sugerida
+curl -s -H "$H" "localhost:7878/api/intel/findings?program=acme" | jq '.findings[] | {title,score,action,why}'
+
+# alimenta o aprendizado
+curl -s -H "$H" -XPOST localhost:7878/api/findings/<id>/triage -d '{"verdict":"confirmed"}'
+```
+
+No dashboard: a aba **Findings** já mostra a coluna **prioridade** (pontuação
++ ação; passe o mouse pra ver o porquê) e os botões **✓ / ✗** pra você
+confirmar ou marcar falso positivo direto ali — é isso que alimenta o
+aprendizado pra próxima vez.
+
+---
+
 ## 7. Rotas da API (referência rápida)
 
 | método | rota                                   | o quê                                  |
@@ -367,6 +408,8 @@ sem precisar montar filtro nenhum manualmente.
 | POST   | `/api/jobs/{id}/cancel`                | cancela                                |
 | GET    | `/api/jobs/{id}/events`                | SSE ao vivo                            |
 | GET    | `/api/findings` · `/api/assets`        | com filtros `?program=…&severity=…`    |
+| GET    | `/api/intel/findings`                  | findings + pontuação/ação, por urgência |
+| POST   | `/api/findings/{id}/triage`            | confirmed/false_positive/ignored        |
 | GET    | `/api/report` · `/api/report.md` · `/api/report.html` | relatório de bounty     |
 | GET    | `/api/programs/{name}/report.md` · `.html` | idem, escopado                     |
 | GET/POST | `/api/programs` · `/api/programs/{name}` | escopo                            |

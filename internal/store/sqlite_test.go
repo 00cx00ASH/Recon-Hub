@@ -84,6 +84,36 @@ func TestSQLiteFindingDedup(t *testing.T) {
 	}
 }
 
+func TestSQLiteSetFindingTriage(t *testing.T) {
+	s := openTmp(t)
+	f := &Finding{JobID: "j", Tool: "scan-x", Type: "takeover", Title: "t", Asset: "a.acme.com", Severity: "high"}
+	if _, err := s.AddFinding(f); err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := s.ListFindings(FindingFilter{})
+	if len(fs) != 1 {
+		t.Fatalf("esperava 1 finding, veio %d", len(fs))
+	}
+	id := fs[0].ID
+
+	got, err := s.SetFindingTriage(id, "false_positive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Triage != "false_positive" || got.TriagedAt == nil {
+		t.Fatalf("triage não aplicado: %+v", got)
+	}
+
+	fs2, _ := s.ListFindings(FindingFilter{})
+	if len(fs2) != 1 || fs2[0].Triage != "false_positive" {
+		t.Fatalf("triage não persistiu: %+v", fs2)
+	}
+
+	if _, err := s.SetFindingTriage("ghost", "confirmed"); err == nil {
+		t.Fatal("esperava erro para finding inexistente")
+	}
+}
+
 func TestSQLiteDedupSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.db")

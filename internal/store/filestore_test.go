@@ -53,6 +53,36 @@ func TestAddFindingDedup(t *testing.T) {
 	}
 }
 
+func TestSetFindingTriage(t *testing.T) {
+	fs, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fs.Close()
+
+	f := &Finding{ID: "f1", JobID: "j1", Tool: "scan-x", Type: "takeover", Title: "t", Asset: "a.acme.com", Severity: "high", CreatedAt: time.Now().UTC()}
+	if _, err := fs.AddFinding(f); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := fs.SetFindingTriage("f1", "confirmed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Triage != "confirmed" || got.TriagedAt == nil {
+		t.Fatalf("triage não aplicado: %+v", got)
+	}
+
+	list, _ := fs.ListFindings(FindingFilter{})
+	if len(list) != 1 || list[0].Triage != "confirmed" {
+		t.Fatalf("triage não persistiu: %+v", list)
+	}
+
+	if _, err := fs.SetFindingTriage("ghost", "confirmed"); err == nil {
+		t.Fatal("esperava erro para finding inexistente")
+	}
+}
+
 func TestAddFindingDedupSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	fs, _ := Open(dir)

@@ -83,6 +83,12 @@ type Finding struct {
 	Count     int             `json:"count"`
 	CreatedAt time.Time       `json:"created_at"` // first seen
 	LastSeen  time.Time       `json:"last_seen"`
+
+	// Triage is optional operator feedback: "" | "confirmed" | "false_positive"
+	// | "ignored". internal/intel uses the accumulated history (grouped by
+	// tool+type) to weigh how much to trust new findings of the same kind.
+	Triage    string     `json:"triage,omitempty"`
+	TriagedAt *time.Time `json:"triaged_at,omitempty"`
 }
 
 // Key is the dedup identity of a finding.

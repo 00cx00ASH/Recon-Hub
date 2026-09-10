@@ -364,7 +364,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <a id="repHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
       </div>
       <div class="wrapx"><table>
-        <thead><tr><th>sev</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th></tr></thead>
+        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th>triagem</th></tr></thead>
         <tbody id="findingsRows"></tbody>
       </table></div>
     </div>
@@ -929,27 +929,60 @@ function syncReportLinks(){
 }
 $('#repInfo').addEventListener('change', syncReportLinks);
 
+function scoreBucket(score){
+  if (score >= 80) return 'critical';
+  if (score >= 55) return 'high';
+  if (score >= 30) return 'medium';
+  return 'low';
+}
+
+async function triageFinding(id, verdict, btn){
+  const row = btn.closest('tr');
+  btn.disabled = true;
+  try {
+    await api('/findings/' + encodeURIComponent(id) + '/triage', { method: 'POST', body: JSON.stringify({ verdict }) });
+    if (row) row.style.opacity = '.45';
+  } catch (e) { alert('falha na triagem: ' + e.message); btn.disabled = false; }
+}
+
 async function loadFindings(){
   syncReportLinks();
   try {
     const prog = $('#findProgram').value;
-    const { findings } = await api('/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
+    const { findings } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
     const tb = $('#findingsRows'); tb.innerHTML = '';
     for (const f of findings || []) {
       const tr = el('tr');
+      const prioCell = el('span', {
+        className: 'sev ' + scoreBucket(f.score),
+        textContent: f.score + ' · ' + f.action,
+        title: f.why + (f.advice ? '\n\n' + f.advice : ''),
+      });
+      const triageCell = el('div', { style: 'display:flex;gap:.3rem' });
+      if (f.triage) {
+        triageCell.append(el('span', { className:'mono', style:'color:var(--faint);font-size:11px', textContent: f.triage }));
+      } else {
+        const okBtn = el('button', { className:'cancel', textContent:'✓', title:'confirmar', style:'color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent);padding:.15rem .45rem' });
+        const noBtn = el('button', { className:'cancel', textContent:'✗', title:'falso positivo', style:'padding:.15rem .45rem' });
+        okBtn.addEventListener('click', e => { e.stopPropagation(); triageFinding(f.id, 'confirmed', okBtn); });
+        noBtn.addEventListener('click', e => { e.stopPropagation(); triageFinding(f.id, 'false_positive', noBtn); });
+        triageCell.append(okBtn, noBtn);
+      }
       tr.append(
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
+        el('td', {}, prioCell),
         el('td', { className:'mono', textContent: f.type || '—' }),
         el('td', { textContent: f.title || '' }),
         el('td', { className:'mono', textContent: f.asset || '' }),
         el('td', { className:'mono', textContent: (f.count && f.count > 1) ? '×' + f.count : '' }),
         el('td', { className:'mono', textContent: f.tool }),
         el('td', { className:'mono', textContent: fmtTime(f.last_seen || f.created_at) }),
+        el('td', {}, triageCell),
       );
       tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
       tb.append(tr);
     }
-    if (!(findings||[]).length) tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'nenhum finding ainda' })));
+    if (!(findings||[]).length) tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'nenhum finding ainda' })));
   } catch {}
 }
 $('#findProgram').addEventListener('change', () => { syncExport('#findProgram', '#findExport'); loadFindings(); });

@@ -12,6 +12,7 @@ import (
 
 	"reconhub/internal/auth"
 	"reconhub/internal/engine"
+	"reconhub/internal/intel"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
 	"reconhub/internal/project"
@@ -77,6 +78,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", s.auth(s.cancelJob))
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.authSSE(s.jobEvents))
 	mux.HandleFunc("GET /api/findings", s.auth(s.listFindings))
+	mux.HandleFunc("POST /api/findings/{id}/triage", s.auth(s.triageFinding))
+	mux.HandleFunc("GET /api/intel/findings", s.auth(s.intelFindings))
 	mux.HandleFunc("GET /api/assets", s.auth(s.listAssets))
 
 	mux.HandleFunc("GET /api/report", s.auth(s.reportJSON))
@@ -272,6 +275,83 @@ func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
 		Limit:    limit,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"findings": fs})
+}
+
+// triageFinding records the operator's verdict on a finding — this is the
+// feedback intel.BuildHistory learns from.
+func (s *Server) triageFinding(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Verdict string `json:"verdict"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if !intel.ValidVerdict(body.Verdict) {
+		writeErr(w, http.StatusBadRequest, "verdict inválido — use confirmed, false_positive ou ignored")
+		return
+	}
+	f, err := s.Store.SetFindingTriage(r.PathValue("id"), body.Verdict)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, f)
+}
+
+// intelRow is one finding joined with its triage assessment, for a client
+// that wants to render score/action without a second round trip.
+type intelRow struct {
+	*store.Finding
+	Score      int     `json:"score"`
+	Action     string  `json:"action"`
+	Why        string  `json:"why"`
+	Advice     string  `json:"advice,omitempty"`
+	Confidence float64 `json:"confidence"`
+	SampleSize int     `json:"sample_size"`
+}
+
+// intelFindings returns findings (same filters as /api/findings) joined with
+// their priority assessment, sorted most-urgent first. History is built from
+// every triaged finding in the store — not just the filtered subset — so the
+// score for a program-scoped view still benefits from what you've learned
+// triaging other programs.
+func (s *Server) intelFindings(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 500
+	}
+	fs, _ := s.Store.ListFindings(store.FindingFilter{
+		JobID:    q.Get("job"),
+		Tool:     q.Get("tool"),
+		Program:  q.Get("program"),
+		Target:   q.Get("target"),
+		Severity: q.Get("severity"),
+		Type:     q.Get("type"),
+		Limit:    limit,
+	})
+	all, _ := s.Store.ListFindings(store.FindingFilter{Limit: 1000000})
+	history := intel.BuildHistory(all)
+
+	assessed := intel.AssessAll(fs, history)
+	byID := make(map[string]*store.Finding, len(fs))
+	for _, f := range fs {
+		byID[f.ID] = f
+	}
+
+	rows := make([]intelRow, 0, len(assessed))
+	for _, a := range assessed {
+		f, ok := byID[a.FindingID]
+		if !ok {
+			continue
+		}
+		rows = append(rows, intelRow{
+			Finding: f, Score: a.Score, Action: a.Action, Why: a.Why,
+			Advice: a.Advice, Confidence: a.Confidence, SampleSize: a.SampleSize,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"findings": rows})
 }
 
 // buildReport gathers findings per the request filters and assembles a report.

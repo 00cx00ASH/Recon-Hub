@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // FileStore is the append-only, in-memory-indexed store.
@@ -382,6 +383,33 @@ func (fs *FileStore) ListAssets(f AssetFilter) ([]*Asset, error) {
 		}
 	}
 	return out, nil
+}
+
+// SetFindingTriage records operator feedback on a finding (by ID) and
+// appends a new snapshot line — replay's "later line wins" rule (keyed by
+// Finding.Key(), which Triage doesn't affect) picks it up on restart just
+// like a count/last_seen update.
+func (fs *FileStore) SetFindingTriage(id, verdict string) (*Finding, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	for _, f := range fs.findings {
+		if f.ID != id {
+			continue
+		}
+		f.Triage = verdict
+		now := time.Now().UTC()
+		f.TriagedAt = &now
+		b, err := json.Marshal(f)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := fs.findingsFile.Write(append(b, '\n')); err != nil {
+			return nil, err
+		}
+		fc := *f
+		return &fc, nil
+	}
+	return nil, errors.New("finding não encontrado")
 }
 
 // ListFindings returns findings newest-first, applying the filter.

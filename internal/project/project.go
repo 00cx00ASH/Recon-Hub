@@ -114,10 +114,12 @@ func WriteNotes(dataDir, name, content string) error {
 
 // SyncFromStore rebuilds the project's snapshot from current store state:
 //
-//	project.json   the program's scope (in_scope/out_of_scope) — self-contained
 //	summary.json   counts by status/severity/kind + last activity
 //	report.md      bounty-ready report, scoped to this program
 //	assets.json    every asset discovered under this program
+//
+// The program's scope itself is not duplicated here — it already lives in
+// programs/<name>.json (scope.Registry is the source of truth for it).
 //
 // It's cheap enough to call after every job completes and on every read of
 // the summary — there's no separate "stale" state to track.
@@ -126,8 +128,7 @@ func SyncFromStore(dataDir, name string, progs *scope.Registry, st store.Store) 
 	if dir == "" {
 		return Summary{}, fmt.Errorf("nome de projeto inválido: %q", name)
 	}
-	prog, ok := progs.Get(name)
-	if !ok {
+	if _, ok := progs.Get(name); !ok {
 		return Summary{}, fmt.Errorf("programa desconhecido: %s", name)
 	}
 
@@ -189,9 +190,6 @@ func SyncFromStore(dataDir, name string, progs *scope.Registry, st store.Store) 
 	}
 	rep := report.Build(name, "", items, false)
 
-	if err := writeJSON(filepath.Join(dir, "project.json"), prog); err != nil {
-		return sum, err
-	}
 	if err := writeJSON(filepath.Join(dir, "summary.json"), sum); err != nil {
 		return sum, err
 	}

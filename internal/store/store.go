@@ -14,6 +14,7 @@ type Store interface {
 
 	AddFinding(f *Finding) (isNew bool, err error)
 	ListFindings(f FindingFilter) ([]*Finding, error)
+	SetFindingTriage(id, verdict string) (*Finding, error)
 
 	AddAsset(a *Asset) (isNew bool, err error)
 	ListAssets(f AssetFilter) ([]*Asset, error)

@@ -226,6 +226,8 @@ específica de todas, então qualquer `/api/...` ganha dela.
 | POST   | `/api/jobs/{id}/cancel`  | cancela                            |
 | GET    | `/api/jobs/{id}/events`  | SSE                               |
 | GET    | `/api/findings`          | findings (`?program=&tool=&severity=&type=`) |
+| GET    | `/api/intel/findings`    | findings + pontuação/ação, ordenados por urgência |
+| POST   | `/api/findings/{id}/triage` | registra confirmed/false_positive/ignored     |
 | GET    | `/api/assets`            | assets descobertos (`?program=&kind=`) |
 | GET    | `/api/programs`          | programas de `./programs`          |
 | GET    | `/api/programs/{name}`   | um programa (escopo)              |
@@ -518,7 +520,6 @@ filtrar nada manualmente.
 
 ```
 data/projects/acme/
-├── project.json    escopo do programa (in_scope/out_of_scope) — a pasta é autocontida
 ├── summary.json    contagens (jobs por status, findings por severidade, assets por tipo, última atividade)
 ├── report.md       relatório de bounty, já escopado pra este programa
 ├── assets.json      todos os assets descobertos neste programa
@@ -566,6 +567,47 @@ template (usa o título do finding e marca "revisar antes de submeter").
 Filtros na query: `program`, `target`, `job`, `tool`, `type`, `severity`,
 `include_info=1`. Findings só-informativos sem template são omitidos por padrão.
 No dashboard: aba **Findings** → **⬇ relatório .md** / **↗ relatório .html**.
+
+---
+
+## Priorização de findings (intel)
+
+O hub não trata todo finding com o mesmo peso. `internal/intel` calcula, pra
+cada um, uma **pontuação de 0 a 100** e uma **ação concreta** — "reportar
+agora", "confirmar e reportar", "investigar quando der" ou "revisar em lote /
+provável ruído" — combinando dois sinais:
+
+1. **Conhecimento embutido** (`knownRisk` em `internal/intel/intel.go`) — o
+   mesmo julgamento de segurança que um revisor experiente aplicaria de
+   cara: `mongodb-no-auth` ou `ai-key-valid` já nascem com prior alto
+   (quase sempre reais); `open-redirect` isolado ou `cors-wildcard` sem
+   credentials nascem com prior baixo (normalmente ruído). Isso já funciona
+   num hub **novo em folha**, sem nenhuma triagem sua ainda.
+2. **Seu próprio histórico de triagem** — marque um finding como
+   confirmado ou falso positivo (`POST /api/findings/{id}/triage`) e esse
+   veredito entra numa tabela de frequência por `(ferramenta, tipo)`. A
+   pontuação combina o prior embutido com esse histórico por suavização
+   bayesiana simples: com pouco ou nenhum feedback seu, o conhecimento
+   embutido decide; conforme você triagem mais achados de um mesmo tipo, o
+   *seu* ambiente passa a pesar mais que o prior genérico — pra cima ou pra
+   baixo, dependendo do que você vem confirmando de verdade.
+
+Não é um modelo treinado — é zero dependências, como o resto do núcleo — mas
+é aprendizado real (estatístico, não caixa-preta) que melhora com o uso.
+
+| método | rota                                | o quê                                              |
+|--------|---------------------------------------|-----------------------------------------------------|
+| GET    | `/api/intel/findings`                 | findings + pontuação/ação, ordenados por urgência (mesmos filtros de `/api/findings`) |
+| POST   | `/api/findings/{id}/triage`           | registra seu veredito: `{"verdict":"confirmed"\|"false_positive"\|"ignored"}` |
+
+```bash
+curl -s -H "$H" "localhost:7878/api/intel/findings?program=acme&severity=high" | jq
+curl -s -H "$H" -XPOST localhost:7878/api/findings/<id>/triage -d '{"verdict":"confirmed"}'
+```
+
+No dashboard, a aba **Findings** já usa `/api/intel/findings`: cada linha
+mostra a pontuação/ação (passe o mouse pra ver o porquê) e tem botões **✓
+confirmar** / **✗ falso positivo** pra você alimentar o histórico direto ali.
 
 ---
 
@@ -770,6 +812,7 @@ internal/registry/          carrega tools/<nome>/tool.json
 internal/pipeline/          carrega pipelines/<nome>.json
 internal/scope/             carrega programs/<nome>.json + match de escopo
 internal/project/           pasta física por programa (data/projects/<nome>/): notas + snapshot sincronizado
+internal/intel/             prioriza findings: conhecimento embutido + aprendizado por triagem
 internal/wordlist/          indexa wordlists/ + um checkout do SecLists
 internal/monitor/           watches: pipeline agendada + diff de findings + webhook
 internal/runner/            spawn do processo + parser NDJSON

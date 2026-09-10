@@ -113,10 +113,14 @@ func TestSyncFromStoreWritesSnapshot(t *testing.T) {
 	}
 
 	dir := Dir(dataDir, "acme")
-	for _, f := range []string{"project.json", "summary.json", "report.md", "assets.json", "notes.md"} {
+	for _, f := range []string{"summary.json", "report.md", "assets.json", "notes.md"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("faltou %s: %v", f, err)
 		}
+	}
+	// o escopo já vive em programs/<nome>.json — não duplicamos aqui.
+	if _, err := os.Stat(filepath.Join(dir, "project.json")); !os.IsNotExist(err) {
+		t.Error("project.json não deveria existir (duplicaria programs/<nome>.json)")
 	}
 }
 
