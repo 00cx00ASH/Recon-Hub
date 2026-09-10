@@ -103,6 +103,22 @@
   .sev.medium{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   .sev.low,.sev.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
   .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
+
+  .urow{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border:1px solid var(--border);border-radius:4px;margin-bottom:.4rem;cursor:pointer;background:var(--surface)}
+  .urow:hover{border-color:var(--border-strong)}
+  .urow .score{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);flex:none;width:2.2rem;text-align:right}
+  .urow .prog{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--accent-2);border:1px solid color-mix(in srgb,var(--accent-2) 40%,transparent);border-radius:999px;padding:.05rem .5rem;flex:none}
+  .urow .utitle{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .urow .uasset{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);flex:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .proggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
+  .progcard{border:1px solid var(--border);border-radius:6px;padding:.8rem .9rem;background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:.5rem}
+  .progcard:hover{border-color:var(--border-strong)}
+  .progcard .pname{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13.5px}
+  .progcard .pbar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface-2)}
+  .progcard .pbar i{display:block;height:100%}
+  .progcard .pcounts{display:flex;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint)}
+  .progcard .pmeta{font-size:11px;color:var(--faint)}
   .wrapx{overflow-x:auto}
 
   .chipwrap{display:flex;flex-wrap:wrap;gap:.35rem;margin:.4rem 0;align-items:center}
@@ -260,6 +276,7 @@ docker compose exec reconhub cat /app/data/token</pre>
 
   <section class="content">
     <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="false" data-view="panel">Painel</button>
       <button role="tab" aria-selected="true" data-view="current">Job atual</button>
       <button role="tab" aria-selected="false" data-view="jobs">Jobs</button>
       <button role="tab" aria-selected="false" data-view="pipelines">Pipelines</button>
@@ -268,6 +285,16 @@ docker compose exec reconhub cat /app/data/token</pre>
       <button role="tab" aria-selected="false" data-view="assets">Assets</button>
       <button role="tab" aria-selected="false" data-view="projects">Projetos</button>
       <button role="tab" aria-selected="false" data-view="docs">Docs</button>
+    </div>
+
+    <div class="view" id="view-panel">
+      <p class="muted" style="margin-top:0">O que está mais urgente agora, juntando todos os programas — pra quem acompanha mais de um ao mesmo tempo.</p>
+
+      <h2 style="margin-top:0">Mais urgente agora</h2>
+      <div id="panelUrgent"></div>
+
+      <h2 style="margin-top:1.6rem">Programas</h2>
+      <div id="panelPrograms" class="proggrid"></div>
     </div>
 
     <div class="view active" id="view-current">
@@ -1747,10 +1774,73 @@ document.addEventListener('keydown', e => {
   }
 });
 
+/* ---------- painel cross-programa ---------- */
+async function loadPanel(){
+  const urgentBox = $('#panelUrgent');
+  const progBox = $('#panelPrograms');
+  urgentBox.innerHTML = '<p class="muted" style="padding:.3rem 0">carregando…</p>';
+  progBox.innerHTML = '';
+
+  let programs = [], findings = [];
+  try { ({ programs } = await api('/programs')); } catch {}
+  try { ({ findings } = await api('/intel/findings?limit=500')); } catch {}
+
+  const urgent = (findings || []).filter(f => !f.triage).sort((a, b) => b.score - a.score).slice(0, 15);
+  urgentBox.innerHTML = '';
+  if (!urgent.length) {
+    urgentBox.append(el('p', { className:'muted', style:'padding:.3rem 0', textContent: 'nada pendente de triagem — tudo em dia.' }));
+  } else {
+    for (const f of urgent) {
+      const row = el('div', { className:'urow' });
+      row.append(
+        el('span', { className:'score', textContent: String(f.score) }),
+        el('span', { className:'sev ' + f.severity, textContent: f.severity }),
+        el('span', { className:'prog', textContent: f.program || '—' }),
+        el('span', { className:'utitle', textContent: f.title || f.type }),
+        el('span', { className:'uasset', textContent: f.asset || '' }),
+      );
+      row.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
+      urgentBox.append(row);
+    }
+  }
+
+  progBox.innerHTML = '';
+  if (!(programs || []).length) {
+    progBox.append(el('p', { className:'muted', textContent: 'nenhum programa ainda — crie um em Job atual → ＋ novo projeto.' }));
+    return;
+  }
+  const sevColor = { critical:'var(--crit)', high:'var(--crit)', medium:'var(--warn)', low:'var(--info)', info:'var(--faint)' };
+  const summaries = await Promise.all(programs.map(async p => {
+    try { return [p.name, await api('/programs/' + encodeURIComponent(p.name) + '/summary')]; }
+    catch { return [p.name, null]; }
+  }));
+  for (const [name, sum] of summaries) {
+    const card = el('div', { className:'progcard' });
+    card.append(el('div', { className:'pname', textContent: name }));
+    if (sum) {
+      const bySev = sum.findings_by_severity || {};
+      const total = Object.values(bySev).reduce((a, b) => a + b, 0) || 1;
+      const bar = el('div', { className:'pbar' });
+      for (const sev of ['critical', 'high', 'medium', 'low', 'info']) {
+        const n = bySev[sev] || 0;
+        if (n) bar.append(el('i', { style: `width:${(n / total * 100)}%;background:${sevColor[sev]}` }));
+      }
+      card.append(bar);
+      card.append(el('div', { className:'pcounts', textContent: `${sum.jobs ?? 0} job(s) · ${sum.findings ?? 0} finding(s) · ${sum.assets ?? 0} asset(s)` }));
+      card.append(el('div', { className:'pmeta', textContent: sum.last_activity ? 'última atividade ' + fmtTime(sum.last_activity) : 'sem atividade ainda' }));
+    } else {
+      card.append(el('div', { className:'pmeta', textContent:'erro ao carregar resumo' }));
+    }
+    card.addEventListener('click', () => { selectTab('projects'); $('#projSelect').value = name; renderProject(name); });
+    progBox.append(card);
+  }
+}
+
 /* ---------- tabs ---------- */
 function selectTab(view){
   for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
   for (const v of document.querySelectorAll('.view')) v.classList.toggle('active', v.id === 'view-' + view);
+  if (view === 'panel') loadPanel();
   if (view === 'jobs') loadJobs();
   if (view === 'pipelines') loadPipelines();
   if (view === 'monitor') loadWatches();
