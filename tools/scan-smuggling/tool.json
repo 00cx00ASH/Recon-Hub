@@ -1,0 +1,22 @@
+{
+  "name": "scan-smuggling",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "HTTP Request Smuggling (CL.TE / TE.CL) por timing oracle: manda um corpo ambíguo entre Content-Length e Transfer-Encoding numa conexão TCP isolada e mede se o servidor trava esperando dados que nunca chegam. Nunca encadeia uma 2ª requisição real pra 'provar' o desync — é a técnica deliberadamente segura de detectar isso sem risco de ler a resposta de outro usuário.",
+  "guide": "Alvo = uma URL http/https. Cada URL testada gera 3 conexões TCP incomuns (baseline, CL.TE, TE.CL) — evite rodar em massa ou repetidamente contra o mesmo alvo em produção; a concorrência é capada em 5 de propósito. Não usa wordlist nem auth compartilhada (o teste é no framing da requisição, não autenticado). Modos lista/arquivo varrem várias URLs, uma de cada vez por padrão.",
+  "validation": "Todo finding aqui é candidato por timing, NUNCA confirmação de smuggling real — a ferramenta deliberadamente não encadeia uma 2ª requisição pra provar o desync (arriscaria ler resposta de outro usuário). Exemplo de candidato válido: o probe CL.TE não responde em ~5s enquanto o baseline respondeu em <200ms, de forma repetível (rode de novo pra descartar rede instável). Antes de reportar, confirme com Burp Suite (HTTP Request Smuggler) ou o método manual do PortSwigger — só isso prova o desync de verdade.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 2, "help": "URLs testadas em paralelo (capado em 5)" },
+    { "name": "read_timeout_ms", "type": "int", "required": false, "default": 5000, "help": "quanto esperar por resposta antes de considerar 'travou'" }
+  ]
+}

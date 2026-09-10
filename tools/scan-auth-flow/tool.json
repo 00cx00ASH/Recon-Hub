@@ -1,0 +1,17 @@
+{
+  "name": "scan-auth-flow",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "SSO/OAuth: descobre o authorization_endpoint (via /.well-known/openid-configuration ou caminhos comuns), testa bypass de validação de redirect_uri — confirmado só pelo destino real da resposta — e inventaria endpoints de metadata SAML encontrados (sem tentar validar assinatura XML).",
+  "guide": "Alvo = a URL base do site (ex https://app.exemplo.com). Pra testar o bypass de redirect_uri de verdade, informe params.client_id — pegue um válido na própria URL de login do app (?client_id=...); sem ele a maioria dos provedores rejeita antes de sequer olhar o redirect_uri, e a ferramenta pula esse teste avisando. Se já souber o authorization_endpoint, passe em params.authorize_url e pula a descoberta. SAML aqui é só inventário — achar a metadata não é vulnerabilidade, é o ponto de partida pra um teste manual.",
+  "validation": "Exemplo crítico confirmado: redirect_uri=https://example.com faz o servidor responder 302 com Location: https://example.com?code=... — o authorization code vazando pro canary é a prova, não inferência. Sem client_id, a ferramenta nem tenta (evita gerar 'não achou bypass' que na real só significa 'não testou direito'). O achado de metadata SAML é sempre severidade 'info' — não é vulnerabilidade, é só o endpoint existir; a análise de verdade (XSW, replay) precisa de teste manual ou ferramenta especializada em SAML.",
+  "exec": ["go", "run", "."],
+  "timeout": "10m",
+  "params": [
+    { "name": "authorize_url", "type": "string", "required": false, "help": "authorization_endpoint já conhecido — pula a descoberta" },
+    { "name": "client_id", "type": "string", "required": false, "help": "client_id válido — necessário pro teste de bypass de redirect_uri rodar de verdade" },
+    { "name": "canary", "type": "string", "required": false, "default": "example.com", "help": "host inofensivo usado pra confirmar o bypass" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

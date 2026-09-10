@@ -1,0 +1,25 @@
+{
+  "name": "scan-ssrf",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Server-Side Request Forgery: injeta URLs de recursos internos/bem-conhecidos (metadata AWS/GCP/Azure, loopback, file:///etc/passwd) em parâmetros classicamente buscados pelo SERVIDOR (webhook, import, proxy, avatar por URL…) e só reporta quando o CONTEÚDO da resposta prova que o servidor buscou aquele recurso — nunca só pela presença do payload.",
+  "guide": "Alvo = uma URL http/https, de preferência já apontando pra uma feature que busca URL no servidor (webhook, import, preview de link, avatar por URL…). Não usa wordlist — a lista de nomes de parâmetro é fixa e curada. 'candidates' (padrão off) liga também os achados de localhost/loopback sem confirmação de conteúdo, por diferencial contra um host inexistente — mais ruído, sem prova. Modos lista/arquivo varrem várias URLs.",
+  "validation": "Exemplo crítico confirmado: o parâmetro 'webhook_url' apontado pra http://169.254.169.254/latest/meta-data/ faz a resposta voltar com ami-id/instance-id/security-credentials no corpo — a AWS metadata de verdade, não inferência. Opere primeiro sem 'candidates' (achados confirmados por conteúdo, alta confiança); ligue 'candidates' só se quiser ver os sinais de localhost sem prova, que exigem confirmação manual ou um collaborator OOB (fora do escopo desta ferramenta).",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo no servidor, uma URL por linha" },
+    { "name": "params", "type": "string", "required": false, "help": "nomes de parâmetro extra, separados por vírgula" },
+    { "name": "candidates", "type": "bool", "required": false, "default": false, "help": "reportar também candidatos de localhost/loopback sem confirmação de conteúdo" },
+    { "name": "max_params", "type": "int", "required": false, "default": 60, "help": "teto de parâmetros testados por URL" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 10, "help": "requisições simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 6000, "help": "timeout por requisição" }
+  ]
+}
