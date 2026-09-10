@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Web cache poisoning via entradas não-chaveadas: injeta um canary em X-Forwarded-Host / X-Forwarded-Scheme / X-Original-URL / Forwarded / X-Host / … e vê se ele volta refletido numa resposta cacheável — e, pra headers, confirma a persistência com uma 2ª requisição limpa. Cada teste usa um cache-buster único na query, então a resposta envenenada fica presa numa URL que nenhum usuário real acessa.",
   "guide": "Alvo = uma URL http/https (a raiz do site ou uma página específica). Não usa wordlist. A ferramenta é conservadora: sempre adiciona ?cb=<aleatório> pra isolar o teste do cache real. 'headers' (csv) sobrescreve a lista padrão de 17 entradas. Modos lista/arquivo varrem várias URLs.",
+  "validation": "Exemplo confirmado: um valor canário injetado em X-Forwarded-Host aparecendo de novo numa 2ª requisição limpa (sem o header) pra mesma URL — prova que ficou cacheado pra qualquer visitante. Opere com concorrência baixa (padrão 4) em produção — é fácil poluir o cache real do site de propósito de forma mais agressiva do que deveria.",
   "exec": ["go", "run", "."],
   "timeout": "15m",
   "modes": [

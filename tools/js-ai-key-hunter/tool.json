@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Caça credenciais de provedores de IA/ML no HTML + JS + source maps: OpenAI (sk-proj/legacy), Anthropic (sk-ant-api03), Groq, Mistral, Perplexity, Replicate, HuggingFace, OpenRouter, Together, Fireworks, Cohere, Google AI/Gemini, Azure OpenAI, ElevenLabs, Deepgram, AssemblyAI, LangSmith, Pinecone, W&B, Vertex/GCP service account, AWS Bedrock. Filtro de entropia de Shannon + denylist de placeholders. Validação read-only OPCIONAL (1 GET ao endpoint de metadados do provedor).",
   "guide": "Alvo = a URL de uma página (ex https://app.exemplo.com). Baixa a página + <script src> + os .js.map. 'validate' (padrão OFF) faz UM GET read-only por chave (ex api.openai.com/v1/models) só pra dizer se está ativa — a chave já está pública no JS do alvo; nada é escrito nem consome créditos. Sem wordlist. Modos lista/arquivo varrem várias URLs.",
+  "validation": "Exemplo: uma sk-ant-api03-... ou sk-proj-... visível num bundle JS de produção. Opere com 'validate' ligado sempre que puder — o GET de metadados do provedor (ex: api.openai.com/v1/models) confirma se a chave está ATIVA, que é o que separa 'achado' de 'achado que vale reportar como crítico'. Sem validate, trate como exposição de severidade média (pode já estar revogada).",
   "exec": ["go", "run", "."],
   "timeout": "12m",
   "modes": [

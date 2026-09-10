@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Busca na rede PÚBLICA do Postman por um termo (domínio, nome da empresa, produto), lista as collections e workspaces públicas, baixa o JSON de cada collection (run.pstmn.io) e varre por segredos (AWS, Google, GitHub, Slack, Stripe, OpenAI, chave privada, Bearer, basic-auth em URL, api_key genérica com filtro de entropia) e hosts internos/staging/dev.",
   "guide": "Alvo = o termo de busca. Um domínio (exemplo.com) liga a marcação de hosts relacionados. Não usa wordlist. Não autentica no Postman — usa a API pública de busca. 'no_deep' pula o download das collections (só lista). Emite as collections como assets kind=url e os hosts internos como kind=subdomain.",
+  "validation": "Exemplo válido: uma collection pública do Postman com um Bearer token de produção hardcoded num request salvo. Opere passando o nome da empresa E o domínio como alvo/match_domain quando souber os dois — melhora muito a precisão de quais hosts marcar como 'internos' na varredura.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "params": [

@@ -23,6 +23,8 @@ func main() {
 	switch cmd {
 	case "tools":
 		err = cmdTools(h, args)
+	case "tool":
+		err = cmdTool(h, args)
 	case "programs":
 		err = cmdPrograms(h, args)
 	case "run":
@@ -63,6 +65,7 @@ func usage() {
 uso: reconhub-cli <comando> [args]
 
   tools                                    lista as ferramentas registradas
+  tool <nome>                              detalhe de 1 ferramenta: resumo, guia, critério de finding válido
   programs                                 lista os programas/projetos
   run <ferramenta> <alvo> [flags]          dispara 1 ferramenta e acompanha até terminar
   jobs [flags]                             lista jobs

@@ -34,16 +34,17 @@ type Mode struct {
 
 // Tool is a parsed tool.json manifest plus resolved runtime fields.
 type Tool struct {
-	Name     string   `json:"name"`
-	Version  string   `json:"version"`
-	Language string   `json:"language"`
-	Category string   `json:"category"`
-	Summary  string   `json:"summary"`
-	Guide    string   `json:"guide,omitempty"` // 1-2 frases: o que pôr no Alvo, wordlists…
-	Exec     []string `json:"exec"`            // argv; {target} and {job_id} are substituted
-	Timeout  string   `json:"timeout"`         // Go duration string, e.g. "30m"
-	Params   []Param  `json:"params,omitempty"`
-	Modes    []Mode   `json:"modes,omitempty"`
+	Name       string   `json:"name"`
+	Version    string   `json:"version"`
+	Language   string   `json:"language"`
+	Category   string   `json:"category"`
+	Summary    string   `json:"summary"`
+	Guide      string   `json:"guide,omitempty"`      // 1-2 frases: o que pôr no Alvo, wordlists…
+	Validation string   `json:"validation,omitempty"` // o que conta como finding válido vs. ruído/falso positivo
+	Exec       []string `json:"exec"`                 // argv; {target} and {job_id} are substituted
+	Timeout    string   `json:"timeout"`              // Go duration string, e.g. "30m"
+	Params     []Param  `json:"params,omitempty"`
+	Modes      []Mode   `json:"modes,omitempty"`
 
 	Dir        string        `json:"dir"`
 	TimeoutDur time.Duration `json:"-"`

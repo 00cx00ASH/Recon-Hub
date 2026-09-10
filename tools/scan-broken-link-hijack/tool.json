@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Broken Link Hijacking: extrai os links/recursos externos de uma página (a/script/iframe/form, opcionalmente img/link) e checa quais apontam pra algo sequestrável — usuário/repo GitHub inexistente, pacote npm publicável, bucket S3 NoSuchBucket, subdomínio de Heroku/Netlify/Vercel/Surge/… não reclamado, handle de rede social livre, ou domínio que nem resolve (NXDOMAIN).",
   "guide": "Alvo = a URL de uma página (ex https://blog.exemplo.com). A ferramenta baixa o HTML, acha os links externos e testa cada um. Não usa wordlist. 'include_subresources' liga também <img>/<link> (mais ruído). Modos lista/arquivo varrem várias páginas. Só faz GET — não registra nada, só diz o que é registrável.",
+  "validation": "Exemplo confirmado: um link pra github.com/empresa-antiga/repo-deletado respondendo 404 da API do GitHub (usuário/repo livre pra registrar). Opere com 'include_subresources' desligado primeiro (padrão, menos ruído); ligue só se quiser cobrir favicon/CSS também depois de já ter varrido os links principais.",
   "exec": ["go", "run", "."],
   "timeout": "12m",
   "modes": [

@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "OSINT de Google Tag Manager: acha os IDs de rastreamento numa página (GTM, GA4 G-, UA-, Ads AW-, GT-, Floodlight DC-), baixa o container gtm.js PÚBLICO de cada GTM-ID e o disseca — versão, contagem de tags/triggers/variáveis, tags de HTML customizado (com heurística de suspeita: document.write/eval/atob/script externo), pixels de terceiros (Facebook, LinkedIn, TikTok, Hotjar…), outros IDs de rastreamento referenciados, e segredos hardcoded no container.",
   "guide": "Alvo = a URL de uma página (ex https://exemplo.com). Baixa a página + os <script src> e extrai os IDs; pra cada GTM-XXXX, baixa https://www.googletagmanager.com/gtm.js?id=... (recurso público, não é intrusivo). Já tem o ID? Passe em params.gtm_id e deixe o Alvo vazio. Sem wordlist. Modos lista/arquivo varrem várias páginas.",
+  "validation": "Exemplo de finding real (não só OSINT): um segredo hardcoded dentro do container gtm.js público, ou uma tag HTML customizada usando document.write/eval num container de produção. A maior parte da saída (IDs, pixels de terceiro) é contexto — use pra mapear rastreadores, não como achado de segurança por si só.",
   "exec": ["go", "run", "."],
   "timeout": "8m",
   "modes": [

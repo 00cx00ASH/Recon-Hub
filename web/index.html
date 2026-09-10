@@ -203,6 +203,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       <select id="tool"></select>
       <span class="help" id="toolHelp"></span>
       <span class="help" id="toolGuide" style="color:var(--dim);border-left:2px solid var(--border-strong);padding-left:.5rem;margin-top:.2rem"></span>
+      <span class="help" id="toolValidation" style="color:var(--ok);border-left:2px solid color-mix(in srgb,var(--ok) 45%,transparent);padding-left:.5rem;margin-top:.2rem"></span>
       <details id="toolDoc" style="margin-top:.35rem">
         <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">ℹ ajuda completa</summary>
         <div class="md" id="toolDocBody" style="font-size:12px;max-width:none;margin-top:.4rem"><p class="muted" style="padding:.3rem 0">carregando…</p></div>
@@ -571,6 +572,8 @@ function renderToolMeta() {
   $('#toolHelp').textContent = t ? (t.summary || '') : '';
   $('#toolGuide').textContent = (t && t.guide) || '';
   $('#toolGuide').hidden = !(t && t.guide);
+  $('#toolValidation').textContent = (t && t.validation) ? ('✓ ' + t.validation) : '';
+  $('#toolValidation').hidden = !(t && t.validation);
 
   // ajuda completa (README da ferramenta) — carrega ao abrir o <details>
   const doc = $('#toolDoc');

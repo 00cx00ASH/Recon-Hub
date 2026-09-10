@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Acha referências a cloud storage (S3, GCS, Azure Blob, R2, DO Spaces, Wasabi, Backblaze B2, Linode, Scaleway, Alibaba OSS, IBM COS) no HTML/JS/source maps de uma página e testa cada bucket: LIST anônimo, privado ou inexistente (takeover).",
   "guide": "Alvo = uma URL http(s) (ex: https://app.exemplo.com), ou lista/arquivo de URLs. Não usa wordlist — extrai referências a buckets do HTML/JS/source maps da página e testa cada um. Sem http:// ele assume https://.",
+  "validation": "Exemplo válido: um bucket S3 respondendo <ListBucketResult> pra um GET anônimo (LIST liberado). Opere com 'maps' ligado — buckets aparecem tanto no JS quanto nos source maps, e o segundo lugar é onde a maioria escapa de auditorias manuais. 'Privado' e 'inexistente' são só contexto, não reporte como vulnerabilidade.",
   "exec": [
     "go",
     "run",

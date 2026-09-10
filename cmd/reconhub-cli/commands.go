@@ -10,6 +10,7 @@ import (
 	"reconhub/internal/copilot"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
+	"reconhub/internal/registry"
 	"reconhub/internal/scope"
 	"reconhub/internal/store"
 )
@@ -35,6 +36,69 @@ func cmdTools(h *hubClient, _ []string) error {
 	}
 	fmt.Printf("\n%d ferramenta(s)\n", len(res.Tools))
 	return nil
+}
+
+// cmdTool prints the full manifest of one tool — summary, how to point the
+// Alvo at it (guide), what actually counts as a valid finding vs. noise
+// (validation), and its params/modes. Same data the dashboard shows next to
+// the tool picker, for whoever drives the hub from a terminal instead.
+func cmdTool(h *hubClient, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("uso: reconhub-cli tool <nome>")
+	}
+	var t registry.Tool
+	if err := h.get("/api/tools/"+args[0], &t); err != nil {
+		return err
+	}
+	fmt.Printf("%s  (%s · %s)\n", t.Name, t.Category, t.Language)
+	fmt.Printf("timeout: %s\n\n", t.Timeout)
+	fmt.Println(wrap(t.Summary))
+	if t.Guide != "" {
+		fmt.Println("\ncomo usar:")
+		fmt.Println(wrap(t.Guide))
+	}
+	if t.Validation != "" {
+		fmt.Println("\no que esperar como finding válido:")
+		fmt.Println(wrap(t.Validation))
+	}
+	if len(t.Modes) > 0 {
+		fmt.Println("\nmodos:")
+		for _, m := range t.Modes {
+			fmt.Printf("  %-10s %s\n", m.Name, m.Help)
+		}
+	}
+	if len(t.Params) > 0 {
+		fmt.Println("\nparams:")
+		for _, p := range t.Params {
+			req := ""
+			if p.Required {
+				req = " *"
+			}
+			fmt.Printf("  %-16s %-6s%-2s %s\n", p.Name, p.Type, req, p.Help)
+		}
+	}
+	return nil
+}
+
+// wrap does a plain 90-col soft wrap so long summary/guide/validation text
+// (they're written as dashboard tooltip prose) is readable in a terminal.
+func wrap(s string) string {
+	const width = 90
+	words := strings.Fields(s)
+	var out strings.Builder
+	lineLen := 0
+	for i, w := range words {
+		if lineLen > 0 && lineLen+1+len(w) > width {
+			out.WriteByte('\n')
+			lineLen = 0
+		} else if i > 0 {
+			out.WriteByte(' ')
+			lineLen++
+		}
+		out.WriteString(w)
+		lineLen += len(w)
+	}
+	return out.String()
 }
 
 func cmdPrograms(h *hubClient, _ []string) error {

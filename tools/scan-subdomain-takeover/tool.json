@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Subdomain takeover por CNAME dangling: segue a cadeia de CNAME com DNS direto, casa contra ~58 fingerprints de serviços (GitHub Pages, S3, Heroku, Netlify, Vercel, Azure, Fastly, Shopify, Zendesk, Ghost, Webflow, Kajabi, Canny, Brightcove…) e confirma pelo corpo HTTP.",
   "guide": "Alvo = um host (modo \"Alvo único\"), ou uma lista/arquivo de hosts nos outros modos. Não usa wordlist — casa o CNAME contra ~58 fingerprints embutidos. Ótimo como 2º step depois de recon-crtsh.",
+  "validation": "Exemplo confirmado: CNAME apontando pra um bucket S3 com 'NoSuchBucket' no corpo, ou pra um app Heroku desativado com a página de erro característica. Opere sempre com 'http' ligado (padrão) — é a diferença entre 'CNAME órfão' (pode não significar nada) e 'takeover confirmado' (vale reportar já). Use 'only_confirmed' quando for rodar em massa numa lista grande de subdomínios.",
   "exec": [
     "go",
     "run",

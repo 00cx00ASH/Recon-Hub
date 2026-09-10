@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Auditoria PROFUNDA de uma collection do Postman que você aponta (por id, URL pública, ou todas as collections de um workspace público). Baixa o JSON completo (run.pstmn.io), inventaria os requests (método + URL → assets), e varre por segredos (18 padrões com entropia), PII (e-mail, CPF, SSN, cartão validado por Luhn, IBAN, telefone — redigidos), credenciais hardcoded nos blocos `auth` (bearer/apikey/basic com valor literal, não `{{variável}}`), e hosts internos/staging.",
   "guide": "Alvo = o id de uma collection (ex 12345-uuid), a URL pública dela (www.postman.com/<handle>/<workspace>/collection/<id>), ou a URL de um workspace público (audita todas as collections dele). Não usa wordlist. Não autentica no Postman. Diferente do scan-postman-net (que BUSCA por um termo), aqui você já sabe qual collection quer auditar a fundo. 'collections' aceita vários por vírgula/linha.",
+  "validation": "Exemplo válido: um bloco 'auth' tipo bearer com o token escrito literalmente (não '{{token}}') num request salvo na collection. Opere aqui quando já souber QUAL collection auditar (id ou URL específica) — é mais profundo que o scan-postman-net, então não é pra busca exploratória, é pra ir fundo numa collection que você já achou.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "modes": [

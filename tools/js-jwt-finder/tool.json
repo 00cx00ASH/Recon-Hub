@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Acha JWTs no HTML/JS de uma página (ou colados), decodifica header e payload SEM verificar assinatura, e aponta problemas: alg=none, sem exp, vida > 1 ano, claims sensíveis (email/role/is_admin/permissions/…), header jku/x5u, emissor conhecido (Supabase/Firebase/Cognito/Auth0/Okta). Pra tokens HS256/384/512, tenta quebrar o segredo com ~60 segredos fracos embutidos + wordlist opcional (SecLists).",
   "guide": "Alvo = a URL de uma página (ex https://app.exemplo.com). Baixa a página + os <script src> e acha os eyJ....eyJ.... Já tem um token? Cole em params.token (um ou vários). 'wordlist' escolhe uma lista de segredos pra tentar quebrar HS* — a embutida já cobre os clássicos; use uma do SecLists (ex Passwords/) pra ir mais fundo. Só decodifica localmente — nenhuma requisição ao emissor. Modos lista/arquivo varrem várias páginas.",
+  "validation": "Exemplo válido direto: um JWT com {\"alg\":\"none\"} no header, ou payload sem 'exp'. Opere passando uma wordlist maior (SecLists Passwords/) quando achar um HS256 e a lista embutida não quebrar — vale a pena rodar de novo só nesse token específico com 'token' colado em vez de escanear a página inteira de novo.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "modes": [

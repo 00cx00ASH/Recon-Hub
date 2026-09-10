@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Descobre endpoints GraphQL (16 caminhos comuns), testa introspection e enumera queries/mutations/subscriptions, marca campos de nome sensível (password/token/ssn/…) e mutations perigosas (delete/impersonate/updateRole/…), e checa misconfigs: queries por GET (CSRF), batching de operações (brute force/DoS), sugestão de campos (\"Did you mean\") e vazamento de stack trace nas mensagens de erro.",
   "guide": "Alvo = a URL base do site OU o endpoint GraphQL direto. Com discovery ligado (padrão), tenta /graphql, /api/graphql, /query, /graphiql, … a partir da base. Não usa wordlist. Só faz queries de leitura (__typename, introspection, um campo inexistente) — nenhuma mutation é executada. Modos lista/arquivo varrem várias bases.",
+  "validation": "Exemplo de finding: introspection respondendo o schema completo com uma mutation deleteUser ou updateUserRole visível. Opere com discovery ligado (padrão) num alvo novo pra achar o endpoint sozinho; se já souber o endpoint exato, use 'no_discover' pra ir direto e evitar ruído de tentativas nos outros 15 caminhos.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "modes": [
