@@ -45,27 +45,38 @@ func get(c *http.Client, url string) ([]byte, int, error) {
 }
 
 func srcCrtsh(c *http.Client, root string) ([]string, error) {
-	var out []string
 	for attempt := 0; attempt < 3; attempt++ {
 		b, st, err := get(c, "https://crt.sh/?q=%25."+root+"&output=json")
 		if err == nil && st == 200 && len(b) > 0 {
-			var rows []struct {
-				NameValue  string `json:"name_value"`
-				CommonName string `json:"common_name"`
-			}
-			if json.Unmarshal(b, &rows) == nil {
-				for _, r := range rows {
-					for _, line := range strings.Split(r.NameValue, "\n") {
-						out = append(out, line)
-					}
-					out = append(out, r.CommonName)
-				}
+			if out, ok := parseCrtshHosts(b); ok {
 				return out, nil
 			}
 		}
 		time.Sleep(time.Duration(attempt+1) * time.Second)
 	}
 	return nil, fmt.Errorf("crt.sh sem resposta utilizável")
+}
+
+// parseCrtshHosts extracts raw host candidates from crt.sh's JSON array
+// (name_value can carry several SANs separated by \n). Separate from the
+// fetch/retry loop above so it's unit testable against a captured response,
+// without needing crt.sh reachable.
+func parseCrtshHosts(b []byte) ([]string, bool) {
+	var rows []struct {
+		NameValue  string `json:"name_value"`
+		CommonName string `json:"common_name"`
+	}
+	if json.Unmarshal(b, &rows) != nil {
+		return nil, false
+	}
+	var out []string
+	for _, r := range rows {
+		for _, line := range strings.Split(r.NameValue, "\n") {
+			out = append(out, line)
+		}
+		out = append(out, r.CommonName)
+	}
+	return out, true
 }
 
 func srcCertspotter(c *http.Client, root string) ([]string, error) {
@@ -80,6 +91,11 @@ func srcCertspotter(c *http.Client, root string) ([]string, error) {
 	if st != 200 {
 		return nil, fmt.Errorf("HTTP %d", st)
 	}
+	return parseCertspotterHosts(b)
+}
+
+// parseCertspotterHosts flattens dns_names across every issuance.
+func parseCertspotterHosts(b []byte) ([]string, error) {
 	var rows []struct {
 		DNSNames []string `json:"dns_names"`
 	}
@@ -102,13 +118,18 @@ func srcHackerTarget(c *http.Client, root string) ([]string, error) {
 	if st != 200 || strings.Contains(text, "API count exceeded") || strings.Contains(text, "error") {
 		return nil, fmt.Errorf("indisponível (%d): %s", st, strings.TrimSpace(firstLine(text)))
 	}
+	return parseHackerTargetHosts(text), nil
+}
+
+// parseHackerTargetHosts reads hackertarget's CSV response ("host,ip\n...").
+func parseHackerTargetHosts(text string) []string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {
 		if h, _, ok := strings.Cut(strings.TrimSpace(line), ","); ok {
 			out = append(out, h)
 		}
 	}
-	return out, nil
+	return out
 }
 
 func srcAlienVault(c *http.Client, root string) ([]string, error) {
@@ -119,6 +140,11 @@ func srcAlienVault(c *http.Client, root string) ([]string, error) {
 	if st != 200 {
 		return nil, fmt.Errorf("HTTP %d", st)
 	}
+	return parseAlienVaultHosts(b)
+}
+
+// parseAlienVaultHosts reads OTX's passive_dns array.
+func parseAlienVaultHosts(b []byte) ([]string, error) {
 	var body struct {
 		PassiveDNS []struct {
 			Hostname string `json:"hostname"`
@@ -145,6 +171,11 @@ func srcAnubis(c *http.Client, root string) ([]string, error) {
 	if st != 200 {
 		return nil, fmt.Errorf("HTTP %d", st)
 	}
+	return parseAnubisHosts(b)
+}
+
+// parseAnubisHosts reads jldc.me's response: a plain JSON array of hostnames.
+func parseAnubisHosts(b []byte) ([]string, error) {
 	var out []string
 	if err := json.Unmarshal(b, &out); err != nil {
 		return nil, err

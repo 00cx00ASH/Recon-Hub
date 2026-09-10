@@ -191,13 +191,20 @@ func fetchCrtsh(domain string, timeout time.Duration) ([]crtRow, error) {
 			lastErr = fmt.Errorf("resposta não-JSON de %d bytes (tentativa %d/%d)", len(trimmed), attempt, attempts)
 			continue
 		}
-		var rows []crtRow
-		if err := json.Unmarshal([]byte(trimmed), &rows); err != nil {
-			return nil, fmt.Errorf("JSON inválido: %w", err)
-		}
-		return rows, nil
+		return parseCrtshBody([]byte(trimmed))
 	}
 	return nil, lastErr
+}
+
+// parseCrtshBody parses crt.sh's JSON array response into rows. Kept
+// separate from the HTTP retry loop above so it can be unit tested against a
+// captured response body, without needing the network.
+func parseCrtshBody(body []byte) ([]crtRow, error) {
+	var rows []crtRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("JSON inválido: %w", err)
+	}
+	return rows, nil
 }
 
 // fetchCertspotter consulta a API pública do certspotter (sem token: limite
@@ -227,6 +234,13 @@ func fetchCertspotter(domain string, timeout time.Duration) ([]string, error) {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
+	return parseCertspotterBody(body)
+}
+
+// parseCertspotterBody parses certspotter's issuances array, flattening
+// dns_names across every issuance. Separate from the HTTP call above so it
+// can be unit tested against a captured response body.
+func parseCertspotterBody(body []byte) ([]string, error) {
 	var issuances []struct {
 		DNSNames []string `json:"dns_names"`
 	}
