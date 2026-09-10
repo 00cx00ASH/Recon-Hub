@@ -126,7 +126,9 @@
   .md pre{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.9rem 1rem;overflow-x:auto;margin:1em 0}
   .md pre code{background:none;border:0;padding:0;font-size:12px;line-height:1.55;color:var(--dim);white-space:pre}
   .md hr{border:0;border-top:1px solid var(--border);margin:2em 0}
-  .md table{margin:1em 0;font-size:12px}
+  .md table{font-size:12px}
+  .md .wrapx{overflow-x:auto;margin:1em 0}
+  .md .wrapx table{margin:0}
   .md th,.md td{border:1px solid var(--border)}
   .md blockquote{margin:1em 0;padding:.2em 1em;border-left:3px solid var(--border-strong);color:var(--dim)}
   #docsBody{padding-bottom:3rem}
@@ -1252,12 +1254,12 @@ function renderMarkdown(src){
     if (/^\s*\|.*\|\s*$/.test(ln) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
       const row = s => s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
       const head = row(ln); i += 2;
-      let t = '<table><thead><tr>' + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>';
+      let t = '<div class="wrapx"><table><thead><tr>' + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>';
       while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
         t += '<tr>' + row(lines[i]).map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>';
         i++;
       }
-      html += t + '</tbody></table>'; continue;
+      html += t + '</tbody></table></div>'; continue;
     }
     if (/^\s*([-*]|\d+\.)\s+/.test(ln)) {
       const ordered = /^\s*\d+\.\s+/.test(ln);
