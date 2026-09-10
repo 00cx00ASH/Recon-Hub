@@ -1,8 +1,11 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsRiskyFile(t *testing.T) {
@@ -127,6 +130,72 @@ func TestRedact(t *testing.T) {
 	}
 	if redact("short") != "***" {
 		t.Error("curto -> ***")
+	}
+}
+
+// TestGetFallsBackWhenTokenLacksAccess regressão: achado rodando o hub de
+// verdade num sandbox onde GITHUB_TOKEN é um PAT fine-grained restrito a UM
+// repo específico. Auditar um repo público diferente (ex juice-shop/juice-shop)
+// dava 403 e a ferramenta desistia — mesmo o repo sendo perfeitamente
+// acessível sem token. O 403 aqui é de permissão, não de rate limit
+// (X-RateLimit-Remaining continua > 0), então deve cair pra acesso anônimo.
+func TestGetFallsBackWhenTokenLacksAccess(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("X-RateLimit-Remaining", "100") // não é rate limit
+		if r.Header.Get("Authorization") != "" {
+			w.WriteHeader(403)
+			_, _ = w.Write([]byte(`{"message":"Resource not accessible by personal access token"}`))
+			return
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	g := newGH("token-sem-acesso-a-este-repo", 5*time.Second)
+	b, status, err := g.get(srv.URL + "/repos/juice-shop/juice-shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != 200 {
+		t.Fatalf("status = %d, corpo = %s (deveria ter caído pro acesso anônimo)", status, b)
+	}
+	if !g.tokenBad {
+		t.Error("tokenBad deveria ficar true depois do fallback")
+	}
+	if calls != 2 {
+		t.Fatalf("esperava 2 chamadas (com token + fallback anônimo), veio %d", calls)
+	}
+
+	// chamada seguinte já sabe que o token é ruim — vai direto anônima, 1 request só.
+	_, status2, _ := g.get(srv.URL + "/repos/juice-shop/juice-shop")
+	if status2 != 200 || calls != 3 {
+		t.Fatalf("chamada seguinte deveria ir direto anônima (1 request): status=%d calls=%d", status2, calls)
+	}
+}
+
+// TestGetRealRateLimitStillMarksExhausted garante que o fix não regrediu o
+// caso original: 403 com X-RateLimit-Remaining=0 é rate limit de verdade, sem
+// token pra tentar de novo, e deve marcar exhausted (não fica em loop).
+func TestGetRealRateLimitStillMarksExhausted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(403)
+	}))
+	defer srv.Close()
+
+	g := newGH("", 5*time.Second)
+	_, status, err := g.get(srv.URL + "/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != 403 {
+		t.Fatalf("status = %d", status)
+	}
+	if !g.exhausted {
+		t.Error("deveria marcar exhausted quando remain=0")
 	}
 }
 

@@ -73,6 +73,38 @@ func TestAnalyze(t *testing.T) {
 	}
 }
 
+// TestAnalyzeNestedSensitiveClaims regressão: achado rodando o hub de verdade
+// contra o OWASP Juice Shop — o payload real vem como
+// {"data":{"password":"<md5>","role":"customer",...},"bid":6,"iat":...}
+// (claims sensíveis aninhadas sob "data", não no nível raiz). Antes do fix,
+// jwt-sensitive-claims só olhava as chaves de topo e não disparava — um hash
+// de senha inteiro passava batido.
+func TestAnalyzeNestedSensitiveClaims(t *testing.T) {
+	nested := map[string]any{
+		"data": map[string]any{
+			"id":       25,
+			"email":    "testuser@example.com",
+			"password": "a226f4f822830025ca5c14731882 36e93",
+			"role":     "customer",
+		},
+		"bid": 6,
+	}
+	h, p, _, _ := decodeJWT(mkHS256(nested, "s"))
+	is := analyze(h, p, "")
+	if !hasKind(is, "jwt-sensitive-claims") {
+		t.Fatal("faltou jwt-sensitive-claims com claim sensível aninhada sob \"data\"")
+	}
+	var detail string
+	for _, i := range is {
+		if i.kind == "jwt-sensitive-claims" {
+			detail = i.detail
+		}
+	}
+	if !strings.Contains(detail, "data.password") || !strings.Contains(detail, "data.email") {
+		t.Errorf("detail deveria citar o caminho aninhado (data.password, data.email): %q", detail)
+	}
+}
+
 func TestCrackHS(t *testing.T) {
 	tok := mkHS256(map[string]any{"sub": "1"}, "supersecret")
 	got, ok := crackHS(tok, mergeSecrets(nil))

@@ -88,6 +88,36 @@ var sensitiveClaims = []string{
 	"account_id", "org_id", "tenant", "internal",
 }
 
+// collectSensitiveClaims walks the decoded payload looking for sensitiveClaims
+// keys at ANY nesting depth, not just the top level. Several real-world
+// issuers (Juice Shop included) wrap the actual user object under a single
+// key like "data" or "user" — a top-level-only check misses a password hash
+// or role sitting right there one level down. Matches are qualified by their
+// dotted path (e.g. "data.password") so a nested hit is as legible as a
+// top-level one.
+func collectSensitiveClaims(v any, path string) []string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for k, val := range m {
+		full := k
+		if path != "" {
+			full = path + "." + k
+		}
+		lk := strings.ToLower(k)
+		for _, sk := range sensitiveClaims {
+			if lk == sk && val != nil && val != "" {
+				out = append(out, full)
+				break
+			}
+		}
+		out = append(out, collectSensitiveClaims(val, full)...)
+	}
+	return out
+}
+
 // analyze inspects a decoded token.
 func analyze(hdr, pl map[string]any, tok string) []issue {
 	var out []issue
@@ -124,16 +154,16 @@ func analyze(hdr, pl map[string]any, tok string) []issue {
 		out = append(out, issue{"jwt-no-exp", "medium", "sem claim exp — o token nunca expira"})
 	}
 
-	var leaked []string
-	for _, k := range sensitiveClaims {
-		if v, ok := pl[k]; ok && v != nil && v != "" {
-			leaked = append(leaked, k)
-		}
-	}
+	leaked := collectSensitiveClaims(pl, "")
+	sort.Strings(leaked)
 	if len(leaked) > 0 {
 		sev := "low"
 		for _, k := range leaked {
-			if strings.Contains(k, "admin") || k == "password" || k == "pwd" || k == "authorization" {
+			last := k
+			if i := strings.LastIndexByte(k, '.'); i >= 0 {
+				last = k[i+1:]
+			}
+			if strings.Contains(last, "admin") || last == "password" || last == "pwd" || last == "authorization" {
 				sev = "medium"
 			}
 		}

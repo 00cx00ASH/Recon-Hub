@@ -19,6 +19,7 @@ type ghClient struct {
 	remain    int
 	resetAt   time.Time
 	exhausted bool
+	tokenBad  bool // token rejeitado por permissão (não por rate limit) — para de usar pro resto da run
 }
 
 func newGH(token string, timeout time.Duration) *ghClient {
@@ -29,6 +30,31 @@ func (g *ghClient) get(path string) ([]byte, int, error) {
 	if g.exhausted {
 		return nil, 0, fmt.Errorf("rate limit esgotado (reseta %s)", g.resetAt.Format(time.Kitchen))
 	}
+	tok := g.token
+	if g.tokenBad {
+		tok = ""
+	}
+	b, status, err := g.doGet(path, tok)
+	if err != nil {
+		return b, status, err
+	}
+	// Um token presente mas sem escopo pro alvo (comum: PAT fine-grained
+	// restrito a outro repo/org) dá 403 sem "esgotar" o rate limit — isso é
+	// permissão, não cota. Um repo público costuma ficar acessível sem
+	// token, então tenta de novo anônimo antes de desistir, e para de usar
+	// esse token pro resto da run (evita repetir o mesmo 403 em toda
+	// chamada seguinte).
+	if status == 403 && tok != "" && g.remain != 0 {
+		g.tokenBad = true
+		b, status, err = g.doGet(path, "")
+	}
+	if status == 403 && g.remain == 0 {
+		g.exhausted = true
+	}
+	return b, status, err
+}
+
+func (g *ghClient) doGet(path, token string) ([]byte, int, error) {
 	url := path
 	if strings.HasPrefix(path, "/") {
 		url = "https://api.github.com" + path
@@ -40,8 +66,8 @@ func (g *ghClient) get(path string) ([]byte, int, error) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "recon-hub/int-github-audit")
-	if g.token != "" {
-		req.Header.Set("Authorization", "Bearer "+g.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := g.http.Do(req)
 	if err != nil {
@@ -60,9 +86,6 @@ func (g *ghClient) get(path string) ([]byte, int, error) {
 			g.resetAt = time.Unix(n, 0)
 		}
 	}
-	if resp.StatusCode == 403 && g.remain == 0 {
-		g.exhausted = true
-	}
 	return b, resp.StatusCode, nil
 }
 
@@ -71,7 +94,7 @@ func (g *ghClient) getRaw(owner, repo, ref, path string) (string, int, error) {
 	url := "https://raw.githubusercontent.com/" + owner + "/" + repo + "/" + ref + "/" + path
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", "recon-hub/int-github-audit")
-	if g.token != "" {
+	if g.token != "" && !g.tokenBad {
 		req.Header.Set("Authorization", "Bearer "+g.token)
 	}
 	resp, err := g.http.Do(req)

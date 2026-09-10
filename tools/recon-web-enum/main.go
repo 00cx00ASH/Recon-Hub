@@ -193,7 +193,7 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 		for _, pn := range queryParams(cur.u) {
 			params[pn] = true
 		}
-		if status >= 200 && status < 300 {
+		if status >= 200 && status < 300 && isHTML(hdr) {
 			for _, f := range extractForms(body, cur.u) {
 				forms = append(forms, f)
 				for _, in := range f.Inputs {
@@ -201,7 +201,7 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 				}
 			}
 		}
-		if cur.d < depth {
+		if cur.d < depth && isHTML(hdr) {
 			for _, l := range pageLinks(body, cur.u, baseHost) {
 				lu, _ := url.Parse(l)
 				lu.RawQuery = "" // enfileira o path sem query pra não explodir

@@ -8,6 +8,21 @@ import (
 	"strings"
 )
 
+// isHTML reports whether a response's Content-Type indicates HTML. Link and
+// form extraction only makes sense on real HTML — running it on a fetched
+// .js/.css/.json body risks matching a template-string literal (e.g. a
+// bundled library's `href="{{href}}"` placeholder, or a `<form>`-shaped
+// string in a code sample) as if it were a real page link or form. A missing
+// Content-Type keeps the previous behavior (assume HTML) since some servers
+// omit it on otherwise-valid HTML responses.
+func isHTML(hdr http.Header) bool {
+	ct := hdr.Get("Content-Type")
+	if ct == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(ct), "html")
+}
+
 // --- link / form extraction ---
 
 var (

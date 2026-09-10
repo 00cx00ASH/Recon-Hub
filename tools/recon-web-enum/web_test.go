@@ -40,6 +40,29 @@ func TestPageLinks(t *testing.T) {
 	}
 }
 
+// TestIsHTMLRejectsJS regressão: um bundle JS que contém uma string de
+// template tipo `href="{{href}}"` (ex: a lib de cookie-consent embute HTML
+// como texto) não pode virar "link descoberto" — só body de resposta HTML
+// deveria ir pro pageLinks/extractForms. Achado rodando o hub de verdade
+// contra o OWASP Juice Shop: o crawler seguia scripts.js e "descobria"
+// http://alvo/{{href}} como se fosse uma página real.
+func TestIsHTMLRejectsJS(t *testing.T) {
+	h := http.Header{}
+	h.Set("Content-Type", "application/javascript; charset=utf-8")
+	if isHTML(h) {
+		t.Error("Content-Type application/javascript não deveria contar como HTML")
+	}
+	h2 := http.Header{}
+	h2.Set("Content-Type", "text/html; charset=utf-8")
+	if !isHTML(h2) {
+		t.Error("text/html deveria contar como HTML")
+	}
+	h3 := http.Header{} // sem Content-Type — mantém compatibilidade (assume HTML)
+	if !isHTML(h3) {
+		t.Error("sem Content-Type deveria manter o comportamento anterior (assume HTML)")
+	}
+}
+
 func TestExtractForms(t *testing.T) {
 	html := `
 	<form action="/login" method="POST">
