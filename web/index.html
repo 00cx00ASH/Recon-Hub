@@ -224,7 +224,8 @@ docker compose exec reconhub cat /app/data/token</pre>
       <details id="newProg" style="margin-top:.35rem">
         <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">＋ novo projeto</summary>
         <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem">
-          <input id="npName" placeholder="nome (ex: acme)" spellcheck="false" autocomplete="off">
+          <input id="npName" placeholder="nome (ex: acme, ou 'Meu Programa Acme')" spellcheck="false" autocomplete="off">
+          <span class="help" id="npSlugPreview" style="color:var(--faint)"></span>
           <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <textarea id="npOut" rows="2" placeholder="out of scope (opcional):&#10;blog.acme.com" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <button id="npSave" class="run" style="padding:.45rem">Criar projeto</button>
@@ -860,22 +861,52 @@ async function loadPrograms(){
 }
 
 const lines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
+
+// slugify: o back-end só aceita a-z, 0-9, . _ - (até 63 chars, começando
+// com letra/número) pro nome do projeto — ele vira o nome do arquivo em
+// programs/<nome>.json. Em vez de rejeitar "Meu Programa Acme" com um erro
+// técnico, convertemos pro slug válido automaticamente (é isso que faz
+// qualquer app moderno) e mostramos o resultado antes de criar.
+function slugify(s){
+  return (s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, 63)
+    .replace(/^[._-]+/, ''); // precisa começar com a-z/0-9
+}
+function updateSlugPreview(){
+  const raw = $('#npName').value;
+  const slug = slugify(raw);
+  const prev = $('#npSlugPreview');
+  if (!raw.trim()) { prev.textContent = ''; return; }
+  prev.textContent = (slug && slug !== raw.trim()) ? `vai ser criado como: ${slug}` : (slug ? '' : 'nome inválido — use letras, números, . _ -');
+}
+$('#npName').addEventListener('input', updateSlugPreview);
+
 $('#npSave').addEventListener('click', async () => {
+  const slug = slugify($('#npName').value);
   const body = {
-    name: $('#npName').value.trim(),
+    name: slug,
     in_scope: lines($('#npIn').value),
     out_of_scope: lines($('#npOut').value),
   };
-  if (!body.name || !body.in_scope.length) { $('#npMsg').textContent = 'nome e ao menos 1 linha de in-scope'; return; }
+  $('#npMsg').style.color = 'var(--crit)';
+  if (!body.name) { $('#npMsg').textContent = 'dê um nome ao projeto (letras, números, . _ -)'; return; }
+  if (!body.in_scope.length) { $('#npMsg').textContent = 'adicione ao menos 1 linha de in-scope (ex: *.' + body.name + '.com)'; return; }
   $('#npSave').disabled = true;
   try {
     const p = await api('/programs', { method:'POST', body: JSON.stringify(body) });
-    $('#npMsg').textContent = 'criado: ' + p.name;
+    $('#npMsg').style.color = 'var(--ok)';
+    $('#npMsg').textContent = '✓ criado: ' + p.name;
     $('#npName').value = $('#npIn').value = $('#npOut').value = '';
+    $('#npSlugPreview').textContent = '';
     $('#newProg').open = false;
     await loadPrograms();
     $('#jobProgram').value = p.name;
-  } catch (e) { $('#npMsg').textContent = 'erro: ' + e.message; }
+  } catch (e) { $('#npMsg').style.color = 'var(--crit)'; $('#npMsg').textContent = 'erro: ' + e.message; }
   finally { $('#npSave').disabled = false; }
 });
 
