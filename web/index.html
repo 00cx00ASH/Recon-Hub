@@ -36,6 +36,9 @@
   header .spacer{flex:1}
   header input{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.35rem .5rem;width:230px}
 
+  .projswitch{display:flex;align-items:center;gap:.4rem;font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace;flex:none}
+  .projswitch select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--accent);border-radius:3px;padding:.35rem .5rem;max-width:150px}
+
   .searchbox{position:relative;width:min(360px,32vw)}
   .searchbox input{width:100%}
   .searchdrop{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:60vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:50}
@@ -50,7 +53,7 @@
   .shit .title{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .shit .detail{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .searchdrop .empty,.searchdrop .hint{padding:.7rem;font-size:12px;color:var(--faint)}
-  @media (max-width:820px){ .searchbox{width:100%;order:3} header{flex-wrap:wrap} }
+  @media (max-width:820px){ .searchbox{width:100%;order:3} .projswitch{order:2} header{flex-wrap:wrap} }
 
   main{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 49px)}
   @media (max-width:820px){ main{grid-template-columns:1fr} }
@@ -211,6 +214,10 @@
     <div class="searchdrop" id="searchDrop" hidden></div>
   </div>
   <span class="spacer"></span>
+  <div class="projswitch" title="projeto ativo — vira o padrão em novo job, pipeline, watch e no que abre na aba Projetos. Trocar aqui troca em todo lugar.">
+    <label for="activeProject">projeto ativo</label>
+    <select id="activeProject"><option value="">— nenhum —</option></select>
+  </div>
   <input id="token" type="password" placeholder="cole o bearer token aqui" autocomplete="off" spellcheck="false">
 </header>
 <div id="authBanner" hidden>
@@ -986,11 +993,19 @@ async function loadPrograms(){
   let programs = [];
   try { ({ programs } = await api('/programs')); } catch {}
   PROGRAMS = programs || [];
-  for (const sel of ['#jobProgram', '#plProgram', '#findProgram', '#assetProgram', '#projSelect']) {
+  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#findProgram', '#assetProgram', '#projSelect']) {
     const s = $(sel), keep = s.firstElementChild, cur = s.value;
     s.innerHTML = ''; s.append(keep);
     for (const p of programs || []) s.append(el('option', { value: p.name, textContent: p.name }));
     if ([...s.options].some(o => o.value === cur)) s.value = cur;
+  }
+  // 1ª carga: restaura o projeto ativo salvo do navegador. Recargas
+  // seguintes (após criar/editar/excluir projeto) só preservam o que já
+  // estava selecionado em cada select (feito acima) — não pisam na escolha
+  // que o usuário já fez na sessão atual.
+  if (!loadPrograms.booted) {
+    loadPrograms.booted = true;
+    propagateProject(loadPersistedProject(), { reload: false });
   }
 }
 
@@ -1039,7 +1054,7 @@ $('#npSave').addEventListener('click', async () => {
     $('#npSlugPreview').textContent = '';
     $('#newProg').open = false;
     await loadPrograms();
-    $('#jobProgram').value = p.name;
+    propagateProject(p.name, { reload: false });
   } catch (e) { $('#npMsg').style.color = 'var(--crit)'; $('#npMsg').textContent = 'erro: ' + e.message; }
   finally { $('#npSave').disabled = false; }
 });
@@ -1055,6 +1070,41 @@ function tokQS(){
 
 /* ---------- projeto (pasta física + notas) ---------- */
 let currentProject = null;
+
+// projeto ativo: um único estado global, visível no cabeçalho, que serve de
+// padrão pra todo select de projeto/programa da UI (novo job, pipeline,
+// watch, aba Projetos). Resolve o "perco contexto entre abas": escolher o
+// projeto uma vez (no cabeçalho, na aba Projetos, ou ao criar um job) já
+// aplica em todo o resto. Os filtros de Findings/Assets são a exceção
+// deliberada — eles recebem o valor como sugestão inicial, mas escolher
+// "todos" ali pra navegar entre programas não deve resetar o projeto ativo.
+function persistProject(name){
+  try { if (name) localStorage.setItem('rh_project', name); else localStorage.removeItem('rh_project'); } catch {}
+}
+function loadPersistedProject(){
+  try { return localStorage.getItem('rh_project') || ''; } catch { return ''; }
+}
+function reloadForActiveView(){
+  const btn = document.querySelector('.tabs button[aria-selected="true"]');
+  const view = btn ? btn.dataset.view : null;
+  if (view === 'findings') { syncExport('#findProgram', '#findExport'); loadFindings(); }
+  if (view === 'assets') { syncExport('#assetProgram', '#assetExport'); loadAssets(); }
+  if (view === 'projects') loadProjectsTab();
+}
+function propagateProject(name, opts){
+  const val = name || '';
+  currentProject = val || null;
+  persistProject(val);
+  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#nwProgram', '#findProgram', '#assetProgram', '#projSelect']) {
+    const s = $(sel);
+    if (s && [...s.options].some(o => o.value === val)) s.value = val;
+  }
+  if (!opts || opts.reload !== false) reloadForActiveView();
+}
+$('#activeProject').addEventListener('change', () => propagateProject($('#activeProject').value));
+$('#jobProgram').addEventListener('change', () => propagateProject($('#jobProgram').value));
+$('#plProgram').addEventListener('change', () => propagateProject($('#plProgram').value));
+$('#nwProgram').addEventListener('change', () => propagateProject($('#nwProgram').value));
 
 function loadProjectsTab(){
   const v = $('#projSelect').value;
@@ -1125,7 +1175,7 @@ async function renderCoverage(name){
     btn.addEventListener('click', () => {
       $('#tool').value = s.tool;
       renderToolMeta();
-      $('#jobProgram').value = name;
+      propagateProject(name, { reload: false });
       if (s.examples && s.examples.length) $('#target').value = s.examples[0];
       $('#target').focus();
     });
@@ -1212,6 +1262,7 @@ async function renderProject(name){
 
 $('#projSelect').addEventListener('change', () => {
   const v = $('#projSelect').value;
+  propagateProject(v, { reload: false });
   if (v) renderProject(v);
   else { currentProject = null; $('#projBox').hidden = true; $('#projNoSel').hidden = false; }
 });
@@ -1237,7 +1288,7 @@ $('#projDelete').addEventListener('click', async () => {
   $('#projDelete').disabled = true;
   try {
     await api('/programs/' + encodeURIComponent(currentProject), { method:'DELETE' });
-    currentProject = null;
+    propagateProject('', { reload: false });
     $('#projBox').hidden = true;
     $('#projNoSel').hidden = false;
     await loadPrograms();
@@ -1666,6 +1717,7 @@ async function loadWatches(){
   const gsel = $('#nwProgram');
   gsel.innerHTML = '<option value="">— sem programa —</option>';
   for (const g of PROGRAMS || []) gsel.append(el('option', { value:g.name, textContent:g.name }));
+  if ([...gsel.options].some(o => o.value === (currentProject || ''))) gsel.value = currentProject || '';
 
   const tb = $('#watchRows'); tb.innerHTML = '';
   let watches = [];
@@ -1794,13 +1846,12 @@ function renderSearchResults(results, query){
       row.addEventListener('click', () => {
         closeSearchDrop();
         $('#globalSearch').value = '';
+        if (hit.program) propagateProject(hit.program, { reload: false });
         if ((hit.kind === 'finding' || hit.kind === 'asset') && hit.job_id) {
           selectTab('current');
           attachJob(hit.job_id);
         } else if (hit.kind === 'note' && hit.program) {
           selectTab('projects');
-          $('#projSelect').value = hit.program;
-          renderProject(hit.program);
         }
       });
       drop.append(row);
@@ -1901,7 +1952,7 @@ async function loadPanel(){
     } else {
       card.append(el('div', { className:'pmeta', textContent:'erro ao carregar resumo' }));
     }
-    card.addEventListener('click', () => { selectTab('projects'); $('#projSelect').value = name; renderProject(name); });
+    card.addEventListener('click', () => { propagateProject(name, { reload: false }); selectTab('projects'); });
     progBox.append(card);
   }
 }
