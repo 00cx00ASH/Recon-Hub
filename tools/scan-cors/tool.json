@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Testa CORS mal configurado: reflexão da origem do atacante em Access-Control-Allow-Origin, origem 'null', wildcard '*' com Access-Control-Allow-Credentials: true, e bypasses de regex (sufixo <alvo>.evil, prefixo evil<alvo>, hífen no subdomínio, downgrade http, subdomínio arbitrário do domínio registrável). Faz um GET com Origin: <atacante> e lê os headers da resposta.",
   "guide": "Alvo = uma URL http/https — de preferência um endpoint de API que devolva dados (ex https://api.exemplo.com/me). Não usa wordlist. Cada URL testa ~9 origens forjadas. O finding crítico é reflexão da origem + credentials: true (leitura autenticada cross-origin). Modos lista/arquivo varrem várias URLs.",
+  "validation": "Exemplo crítico: um endpoint autenticado devolvendo Access-Control-Allow-Origin: https://evil.com refletido + Access-Control-Allow-Credentials: true — isso é roubo de sessão cross-origin de verdade. Opere apontando pra endpoints de API que retornam dado de usuário (ex: /api/me, /api/account), não pra páginas estáticas — é onde o impacto existe.",
   "exec": ["go", "run", "."],
   "timeout": "12m",
   "modes": [

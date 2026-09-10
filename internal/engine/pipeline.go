@@ -48,8 +48,11 @@ func (e *Engine) SubmitPipeline(pl pipeline.Pipeline, target string, program *sc
 	if err := e.store.CreatePipelineRun(run); err != nil {
 		return nil, err
 	}
-	go e.runPipeline(pl, run, program)
+	// snapshot before starting the background goroutine: runPipeline mutates
+	// run.Status/StartedAt/Steps concurrently, so copying after `go` races
+	// with those writes (caught by `go test -race`).
 	rc := *run
+	go e.runPipeline(pl, run, program)
 	return &rc, nil
 }
 

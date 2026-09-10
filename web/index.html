@@ -36,6 +36,25 @@
   header .spacer{flex:1}
   header input{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.35rem .5rem;width:230px}
 
+  .projswitch{display:flex;align-items:center;gap:.4rem;font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace;flex:none}
+  .projswitch select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--accent);border-radius:3px;padding:.35rem .5rem;max-width:150px}
+
+  .searchbox{position:relative;width:min(360px,32vw)}
+  .searchbox input{width:100%}
+  .searchdrop{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:60vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:50}
+  .shit{display:flex;flex-direction:column;gap:.15rem;padding:.55rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)}
+  .shit:last-child{border-bottom:0}
+  .shit:hover{background:var(--surface-2)}
+  .shit .top{display:flex;align-items:center;gap:.4rem;font-size:12.5px}
+  .shit .kind{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:.05rem .4rem;border-radius:999px;border:1px solid var(--border-strong);color:var(--faint);flex:none}
+  .shit .kind.finding{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .shit .kind.asset{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .shit .kind.note{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+  .shit .title{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .shit .detail{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .searchdrop .empty,.searchdrop .hint{padding:.7rem;font-size:12px;color:var(--faint)}
+  @media (max-width:820px){ .searchbox{width:100%;order:3} .projswitch{order:2} header{flex-wrap:wrap} }
+
   main{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 49px)}
   @media (max-width:820px){ main{grid-template-columns:1fr} }
 
@@ -87,7 +106,36 @@
   .sev.medium{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   .sev.low,.sev.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
   .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
+
+  .urow{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border:1px solid var(--border);border-radius:4px;margin-bottom:.4rem;cursor:pointer;background:var(--surface)}
+  .urow:hover{border-color:var(--border-strong)}
+  .urow .score{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);flex:none;width:2.2rem;text-align:right}
+  .urow .prog{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--accent-2);border:1px solid color-mix(in srgb,var(--accent-2) 40%,transparent);border-radius:999px;padding:.05rem .5rem;flex:none}
+  .urow .utitle{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .urow .uasset{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);flex:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .proggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
+  .progcard{border:1px solid var(--border);border-radius:6px;padding:.8rem .9rem;background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:.5rem}
+  .progcard:hover{border-color:var(--border-strong)}
+  .progcard .pname{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13.5px}
+  .progcard .pbar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface-2)}
+  .progcard .pbar i{display:block;height:100%}
+  .progcard .pcounts{display:flex;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint)}
+  .progcard .pmeta{font-size:11px;color:var(--faint)}
   .wrapx{overflow-x:auto}
+
+  .chipwrap{display:flex;flex-wrap:wrap;gap:.35rem;margin:.4rem 0;align-items:center}
+  .chip{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem}
+  .suggcard{border:1px solid var(--border);border-radius:4px;padding:.6rem .7rem;margin-bottom:.5rem;display:flex;flex-direction:column;gap:.3rem}
+  .suggcard .top{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .suggcard .tool{font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .suggcard .reason{color:var(--dim);font-size:12px}
+  .suggcard .ex{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint)}
+  .suggcard button{align-self:flex-start;font-family:"IBM Plex Mono",monospace;font-size:11px;background:none;color:var(--accent-2);border:1px solid color-mix(in srgb,var(--accent-2) 45%,transparent);border-radius:3px;padding:.2rem .6rem;cursor:pointer}
+  .grouprow{cursor:pointer}
+  .grouprow:hover{background:var(--surface)}
+  .anom{color:var(--crit)}
+  #findFilterChip{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);border-radius:999px;padding:.2rem .6rem}
 
   .plrun{max-width:520px;border:1px solid var(--border);border-radius:4px;padding:1rem;background:var(--surface)}
   .plsteps{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim)}
@@ -113,7 +161,9 @@
   .md pre{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:.9rem 1rem;overflow-x:auto;margin:1em 0}
   .md pre code{background:none;border:0;padding:0;font-size:12px;line-height:1.55;color:var(--dim);white-space:pre}
   .md hr{border:0;border-top:1px solid var(--border);margin:2em 0}
-  .md table{margin:1em 0;font-size:12px}
+  .md table{font-size:12px}
+  .md .wrapx{overflow-x:auto;margin:1em 0}
+  .md .wrapx table{margin:0}
   .md th,.md td{border:1px solid var(--border)}
   .md blockquote{margin:1em 0;padding:.2em 1em;border-left:3px solid var(--border-strong);color:var(--dim)}
   #docsBody{padding-bottom:3rem}
@@ -135,6 +185,23 @@
   #entryHelp .paste input{flex:1;font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem}
   #entryHelp .paste button{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12px;background:var(--accent);color:#1a1400;border:0;border-radius:3px;padding:0 1rem;cursor:pointer}
 
+  /* ---------- toasts + modal de confirmação (substituem alert()/confirm() nativos) ---------- */
+  #toasts{position:fixed;bottom:1.1rem;right:1.1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem;max-width:min(380px,calc(100vw - 2.2rem))}
+  .toast{background:var(--surface);border:1px solid var(--border-strong);border-left:3px solid var(--info);border-radius:6px;padding:.65rem .8rem;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;gap:.5rem;align-items:flex-start;animation:toastin .18s ease-out}
+  .toast.error{border-left-color:var(--crit)}
+  .toast.ok{border-left-color:var(--ok)}
+  .toast .tmsg{flex:1;word-break:break-word}
+  .toast .tx{background:none;border:0;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:0}
+  @keyframes toastin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+  #confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:210;display:flex;align-items:center;justify-content:center;padding:1rem}
+  #confirmBox{background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:1.2rem 1.3rem;max-width:440px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.4)}
+  #confirmBox p{font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-line;margin:0 0 1rem}
+  #confirmBox .row{display:flex;gap:.6rem;justify-content:flex-end}
+  #confirmBox button{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border-radius:4px;padding:.5rem 1rem;cursor:pointer}
+  #confirmCancel{background:none;border:1px solid var(--border-strong);color:var(--dim)}
+  #confirmOk{background:var(--crit);border:0;color:#1a0a06;font-weight:600}
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -142,13 +209,32 @@
 <header>
   <span class="dot" id="health" title="status da API"></span>
   <span class="brand"><b>recon</b>-hub</span>
+  <div class="searchbox">
+    <input id="globalSearch" type="text" placeholder="🔍 buscar em findings, assets e notas… (⌘K)" autocomplete="off" spellcheck="false">
+    <div class="searchdrop" id="searchDrop" hidden></div>
+  </div>
   <span class="spacer"></span>
+  <div class="projswitch" title="projeto ativo — vira o padrão em novo job, pipeline, watch e no que abre na aba Projetos. Trocar aqui troca em todo lugar.">
+    <label for="activeProject">projeto ativo</label>
+    <select id="activeProject"><option value="">— nenhum —</option></select>
+  </div>
   <input id="token" type="password" placeholder="cole o bearer token aqui" autocomplete="off" spellcheck="false">
 </header>
 <div id="authBanner" hidden>
   <b>Precisa do token.</b>
   <span>Abra a URL que o servidor imprime no log (<code>http://127.0.0.1:7878/#token=…</code>), ou copie <code>data/token</code> e cole no campo acima →</span>
   <button class="x" id="authBannerX" title="fechar">✕</button>
+</div>
+
+<div id="toasts"></div>
+<div id="confirmOverlay" hidden>
+  <div id="confirmBox">
+    <p id="confirmMsg"></p>
+    <div class="row">
+      <button id="confirmCancel">Cancelar</button>
+      <button id="confirmOk">Confirmar</button>
+    </div>
+  </div>
 </div>
 
 <div id="entryHelp" hidden>
@@ -188,6 +274,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       <select id="tool"></select>
       <span class="help" id="toolHelp"></span>
       <span class="help" id="toolGuide" style="color:var(--dim);border-left:2px solid var(--border-strong);padding-left:.5rem;margin-top:.2rem"></span>
+      <span class="help" id="toolValidation" style="color:var(--ok);border-left:2px solid color-mix(in srgb,var(--ok) 45%,transparent);padding-left:.5rem;margin-top:.2rem"></span>
       <details id="toolDoc" style="margin-top:.35rem">
         <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">ℹ ajuda completa</summary>
         <div class="md" id="toolDocBody" style="font-size:12px;max-width:none;margin-top:.4rem"><p class="muted" style="padding:.3rem 0">carregando…</p></div>
@@ -208,7 +295,8 @@ docker compose exec reconhub cat /app/data/token</pre>
       <details id="newProg" style="margin-top:.35rem">
         <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">＋ novo projeto</summary>
         <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem">
-          <input id="npName" placeholder="nome (ex: acme)" spellcheck="false" autocomplete="off">
+          <input id="npName" placeholder="nome (ex: acme, ou 'Meu Programa Acme')" spellcheck="false" autocomplete="off">
+          <span class="help" id="npSlugPreview" style="color:var(--faint)"></span>
           <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <textarea id="npOut" rows="2" placeholder="out of scope (opcional):&#10;blog.acme.com" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <button id="npSave" class="run" style="padding:.45rem">Criar projeto</button>
@@ -223,6 +311,7 @@ docker compose exec reconhub cat /app/data/token</pre>
 
   <section class="content">
     <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="false" data-view="panel">Painel</button>
       <button role="tab" aria-selected="true" data-view="current">Job atual</button>
       <button role="tab" aria-selected="false" data-view="jobs">Jobs</button>
       <button role="tab" aria-selected="false" data-view="pipelines">Pipelines</button>
@@ -231,6 +320,16 @@ docker compose exec reconhub cat /app/data/token</pre>
       <button role="tab" aria-selected="false" data-view="assets">Assets</button>
       <button role="tab" aria-selected="false" data-view="projects">Projetos</button>
       <button role="tab" aria-selected="false" data-view="docs">Docs</button>
+    </div>
+
+    <div class="view" id="view-panel">
+      <p class="muted" style="margin-top:0">O que está mais urgente agora, juntando todos os programas — pra quem acompanha mais de um ao mesmo tempo.</p>
+
+      <h2 style="margin-top:0">Mais urgente agora</h2>
+      <div id="panelUrgent"></div>
+
+      <h2 style="margin-top:1.6rem">Programas</h2>
+      <div id="panelPrograms" class="proggrid"></div>
     </div>
 
     <div class="view active" id="view-current">
@@ -306,7 +405,7 @@ docker compose exec reconhub cat /app/data/token</pre>
     <div class="view" id="view-monitor">
       <p class="muted" style="margin-top:0">Um <b>watch</b> é uma pipeline agendada. Quando termina, o hub compara os findings com a run anterior do mesmo watch e, se houver novos, faz um <code>POST</code> no webhook (Discord).</p>
       <div class="wrapx"><table>
-        <thead><tr><th>watch</th><th>pipeline → alvo</th><th>intervalo</th><th>estado</th><th>última run</th><th>novos</th><th></th></tr></thead>
+        <thead><tr><th>watch</th><th>pipeline → alvo</th><th>intervalo</th><th>canal</th><th>estado</th><th>última run</th><th>novos</th><th>histórico</th><th></th></tr></thead>
         <tbody id="watchRows"></tbody>
       </table></div>
 
@@ -339,6 +438,15 @@ docker compose exec reconhub cat /app/data/token</pre>
             <input id="nwWebhook" placeholder="https://discord.com/api/webhooks/…" spellcheck="false" autocomplete="off">
           </div>
           <div class="field">
+            <label for="nwWebhookType">canal do webhook</label>
+            <select id="nwWebhookType">
+              <option value="">Discord (padrão)</option>
+              <option value="slack">Slack</option>
+              <option value="telegram">Telegram — embuta o chat_id na própria URL</option>
+              <option value="generic">Genérico (JSON simples)</option>
+            </select>
+          </div>
+          <div class="field">
             <label><input type="checkbox" id="nwEnabled" checked> habilitado</label>
           </div>
           <button class="run" id="nwSave">Criar watch</button>
@@ -358,13 +466,15 @@ docker compose exec reconhub cat /app/data/token</pre>
         <label for="findProgram">programa</label>
         <select id="findProgram" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem"><option value="">todos</option></select>
         <a id="findExport" hidden style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar projeto</a>
+        <span id="findFilterChip" hidden title="clique pra limpar o filtro"></span>
         <span style="flex:1"></span>
         <label style="display:flex;align-items:center;gap:.3rem"><input type="checkbox" id="repInfo"> incluir info</label>
         <a id="repMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
         <a id="repHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
       </div>
+      <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
-        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th>triagem</th></tr></thead>
+        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
         <tbody id="findingsRows"></tbody>
       </table></div>
     </div>
@@ -394,6 +504,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <a id="projReportMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
         <a id="projReportHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
         <a id="projExport" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar tudo .json</a>
+        <button class="cancel" id="projDelete" title="remove só a definição de escopo — jobs/findings/notas ficam guardados">✕ excluir projeto</button>
       </div>
 
       <div id="projNoSel" class="muted">Escolha um projeto acima — ou crie um novo em <b>Job atual → ＋ novo projeto</b>. Cada projeto vira uma pasta em <code>data/projects/&lt;nome&gt;/</code> com notas, snapshot e relatório.</div>
@@ -405,11 +516,54 @@ docker compose exec reconhub cat /app/data/token</pre>
           <p class="help" id="projSynced" style="margin-top:.7rem"></p>
         </div>
 
+        <div class="plrun" style="max-width:none;margin-bottom:1.2rem">
+          <h2 style="margin-top:0">Escopo</h2>
+          <p class="help" style="margin:0 0 .6rem">Alvos que as ferramentas podem testar sob esse projeto — um por linha. Editar aqui atualiza o que já existe, não cria outro projeto.</p>
+          <div class="field">
+            <label for="projIn">in scope</label>
+            <textarea id="projIn" rows="3" spellcheck="false" placeholder="*.acme.com&#10;acme.io" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          </div>
+          <div class="field">
+            <label for="projOut">out of scope</label>
+            <textarea id="projOut" rows="2" spellcheck="false" placeholder="blog.acme.com" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <button class="run" id="projScopeSave" style="width:auto;padding:.5rem 1rem">Salvar escopo</button>
+            <span class="help" id="projScopeMsg"></span>
+          </div>
+        </div>
+
+        <div class="plrun" style="max-width:none;margin-bottom:1.2rem">
+          <h2 style="margin-top:0">Copiloto de cobertura</h2>
+          <p class="help" style="margin:0 0 .6rem">O que já rodou nesse programa e o que ainda não — a partir do que foi descoberto até agora.</p>
+          <div class="chipwrap" id="covRan"></div>
+          <div id="covSugg"></div>
+        </div>
+
         <h2>Notas</h2>
         <textarea id="projNotes" rows="10" spellcheck="false" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.6rem;resize:vertical"></textarea>
         <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem">
           <button class="run" id="projNotesSave" style="width:auto;padding:.5rem 1rem">Salvar notas</button>
           <span class="help" id="projNotesMsg"></span>
+        </div>
+
+        <h2 style="margin-top:1.4rem">Autenticação compartilhada</h2>
+        <p class="help" style="margin:0 0 .6rem">Injetada como <code>RECONHUB_AUTH_*</code> só nas requisições cujo host bate com o alvo do job — nunca vaza pra terceiros (buckets, Firebase, APIs de IA, etc). Fica em <code>data/projects/&lt;nome&gt;/auth.json</code>, fora do git.</p>
+        <div class="field">
+          <label for="authCookie">Cookie</label>
+          <input id="authCookie" placeholder="session=...; outro=..." spellcheck="false" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="authBearer">Bearer token</label>
+          <input id="authBearer" placeholder="eyJhbGciOi..." spellcheck="false" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="authHeaders">Headers extras (um por linha, "Nome: valor")</label>
+          <textarea id="authHeaders" rows="3" spellcheck="false" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical" placeholder="X-Api-Key: abc123"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:.6rem">
+          <button class="run" id="authSave" style="width:auto;padding:.5rem 1rem">Salvar auth</button>
+          <span class="help" id="authMsg"></span>
         </div>
       </div>
     </div>
@@ -424,6 +578,47 @@ docker compose exec reconhub cat /app/data/token</pre>
 const $ = (s, r=document) => r.querySelector(s);
 const el = (t, props={}, kids=[]) => { const n=document.createElement(t); Object.assign(n, props); for(const k of [].concat(kids)) n.append(k); return n; };
 const fmtTime = s => { try { return new Date(s).toLocaleTimeString('pt-BR'); } catch { return s; } };
+
+/* ---------- toast + confirm (substituem alert()/confirm() nativos) ---------- */
+function toast(msg, type){
+  const box = $('#toasts');
+  const t = el('div', { className: 'toast' + (type ? ' ' + type : '') });
+  t.append(el('span', { className:'tmsg', textContent: msg }));
+  const x = el('button', { className:'tx', textContent:'✕', title:'fechar' });
+  const timer = setTimeout(() => t.remove(), 6000);
+  x.addEventListener('click', () => { clearTimeout(timer); t.remove(); });
+  t.append(x);
+  box.append(t);
+  return t;
+}
+function toastError(msg){ return toast(msg, 'error'); }
+function toastOk(msg){ return toast(msg, 'ok'); }
+
+function confirmDialog(message){
+  return new Promise(resolve => {
+    $('#confirmMsg').textContent = message;
+    const overlay = $('#confirmOverlay');
+    overlay.hidden = false;
+    const cleanup = (result) => {
+      overlay.hidden = true;
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      overlay.removeEventListener('click', onOverlay);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const ok = $('#confirmOk'), cancel = $('#confirmCancel');
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    const onOverlay = (e) => { if (e.target === overlay) cleanup(false); };
+    const onKey = (e) => { if (e.key === 'Escape') cleanup(false); if (e.key === 'Enter') cleanup(true); };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    overlay.addEventListener('click', onOverlay);
+    document.addEventListener('keydown', onKey);
+    ok.focus();
+  });
+}
 
 let TOOLS = [];
 let WORDLISTS = [];
@@ -519,6 +714,8 @@ function renderToolMeta() {
   $('#toolHelp').textContent = t ? (t.summary || '') : '';
   $('#toolGuide').textContent = (t && t.guide) || '';
   $('#toolGuide').hidden = !(t && t.guide);
+  $('#toolValidation').textContent = (t && t.validation) ? ('✓ ' + t.validation) : '';
+  $('#toolValidation').hidden = !(t && t.validation);
 
   // ajuda completa (README da ferramenta) — carrega ao abrir o <details>
   const doc = $('#toolDoc');
@@ -624,7 +821,7 @@ $('#run').addEventListener('click', async () => {
     attachJob(job.id);
     loadJobs();
   } catch (e) {
-    alert('falha ao criar job: ' + e.message);
+    toastError('falha ao criar job: ' + e.message);
   } finally {
     $('#run').disabled = false;
   }
@@ -657,7 +854,7 @@ async function attachJob(id){
   $('#jId').textContent = '#' + id.slice(0,12);
 
   let job;
-  try { const r = await api('/jobs/' + id); job = r.job; } catch (e) { alert(e.message); return; }
+  try { const r = await api('/jobs/' + id); job = r.job; } catch (e) { toastError(e.message); return; }
   $('#jTool').textContent = job.tool;
   $('#jTarget').textContent = '→ ' + job.target + (job.program ? '  ·  ' + job.program : '');
   pill(job.status);
@@ -691,7 +888,7 @@ async function attachJob(id){
 
 $('#jCancel').addEventListener('click', async () => {
   if (!currentJob) return;
-  try { await api('/jobs/' + currentJob + '/cancel', { method: 'POST' }); } catch (e) { alert(e.message); }
+  try { await api('/jobs/' + currentJob + '/cancel', { method: 'POST' }); } catch (e) { toastError(e.message); }
 });
 
 async function refreshJobFindings(id){
@@ -796,31 +993,69 @@ async function loadPrograms(){
   let programs = [];
   try { ({ programs } = await api('/programs')); } catch {}
   PROGRAMS = programs || [];
-  for (const sel of ['#jobProgram', '#plProgram', '#findProgram', '#assetProgram', '#projSelect']) {
+  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#findProgram', '#assetProgram', '#projSelect']) {
     const s = $(sel), keep = s.firstElementChild, cur = s.value;
     s.innerHTML = ''; s.append(keep);
     for (const p of programs || []) s.append(el('option', { value: p.name, textContent: p.name }));
     if ([...s.options].some(o => o.value === cur)) s.value = cur;
   }
+  // 1ª carga: restaura o projeto ativo salvo do navegador. Recargas
+  // seguintes (após criar/editar/excluir projeto) só preservam o que já
+  // estava selecionado em cada select (feito acima) — não pisam na escolha
+  // que o usuário já fez na sessão atual.
+  if (!loadPrograms.booted) {
+    loadPrograms.booted = true;
+    propagateProject(loadPersistedProject(), { reload: false });
+  }
 }
 
 const lines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
+
+// slugify: o back-end só aceita a-z, 0-9, . _ - (até 63 chars, começando
+// com letra/número) pro nome do projeto — ele vira o nome do arquivo em
+// programs/<nome>.json. Em vez de rejeitar "Meu Programa Acme" com um erro
+// técnico, convertemos pro slug válido automaticamente (é isso que faz
+// qualquer app moderno) e mostramos o resultado antes de criar.
+function slugify(s){
+  return (s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, 63)
+    .replace(/^[._-]+/, ''); // precisa começar com a-z/0-9
+}
+function updateSlugPreview(){
+  const raw = $('#npName').value;
+  const slug = slugify(raw);
+  const prev = $('#npSlugPreview');
+  if (!raw.trim()) { prev.textContent = ''; return; }
+  prev.textContent = (slug && slug !== raw.trim()) ? `vai ser criado como: ${slug}` : (slug ? '' : 'nome inválido — use letras, números, . _ -');
+}
+$('#npName').addEventListener('input', updateSlugPreview);
+
 $('#npSave').addEventListener('click', async () => {
+  const slug = slugify($('#npName').value);
   const body = {
-    name: $('#npName').value.trim(),
+    name: slug,
     in_scope: lines($('#npIn').value),
     out_of_scope: lines($('#npOut').value),
   };
-  if (!body.name || !body.in_scope.length) { $('#npMsg').textContent = 'nome e ao menos 1 linha de in-scope'; return; }
+  $('#npMsg').style.color = 'var(--crit)';
+  if (!body.name) { $('#npMsg').textContent = 'dê um nome ao projeto (letras, números, . _ -)'; return; }
+  if (!body.in_scope.length) { $('#npMsg').textContent = 'adicione ao menos 1 linha de in-scope (ex: *.' + body.name + '.com)'; return; }
   $('#npSave').disabled = true;
   try {
     const p = await api('/programs', { method:'POST', body: JSON.stringify(body) });
-    $('#npMsg').textContent = 'criado: ' + p.name;
+    $('#npMsg').style.color = 'var(--ok)';
+    $('#npMsg').textContent = '✓ criado: ' + p.name;
     $('#npName').value = $('#npIn').value = $('#npOut').value = '';
+    $('#npSlugPreview').textContent = '';
     $('#newProg').open = false;
     await loadPrograms();
-    $('#jobProgram').value = p.name;
-  } catch (e) { $('#npMsg').textContent = 'erro: ' + e.message; }
+    propagateProject(p.name, { reload: false });
+  } catch (e) { $('#npMsg').style.color = 'var(--crit)'; $('#npMsg').textContent = 'erro: ' + e.message; }
   finally { $('#npSave').disabled = false; }
 });
 
@@ -835,6 +1070,41 @@ function tokQS(){
 
 /* ---------- projeto (pasta física + notas) ---------- */
 let currentProject = null;
+
+// projeto ativo: um único estado global, visível no cabeçalho, que serve de
+// padrão pra todo select de projeto/programa da UI (novo job, pipeline,
+// watch, aba Projetos). Resolve o "perco contexto entre abas": escolher o
+// projeto uma vez (no cabeçalho, na aba Projetos, ou ao criar um job) já
+// aplica em todo o resto. Os filtros de Findings/Assets são a exceção
+// deliberada — eles recebem o valor como sugestão inicial, mas escolher
+// "todos" ali pra navegar entre programas não deve resetar o projeto ativo.
+function persistProject(name){
+  try { if (name) localStorage.setItem('rh_project', name); else localStorage.removeItem('rh_project'); } catch {}
+}
+function loadPersistedProject(){
+  try { return localStorage.getItem('rh_project') || ''; } catch { return ''; }
+}
+function reloadForActiveView(){
+  const btn = document.querySelector('.tabs button[aria-selected="true"]');
+  const view = btn ? btn.dataset.view : null;
+  if (view === 'findings') { syncExport('#findProgram', '#findExport'); loadFindings(); }
+  if (view === 'assets') { syncExport('#assetProgram', '#assetExport'); loadAssets(); }
+  if (view === 'projects') loadProjectsTab();
+}
+function propagateProject(name, opts){
+  const val = name || '';
+  currentProject = val || null;
+  persistProject(val);
+  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#nwProgram', '#findProgram', '#assetProgram', '#projSelect']) {
+    const s = $(sel);
+    if (s && [...s.options].some(o => o.value === val)) s.value = val;
+  }
+  if (!opts || opts.reload !== false) reloadForActiveView();
+}
+$('#activeProject').addEventListener('change', () => propagateProject($('#activeProject').value));
+$('#jobProgram').addEventListener('change', () => propagateProject($('#jobProgram').value));
+$('#plProgram').addEventListener('change', () => propagateProject($('#plProgram').value));
+$('#nwProgram').addEventListener('change', () => propagateProject($('#nwProgram').value));
 
 function loadProjectsTab(){
   const v = $('#projSelect').value;
@@ -862,6 +1132,104 @@ function renderProjectSummary(sum){
     (sum.last_activity ? ' · última atividade ' + fmtTime(sum.last_activity) : '');
 }
 
+// copiloto de cobertura: o que já rodou nesse programa vs. o que dá pra
+// rodar agora, dado o que já foi descoberto (ver internal/copilot)
+async function renderCoverage(name){
+  const ran = $('#covRan'), sugg = $('#covSugg');
+  ran.innerHTML = '';
+  sugg.innerHTML = '<p class="muted" style="padding:.3rem 0">carregando…</p>';
+  let cov;
+  try {
+    cov = await api('/programs/' + encodeURIComponent(name) + '/coverage');
+  } catch (e) {
+    sugg.innerHTML = '';
+    sugg.append(el('p', { className:'muted', style:'padding:.3rem 0', textContent: 'erro: ' + e.message }));
+    return;
+  }
+
+  if ((cov.ran || []).length) {
+    ran.append(el('span', { style:'font-size:11px;color:var(--faint);margin-right:.3rem', textContent:'já rodou:' }));
+    for (const t of cov.ran) ran.append(el('span', { className:'chip', textContent: t }));
+  } else {
+    ran.append(el('span', { className:'muted', style:'padding:0', textContent:'nada rodado ainda nesse programa' }));
+  }
+
+  sugg.innerHTML = '';
+  const missing = cov.missing || [];
+  if (!missing.length) {
+    sugg.append(el('p', {
+      className:'muted', style:'padding:.3rem 0',
+      textContent:'sem sugestões — ou já rodou tudo aplicável, ou ainda falta descobrir mais assets pra destravar o resto.',
+    }));
+    return;
+  }
+  for (const s of missing) {
+    const card = el('div', { className:'suggcard' });
+    const top = el('div', { className:'top' });
+    top.append(el('span', { className:'tool', textContent: s.tool }));
+    top.append(el('span', { className:'chip', textContent: s.kind }));
+    card.append(top);
+    card.append(el('div', { className:'reason', textContent: s.reason }));
+    if (s.examples && s.examples.length) card.append(el('div', { className:'ex', textContent: 'ex: ' + s.examples.join(', ') }));
+    const btn = el('button', { textContent:'▶ usar nesse job' });
+    btn.addEventListener('click', () => {
+      $('#tool').value = s.tool;
+      renderToolMeta();
+      propagateProject(name, { reload: false });
+      if (s.examples && s.examples.length) $('#target').value = s.examples[0];
+      $('#target').focus();
+    });
+    card.append(btn);
+    sugg.append(card);
+  }
+}
+
+/* ---------- auth compartilhada por programa ---------- */
+function parseHeaderLines(s){
+  const out = {};
+  for (const line of (s || '').split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const i = t.indexOf(':');
+    if (i < 0) continue;
+    const k = t.slice(0, i).trim(), v = t.slice(i + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
+function headerLinesFromObj(obj){
+  return Object.entries(obj || {}).map(([k, v]) => k + ': ' + v).join('\n');
+}
+
+async function loadAuthForm(name){
+  $('#authMsg').textContent = '';
+  try {
+    const a = await api('/programs/' + encodeURIComponent(name) + '/auth');
+    $('#authCookie').value = a.cookie || '';
+    $('#authBearer').value = a.bearer || '';
+    $('#authHeaders').value = headerLinesFromObj(a.headers);
+  } catch {
+    $('#authCookie').value = ''; $('#authBearer').value = ''; $('#authHeaders').value = '';
+  }
+}
+
+$('#authSave').addEventListener('click', async () => {
+  if (!currentProject) return;
+  $('#authSave').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject) + '/auth', {
+      method: 'PUT',
+      body: JSON.stringify({
+        cookie: $('#authCookie').value.trim(),
+        bearer: $('#authBearer').value.trim(),
+        headers: parseHeaderLines($('#authHeaders').value),
+      }),
+    });
+    $('#authMsg').textContent = 'salvo ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) { $('#authMsg').textContent = 'erro: ' + e.message; }
+  finally { $('#authSave').disabled = false; }
+});
+
 async function renderProject(name){
   currentProject = name;
   $('#projNoSel').hidden = true;
@@ -882,19 +1250,57 @@ async function renderProject(name){
     $('#projNotes').value = notes || '';
   } catch { $('#projNotes').value = ''; }
   $('#projNotesMsg').textContent = '';
+  try {
+    const p = await api('/programs/' + encodeURIComponent(name));
+    $('#projIn').value = (p.in_scope || []).join('\n');
+    $('#projOut').value = (p.out_of_scope || []).join('\n');
+  } catch { $('#projIn').value = ''; $('#projOut').value = ''; }
+  $('#projScopeMsg').textContent = '';
+  renderCoverage(name);
+  loadAuthForm(name);
 }
 
 $('#projSelect').addEventListener('change', () => {
   const v = $('#projSelect').value;
+  propagateProject(v, { reload: false });
   if (v) renderProject(v);
   else { currentProject = null; $('#projBox').hidden = true; $('#projNoSel').hidden = false; }
+});
+
+$('#projScopeSave').addEventListener('click', async () => {
+  if (!currentProject) return;
+  const body = { in_scope: lines($('#projIn').value), out_of_scope: lines($('#projOut').value) };
+  $('#projScopeMsg').style.color = 'var(--crit)';
+  if (!body.in_scope.length) { $('#projScopeMsg').textContent = 'in scope não pode ficar vazio'; return; }
+  $('#projScopeSave').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject), { method:'PUT', body: JSON.stringify(body) });
+    $('#projScopeMsg').style.color = 'var(--ok)';
+    $('#projScopeMsg').textContent = '✓ escopo atualizado ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) { $('#projScopeMsg').style.color = 'var(--crit)'; $('#projScopeMsg').textContent = 'erro: ' + e.message; }
+  finally { $('#projScopeSave').disabled = false; }
+});
+
+$('#projDelete').addEventListener('click', async () => {
+  if (!currentProject) return;
+  const ok = await confirmDialog(`Excluir o projeto "${currentProject}"?\n\nIsso remove só a definição de escopo — jobs, findings, notas e assets já guardados continuam intactos, mas o programa some da lista e novos jobs deixam de ter escopo aplicado até você recriar.`);
+  if (!ok) return;
+  $('#projDelete').disabled = true;
+  try {
+    await api('/programs/' + encodeURIComponent(currentProject), { method:'DELETE' });
+    propagateProject('', { reload: false });
+    $('#projBox').hidden = true;
+    $('#projNoSel').hidden = false;
+    await loadPrograms();
+  } catch (e) { toastError('falha ao excluir: ' + e.message); }
+  finally { $('#projDelete').disabled = false; }
 });
 
 $('#projSync').addEventListener('click', async () => {
   if (!currentProject) return;
   $('#projSync').disabled = true;
   try { renderProjectSummary(await api('/programs/' + encodeURIComponent(currentProject) + '/sync', { method: 'POST' })); }
-  catch (e) { alert('falha ao sincronizar: ' + e.message); }
+  catch (e) { toastError('falha ao sincronizar: ' + e.message); }
   finally { $('#projSync').disabled = false; }
 });
 
@@ -942,16 +1348,83 @@ async function triageFinding(id, verdict, btn){
   try {
     await api('/findings/' + encodeURIComponent(id) + '/triage', { method: 'POST', body: JSON.stringify({ verdict }) });
     if (row) row.style.opacity = '.45';
-  } catch (e) { alert('falha na triagem: ' + e.message); btn.disabled = false; }
+  } catch (e) { toastError('falha na triagem: ' + e.message); btn.disabled = false; }
 }
 
-async function loadFindings(){
-  syncReportLinks();
-  try {
-    const prog = $('#findProgram').value;
-    const { findings } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
-    const tb = $('#findingsRows'); tb.innerHTML = '';
-    for (const f of findings || []) {
+// hostOf espelha internal/intel/grouping.go:hostOf — precisa bater com o
+// "host" que o servidor já usou pra formar os grupos, senão o clique num
+// grupo não encontraria os findings dele na tabela.
+function hostOf(asset){
+  const a = (asset || '').trim();
+  if (!a) return '';
+  try { const u = new URL(a); if (u.host) return u.host.toLowerCase(); } catch {}
+  let h = a.toLowerCase();
+  const si = h.indexOf('/'); if (si >= 0) h = h.slice(0, si);
+  const ci = h.lastIndexOf(':');
+  if (ci >= 0 && !h.slice(ci + 1).includes(']')) h = h.slice(0, ci);
+  return h;
+}
+
+let FINDINGS_ALL = [];
+let FINDINGS_FILTER = null; // { tool, type, host } | null
+
+function matchesFindFilter(f){
+  if (!FINDINGS_FILTER) return true;
+  return f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host;
+}
+
+function renderGroups(groups){
+  const box = $('#groupsBox');
+  box.innerHTML = '';
+  if (!groups || !groups.length) return;
+  const det = el('details');
+  det.append(el('summary', {
+    style: "cursor:pointer;font-size:12px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace",
+    textContent: `▤ grupos similares (${groups.length}) — mesma ferramenta/tipo/host, clique pra filtrar`,
+  }));
+  const wrap = el('div', { className:'wrapx', style:'margin-top:.5rem' });
+  const table = el('table');
+  table.append(el('thead', {}, el('tr', {}, [
+    el('th', { textContent:'sev' }), el('th', { textContent:'ferramenta' }), el('th', { textContent:'tipo' }),
+    el('th', { textContent:'host' }), el('th', { textContent:'qtd' }), el('th', { textContent:'títulos' }),
+  ])));
+  const tbody = el('tbody');
+  for (const g of groups) {
+    const tr = el('tr', { className:'grouprow' });
+    tr.append(
+      el('td', {}, el('span', { className: 'sev ' + g.severity, textContent: g.severity })),
+      el('td', { className:'mono', textContent: g.tool }),
+      el('td', { className:'mono', textContent: g.type || '—' }),
+      el('td', { className:'mono', textContent: g.host || '—' }),
+      el('td', { className:'mono', textContent: g.total }),
+      el('td', { textContent: (g.titles || []).join(', ') }),
+    );
+    tr.addEventListener('click', () => {
+      FINDINGS_FILTER = { tool: g.tool, type: g.type, host: g.host };
+      renderFindingsTable();
+    });
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  wrap.append(table);
+  det.append(wrap);
+  box.append(det);
+}
+
+$('#findFilterChip').addEventListener('click', () => { FINDINGS_FILTER = null; renderFindingsTable(); });
+
+function renderFindingsTable(){
+  const chip = $('#findFilterChip');
+  if (FINDINGS_FILTER) {
+    chip.hidden = false;
+    chip.textContent = `filtrado: ${FINDINGS_FILTER.tool} · ${FINDINGS_FILTER.type} · ${FINDINGS_FILTER.host}  ✕`;
+  } else {
+    chip.hidden = true;
+  }
+
+  const tb = $('#findingsRows'); tb.innerHTML = '';
+  const list = FINDINGS_ALL.filter(matchesFindFilter);
+  for (const f of list) {
       const tr = el('tr');
       const prioCell = el('span', {
         className: 'sev ' + scoreBucket(f.score),
@@ -968,6 +1441,12 @@ async function loadFindings(){
         noBtn.addEventListener('click', e => { e.stopPropagation(); triageFinding(f.id, 'false_positive', noBtn); });
         triageCell.append(okBtn, noBtn);
       }
+      const draftLink = el('a', {
+        textContent: '📄', title: 'gerar rascunho de relatório (.md)',
+        href: '/api/findings/' + encodeURIComponent(f.id) + '/draft.md' + tokQS(),
+        target: '_blank', style: 'text-decoration:none',
+      });
+      draftLink.addEventListener('click', e => e.stopPropagation());
       tr.append(
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', {}, prioCell),
@@ -977,13 +1456,28 @@ async function loadFindings(){
         el('td', { className:'mono', textContent: (f.count && f.count > 1) ? '×' + f.count : '' }),
         el('td', { className:'mono', textContent: f.tool }),
         el('td', { className:'mono', textContent: fmtTime(f.last_seen || f.created_at) }),
+        el('td', {}, draftLink),
         el('td', {}, triageCell),
       );
       tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
       tb.append(tr);
-    }
-    if (!(findings||[]).length) tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'nenhum finding ainda' })));
-  } catch {}
+  }
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:10, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
+}
+
+async function loadFindings(){
+  syncReportLinks();
+  FINDINGS_FILTER = null;
+  try {
+    const prog = $('#findProgram').value;
+    const { findings, groups } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
+    FINDINGS_ALL = findings || [];
+    renderGroups(groups);
+    renderFindingsTable();
+  } catch {
+    FINDINGS_ALL = [];
+    renderFindingsTable();
+  }
 }
 $('#findProgram').addEventListener('change', () => { syncExport('#findProgram', '#findExport'); loadFindings(); });
 
@@ -1021,12 +1515,12 @@ function renderMarkdown(src){
     if (/^\s*\|.*\|\s*$/.test(ln) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
       const row = s => s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
       const head = row(ln); i += 2;
-      let t = '<table><thead><tr>' + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>';
+      let t = '<div class="wrapx"><table><thead><tr>' + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>';
       while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
         t += '<tr>' + row(lines[i]).map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>';
         i++;
       }
-      html += t + '</tbody></table>'; continue;
+      html += t + '</tbody></table></div>'; continue;
     }
     if (/^\s*([-*]|\d+\.)\s+/.test(ln)) {
       const ordered = /^\s*\d+\.\s+/.test(ln);
@@ -1113,7 +1607,7 @@ $('#plRun').addEventListener('click', async () => {
     const run = await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) });
     openPipelineRun(run.id);
     loadPipelineRuns();
-  } catch (e) { alert('falha ao rodar pipeline: ' + e.message); }
+  } catch (e) { toastError('falha ao rodar pipeline: ' + e.message); }
   finally { $('#plRun').disabled = false; }
 });
 
@@ -1144,7 +1638,7 @@ async function openPipelineRun(id){
   $('#plLog').innerHTML = '';
 
   let run;
-  try { const r = await api('/pipeline-runs/' + id); run = r.run; } catch (e) { alert(e.message); return; }
+  try { const r = await api('/pipeline-runs/' + id); run = r.run; } catch (e) { toastError(e.message); return; }
   $('#plRunName').textContent = run.pipeline;
   $('#plRunTarget').textContent = '→ ' + run.target + (run.program ? '  ·  ' + run.program : '');
   $('#plRunFindings').textContent = (run.findings || 0) + ' finding(s)';
@@ -1171,7 +1665,7 @@ async function openPipelineRun(id){
 
 $('#plCancel').addEventListener('click', async () => {
   if (!currentRun) return;
-  try { await api('/pipeline-runs/' + currentRun + '/cancel', { method:'POST' }); } catch (e) { alert(e.message); }
+  try { await api('/pipeline-runs/' + currentRun + '/cancel', { method:'POST' }); } catch (e) { toastError(e.message); }
 });
 
 async function loadPipelineRuns(){
@@ -1199,6 +1693,23 @@ async function loadPipelineRuns(){
 /* ---------- monitor (watches) ---------- */
 let watchSel = null;
 
+// watchAnomaly espelha internal/monitor/anomaly.go:detectAnomaly — history
+// já vem com a run mais recente como último elemento (ver Watch.History no
+// backend), então a amostra "anterior" é tudo antes dela.
+function watchAnomaly(history){
+  const h = history || [];
+  if (h.length < 4) return { detected:false }; // precisa de >=3 runs anteriores + a atual
+  const cur = h[h.length - 1].total;
+  const prior = h.slice(0, -1).map(x => x.total);
+  const n = prior.length;
+  const mean = prior.reduce((a, b) => a + b, 0) / n;
+  const variance = prior.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n;
+  const stddev = Math.sqrt(variance);
+  const floor = stddev < 1 ? 1 : stddev;
+  const z = Math.abs(cur - mean) / floor;
+  return { detected: z >= 2.0, mean, stddev, cur };
+}
+
 async function loadWatches(){
   // popula os selects do formulário
   const psel = $('#nwPipeline'); psel.innerHTML = '';
@@ -1206,28 +1717,51 @@ async function loadWatches(){
   const gsel = $('#nwProgram');
   gsel.innerHTML = '<option value="">— sem programa —</option>';
   for (const g of PROGRAMS || []) gsel.append(el('option', { value:g.name, textContent:g.name }));
+  if ([...gsel.options].some(o => o.value === (currentProject || ''))) gsel.value = currentProject || '';
 
   const tb = $('#watchRows'); tb.innerHTML = '';
   let watches = [];
   try { watches = (await api('/watches')).watches || []; }
-  catch (e) { tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'erro: ' + e.message }))); return; }
-  if (!watches.length) { tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent:'nenhum watch. Crie um abaixo.' }))); return; }
+  catch (e) { tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'erro: ' + e.message }))); return; }
+  if (!watches.length) { tb.append(el('tr', {}, el('td', { colSpan:9, className:'muted', textContent:'nenhum watch. Crie um abaixo.' }))); return; }
+  function jsDiffCell(w){
+    const box = el('div', { className:'mono' });
+    box.append(el('span', { textContent: String(w.last_new_findings ?? 0) }));
+    const jsNew = w.last_new_js ?? 0, jsRem = w.last_removed_js ?? 0;
+    if (jsNew || jsRem) {
+      box.append(el('div', {
+        style: 'font-size:10px;color:var(--accent-2)',
+        textContent: `🧩 ${jsNew ? '+' + jsNew : ''}${jsNew && jsRem ? ' / ' : ''}${jsRem ? '-' + jsRem : ''} JS`,
+        title: 'endpoints novos/removidos desde a run anterior deste watch — o site provavelmente shippou JS novo',
+      }));
+    }
+    return box;
+  }
+
   for (const w of watches) {
     const tr = el('tr');
+    const an = watchAnomaly(w.history);
+    const histText = (w.history || []).map(h => h.total).join(',');
     tr.append(
       el('td', { className:'mono', textContent: w.name }),
       el('td', { className:'mono', textContent: w.pipeline + ' → ' + w.target + (w.program ? '  ·  ' + w.program : '') }),
       el('td', { className:'mono', textContent: w.every }),
+      el('td', { className:'mono', style:'color:var(--faint)', textContent: w.webhook_type || 'discord' }),
       el('td', {}, el('span', { className:'pill ' + (w.enabled ? 'succeeded' : 'canceled'), textContent: w.enabled ? 'on' : 'off' })),
       el('td', { className:'mono', textContent: w.last_run_at ? fmtTime(w.last_run_at) : '—' }),
-      el('td', { className:'mono', textContent: (w.last_new_findings ?? 0) })
+      el('td', {}, jsDiffCell(w)),
+      el('td', {
+        className: 'mono' + (an.detected ? ' anom' : ''),
+        textContent: histText || '—',
+        title: an.detected ? `⚠ anômalo — média ${an.mean.toFixed(1)} ±${an.stddev.toFixed(1)}, agora ${an.cur}` : '',
+      }),
     );
     const act = el('td');
     const runBtn = el('button', { className:'jump', textContent:'rodar agora' });
     runBtn.addEventListener('click', async (ev) => {
       ev.stopPropagation(); runBtn.disabled = true;
       try { await api('/watches/' + encodeURIComponent(w.name) + '/run', { method:'POST' }); runBtn.textContent = 'disparado ✓'; }
-      catch (e) { alert(e.message); runBtn.disabled = false; }
+      catch (e) { toastError(e.message); runBtn.disabled = false; }
       setTimeout(loadWatches, 1500);
     });
     act.append(runBtn);
@@ -1269,6 +1803,7 @@ $('#nwSave').addEventListener('click', async () => {
     program: $('#nwProgram').value,
     every: $('#nwEvery').value.trim() || '24h',
     webhook: $('#nwWebhook').value.trim(),
+    webhook_type: $('#nwWebhookType').value,
     enabled: $('#nwEnabled').checked,
   };
   if (!body.name || !body.pipeline || !body.target) { $('#nwName').focus(); return; }
@@ -1276,16 +1811,157 @@ $('#nwSave').addEventListener('click', async () => {
   try {
     await api('/watches', { method:'POST', body: JSON.stringify(body) });
     $('#nwName').value = $('#nwTarget').value = $('#nwWebhook').value = '';
+    $('#nwWebhookType').value = '';
     $('#newWatch').open = false;
     await loadWatches();
-  } catch (e) { alert('falha ao criar watch: ' + e.message); }
+  } catch (e) { toastError('falha ao criar watch: ' + e.message); }
   finally { $('#nwSave').disabled = false; }
 });
+
+/* ---------- busca global ---------- */
+let searchDebounce = null;
+let searchAbort = null;
+
+function closeSearchDrop(){ $('#searchDrop').hidden = true; $('#searchDrop').innerHTML = ''; }
+
+function kindLabel(k){ return { finding:'finding', asset:'asset', note:'nota' }[k] || k; }
+
+function renderSearchResults(results, query){
+  const drop = $('#searchDrop');
+  drop.innerHTML = '';
+  if (!results.length) {
+    drop.append(el('div', { className:'empty', textContent: `nada encontrado pra "${query}"` }));
+  } else {
+    for (const hit of results) {
+      const row = el('div', { className:'shit' });
+      const top = el('div', { className:'top' });
+      top.append(el('span', { className:'kind ' + hit.kind, textContent: kindLabel(hit.kind) }));
+      top.append(el('span', { className:'title', textContent: hit.title }));
+      row.append(top);
+      if (hit.detail) row.append(el('div', { className:'detail', textContent: hit.detail }));
+      const bits = [];
+      if (hit.program) bits.push(hit.program);
+      if (hit.tool) bits.push(hit.tool);
+      if (bits.length) row.append(el('div', { className:'detail', style:'color:var(--dim)', textContent: bits.join(' · ') }));
+      row.addEventListener('click', () => {
+        closeSearchDrop();
+        $('#globalSearch').value = '';
+        if (hit.program) propagateProject(hit.program, { reload: false });
+        if ((hit.kind === 'finding' || hit.kind === 'asset') && hit.job_id) {
+          selectTab('current');
+          attachJob(hit.job_id);
+        } else if (hit.kind === 'note' && hit.program) {
+          selectTab('projects');
+        }
+      });
+      drop.append(row);
+    }
+  }
+  drop.hidden = false;
+}
+
+async function runSearch(q){
+  if (searchAbort) searchAbort.abort();
+  searchAbort = new AbortController();
+  try {
+    const r = await fetch('/api/search?q=' + encodeURIComponent(q), { headers: authHeaders(), signal: searchAbort.signal });
+    if (r.status === 401) { setAuthNeeded(true); return; }
+    const { results } = await r.json();
+    renderSearchResults(results || [], q);
+  } catch (e) {
+    if (e.name !== 'AbortError') { const drop = $('#searchDrop'); drop.innerHTML = ''; drop.append(el('div', { className:'empty', textContent:'erro: ' + e.message })); drop.hidden = false; }
+  }
+}
+
+$('#globalSearch').addEventListener('input', () => {
+  const q = $('#globalSearch').value.trim();
+  clearTimeout(searchDebounce);
+  if (q.length < 2) { closeSearchDrop(); return; }
+  const drop = $('#searchDrop');
+  drop.innerHTML = '';
+  drop.append(el('div', { className:'hint', textContent:'buscando…' }));
+  drop.hidden = false;
+  searchDebounce = setTimeout(() => runSearch(q), 250);
+});
+$('#globalSearch').addEventListener('keydown', e => { if (e.key === 'Escape') { closeSearchDrop(); e.target.blur(); } });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.searchbox')) closeSearchDrop();
+});
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    $('#globalSearch').focus();
+    $('#globalSearch').select();
+  }
+});
+
+/* ---------- painel cross-programa ---------- */
+async function loadPanel(){
+  const urgentBox = $('#panelUrgent');
+  const progBox = $('#panelPrograms');
+  urgentBox.innerHTML = '<p class="muted" style="padding:.3rem 0">carregando…</p>';
+  progBox.innerHTML = '';
+
+  let programs = [], findings = [];
+  try { ({ programs } = await api('/programs')); } catch {}
+  try { ({ findings } = await api('/intel/findings?limit=500')); } catch {}
+
+  const urgent = (findings || []).filter(f => !f.triage).sort((a, b) => b.score - a.score).slice(0, 15);
+  urgentBox.innerHTML = '';
+  if (!urgent.length) {
+    urgentBox.append(el('p', { className:'muted', style:'padding:.3rem 0', textContent: 'nada pendente de triagem — tudo em dia.' }));
+  } else {
+    for (const f of urgent) {
+      const row = el('div', { className:'urow' });
+      row.append(
+        el('span', { className:'score', textContent: String(f.score) }),
+        el('span', { className:'sev ' + f.severity, textContent: f.severity }),
+        el('span', { className:'prog', textContent: f.program || '—' }),
+        el('span', { className:'utitle', textContent: f.title || f.type }),
+        el('span', { className:'uasset', textContent: f.asset || '' }),
+      );
+      row.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
+      urgentBox.append(row);
+    }
+  }
+
+  progBox.innerHTML = '';
+  if (!(programs || []).length) {
+    progBox.append(el('p', { className:'muted', textContent: 'nenhum programa ainda — crie um em Job atual → ＋ novo projeto.' }));
+    return;
+  }
+  const sevColor = { critical:'var(--crit)', high:'var(--crit)', medium:'var(--warn)', low:'var(--info)', info:'var(--faint)' };
+  const summaries = await Promise.all(programs.map(async p => {
+    try { return [p.name, await api('/programs/' + encodeURIComponent(p.name) + '/summary')]; }
+    catch { return [p.name, null]; }
+  }));
+  for (const [name, sum] of summaries) {
+    const card = el('div', { className:'progcard' });
+    card.append(el('div', { className:'pname', textContent: name }));
+    if (sum) {
+      const bySev = sum.findings_by_severity || {};
+      const total = Object.values(bySev).reduce((a, b) => a + b, 0) || 1;
+      const bar = el('div', { className:'pbar' });
+      for (const sev of ['critical', 'high', 'medium', 'low', 'info']) {
+        const n = bySev[sev] || 0;
+        if (n) bar.append(el('i', { style: `width:${(n / total * 100)}%;background:${sevColor[sev]}` }));
+      }
+      card.append(bar);
+      card.append(el('div', { className:'pcounts', textContent: `${sum.jobs ?? 0} job(s) · ${sum.findings ?? 0} finding(s) · ${sum.assets ?? 0} asset(s)` }));
+      card.append(el('div', { className:'pmeta', textContent: sum.last_activity ? 'última atividade ' + fmtTime(sum.last_activity) : 'sem atividade ainda' }));
+    } else {
+      card.append(el('div', { className:'pmeta', textContent:'erro ao carregar resumo' }));
+    }
+    card.addEventListener('click', () => { propagateProject(name, { reload: false }); selectTab('projects'); });
+    progBox.append(card);
+  }
+}
 
 /* ---------- tabs ---------- */
 function selectTab(view){
   for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
   for (const v of document.querySelectorAll('.view')) v.classList.toggle('active', v.id === 'view-' + view);
+  if (view === 'panel') loadPanel();
   if (view === 'jobs') loadJobs();
   if (view === 'pipelines') loadPipelines();
   if (view === 'monitor') loadWatches();

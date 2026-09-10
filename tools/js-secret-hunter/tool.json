@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Baixa a página + <script src> + source maps e procura credenciais: ~35 padrões (AWS/GCP/GitHub/Slack/Stripe/Twilio/OpenAI/Anthropic, JWT, chaves privadas PEM, URLs de banco com senha, atribuições genéricas com filtro de entropia).",
   "guide": "Alvo = uma URL http(s), ex https://app.exemplo.com. Sem http:// ele assume https://. Não usa wordlist. Os valores saem redigidos (pontas visíveis). Modos lista/arquivo varrem várias URLs.",
+  "validation": "Exemplo confiável: um AKIA[0-9A-Z]{16} ou sk_live_... batendo o padrão de um provedor específico. Opere com 'maps' ligado — segredo em source map é o achado mais comum e mais fácil de perder numa auditoria manual. Atribuição genérica pega por entropia (sem padrão de provedor) merece uma olhada no contexto antes de reportar.",
   "exec": ["go", "run", "."],
   "timeout": "15m",
   "modes": [

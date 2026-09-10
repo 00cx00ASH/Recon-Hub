@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Acha a URL + a anon key do Supabase no HTML/JS de uma página e testa — só leitura — a API PostgREST: lista as tabelas expostas (documento raiz OpenAPI) e checa quais permitem leitura anônima (RLS ausente/fraca), com contagem de linhas e colunas. Decodifica o JWT pra mostrar role/exp e marca como CRÍTICO se for uma service_role key no cliente. Também vê se o cadastro de usuários está aberto.",
   "guide": "Alvo = a URL da página (ex https://app.exemplo.com). Baixa a página + os <script src> e extrai a URL <ref>.supabase.co e a chave (JWT anon/service). Já tem? Passe params.supabase_url + anon_key e deixe o Alvo vazio. Sem wordlist — as tabelas vêm do próprio PostgREST. Só faz GET; nunca escreve. Modos lista/arquivo varrem várias páginas.",
+  "validation": "Exemplo crítico direto: uma service_role key (não anon) exposta no cliente — decodifique o JWT e confira o campo role. Exemplo de finding médio: uma tabela sem RLS devolvendo linhas pra um GET anônimo com a anon key. Opere em modo 'single' primeiro; se a extração falhar num app que usa server-side rendering, tente 'creds' com a URL/key vistas na aba de rede do navegador.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "modes": [

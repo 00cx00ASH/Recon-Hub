@@ -2,6 +2,7 @@
 /reconhub
 /reconhub-sqlite
 /reconhub-mcp
+/reconhub-cli
 reconhub.db
 reconhub.db-shm
 reconhub.db-wal
@@ -26,7 +27,9 @@ tools/recon-crtsh/recon-crtsh
 tools/recon-infra-enum/recon-infra-enum
 tools/recon-passive-enum/recon-passive-enum
 tools/recon-web-enum/recon-web-enum
+tools/recon-tech-cve/recon-tech-cve
 tools/scan-actuator/scan-actuator
+tools/scan-auth-flow/scan-auth-flow
 tools/scan-broken-link-hijack/scan-broken-link-hijack
 tools/scan-cache-poisoning/scan-cache-poisoning
 tools/scan-cognito/scan-cognito
@@ -38,4 +41,6 @@ tools/scan-mongodb/scan-mongodb
 tools/scan-open-redirect/scan-open-redirect
 tools/scan-postman-audit/scan-postman-audit
 tools/scan-postman-net/scan-postman-net
+tools/scan-smuggling/scan-smuggling
+tools/scan-ssrf/scan-ssrf
 tools/scan-subdomain-takeover/scan-subdomain-takeover

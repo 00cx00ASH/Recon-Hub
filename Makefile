@@ -27,6 +27,11 @@ build-sqlite:
 mcp:
 	go build -trimpath -ldflags="-s -w" -o reconhub-mcp ./cmd/reconhub-mcp
 
+## cli: compila o cliente de terminal em ./reconhub-cli
+.PHONY: cli
+cli:
+	go build -trimpath -ldflags="-s -w" -o reconhub-cli ./cmd/reconhub-cli
+
 ## fmt: gofmt -w em todos os módulos
 .PHONY: fmt
 fmt:
@@ -86,7 +91,7 @@ logs:
 ## clean: remove binários e dados locais
 .PHONY: clean
 clean:
-	rm -rf reconhub reconhub-sqlite reconhub-mcp data
+	rm -rf reconhub reconhub-sqlite reconhub-mcp reconhub-cli data
 
 .PHONY: help
 help:

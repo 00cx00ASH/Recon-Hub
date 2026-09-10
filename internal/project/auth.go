@@ -1,0 +1,74 @@
+package project
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// Auth is operator-supplied authentication material attached to every tool
+// request run against this program — a shared logged-in session, so a job
+// doesn't scan anonymously when the interesting surface sits behind login.
+//
+// It lives in data/projects/<name>/auth.json — under data/, which is
+// gitignored, unlike programs/<name>.json (committed scope config). These
+// are real credentials for someone else's application; they must never end
+// up in git by accident, so this file is written 0600 and kept out of the
+// project.json/summary.json/report.md snapshot entirely (SyncFromStore never
+// touches it).
+type Auth struct {
+	Cookie  string            `json:"cookie,omitempty"`  // valor cru do header Cookie
+	Bearer  string            `json:"bearer,omitempty"`  // vira Authorization: Bearer <token>
+	Headers map[string]string `json:"headers,omitempty"` // headers extras (ex: X-Api-Key)
+}
+
+// Empty reports whether there's nothing to inject.
+func (a Auth) Empty() bool {
+	return a.Cookie == "" && a.Bearer == "" && len(a.Headers) == 0
+}
+
+func authFile(dataDir, name string) (string, error) {
+	dir := Dir(dataDir, name)
+	if dir == "" {
+		return "", fmt.Errorf("nome de projeto inválido: %q", name)
+	}
+	return filepath.Join(dir, "auth.json"), nil
+}
+
+// SaveAuth writes the auth context, creating the project folder if needed.
+func SaveAuth(dataDir, name string, a Auth) error {
+	path, err := authFile(dataDir, name)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(a, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0o600)
+}
+
+// LoadAuth reads the auth context; a missing file returns the zero value
+// (Empty() == true), not an error — most programs won't have one set.
+func LoadAuth(dataDir, name string) (Auth, error) {
+	path, err := authFile(dataDir, name)
+	if err != nil {
+		return Auth{}, err
+	}
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return Auth{}, nil
+	}
+	if err != nil {
+		return Auth{}, err
+	}
+	var a Auth
+	if err := json.Unmarshal(b, &a); err != nil {
+		return Auth{}, err
+	}
+	return a, nil
+}

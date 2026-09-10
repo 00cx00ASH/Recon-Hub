@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Content discovery (dir/arquivo) por wordlist: calibra o soft-404 do alvo, testa cada palavra (+ extensões) e reporta os hits por status. Estilo ffuf/gobuster. Aceita 1 URL ou uma lista.",
   "guide": "Alvo = a URL base, ex https://app.exemplo.com. Escolha a wordlist no seletor (traz as embutidas; configure seclists_dir p/ ter o SecLists inteiro). Ele calibra o 404 do alvo pra não gerar lixo. extensions = .php,.bak,~ etc. Nos modos lista/arquivo varre várias URLs base.",
+  "validation": "Exemplo de hit válido: /backup.zip retornando 200 com Content-Length real, destacado da calibração de soft-404 do alvo. Opere escolhendo a wordlist pelo contexto do alvo (ex: uma wordlist de API se o recon-web-enum já indicou stack de API) em vez da lista genérica — resultado mais rápido e mais relevante que forçar uma wordlist enorme.",
   "exec": ["go", "run", "."],
   "timeout": "30m",
   "modes": [

@@ -5,6 +5,7 @@
   "category": "recon",
   "summary": "Port scan TCP (connect) + banner grab + fingerprint de serviço. Aceita host, IP ou CIDR (com teto). Presets top100 (~120 portas curadas com nome de serviço), top1000, web, db, ou csv/ranges (22,80,8000-8100). Grava banner de SSH/SMTP/FTP/HTTP/Redis/Memcached/MySQL e marca serviços sensíveis expostos (redis, mongodb, docker API, kube-apiserver, kubelet, etcd, elasticsearch, rdp, vnc, winrm, mssql/mysql/postgres, jmx, java-rmi…).",
   "guide": "Alvo = um host, IP, ou CIDR (ex 10.0.0.0/24 — limitado por max_hosts). 'ports' escolhe o conjunto. Não usa wordlist. É um connect scan (TCP handshake completo, sem SYN raw) — barulhento mas confiável e não precisa de root. Emite as portas abertas como assets kind=port. Use com responsabilidade e só em alvos autorizados.",
+  "validation": "Exemplo de finding crítico: Redis respondendo +PONG sem AUTH, ou a API do Docker (porta 2375) aceitando comandos. Opere com preset 'top100' pra reconhecimento rápido e só suba pra 'top1000' num alvo que já confirmou ter serviços incomuns — o scan completo demora e gera muito mais ruído de rede.",
   "exec": ["go", "run", "."],
   "timeout": "20m",
   "modes": [

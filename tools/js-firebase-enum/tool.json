@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Acha o firebaseConfig no HTML/JS de uma página e testa o que dá pra ler sem autenticar: Realtime Database (.json?shallow=true), Firestore (documents.list em ~18 coleções comuns, com a apiKey do próprio site) e Storage (listagem do bucket). Só leitura — nunca escreve.",
   "guide": "Alvo = a URL da página (ex https://app.exemplo.com). A ferramenta baixa a página + os <script src> e extrai apiKey/projectId/databaseURL/storageBucket. Se o databaseURL não estiver no config, ela deriva os endpoints padrão a partir do projectId. Sem wordlist. Se você já tem o firebaseConfig, cole em params.config e deixe o Alvo vazio. Modos lista/arquivo varrem várias páginas.",
+  "validation": "Exemplo: GET https://<projeto>.firebaseio.com/.json devolvendo o JSON do banco inteiro, sem token. Opere primeiro em modo 'single' pra extrair o config automaticamente; se já tiver o firebaseConfig de outro lugar (ex: achado por outra ferramenta), pule direto pro modo 'config'. Confira se não é um projeto de demo/staging antes de reportar como crítico.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "modes": [

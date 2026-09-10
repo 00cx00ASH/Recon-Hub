@@ -5,6 +5,7 @@
   "category": "recon",
   "summary": "Enumeração passiva de subdomínios via Certificate Transparency (crt.sh + certspotter, com merge e degradação graciosa). Emite eventos asset kind=subdomain — feito para alimentar outras ferramentas numa pipeline.",
   "guide": "Alvo = domínio RAIZ (ex: exemplo.com), sem http:// e sem www. Não usa wordlist — a fonte é Certificate Transparency (crt.sh + certspotter). Produz assets kind=subdomain, não findings.",
+  "validation": "Não é finding, é o primeiro passo: alimenta scan-subdomain-takeover e recon-web-enum com os subdomínios achados via Certificate Transparency. Opere encadeado numa pipeline (ex: crtsh-takeover) em vez de rodar solto — o valor dele é o que vem depois, e nem todo host achado está ativo (confirme antes de assumir 'descoberto').",
   "exec": [
     "go",
     "run",

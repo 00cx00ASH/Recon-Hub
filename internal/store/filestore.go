@@ -389,6 +389,21 @@ func (fs *FileStore) ListAssets(f AssetFilter) ([]*Asset, error) {
 // appends a new snapshot line — replay's "later line wins" rule (keyed by
 // Finding.Key(), which Triage doesn't affect) picks it up on restart just
 // like a count/last_seen update.
+// GetFinding looks up one finding by id. Linear scan — findings aren't
+// keyed by id in memory (only by dedup Key(), see findingSeen), and this is
+// a low-frequency lookup (one finding, one report draft), not a hot path.
+func (fs *FileStore) GetFinding(id string) (*Finding, bool) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	for _, f := range fs.findings {
+		if f.ID == id {
+			fc := *f
+			return &fc, true
+		}
+	}
+	return nil, false
+}
+
 func (fs *FileStore) SetFindingTriage(id, verdict string) (*Finding, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()

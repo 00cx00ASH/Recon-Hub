@@ -5,6 +5,7 @@
   "category": "int",
   "summary": "Stub de referência: emite eventos NDJSON de exemplo para validar o orquestrador ponta-a-ponta.",
   "guide": "Stub de referência. Alvo = qualquer string. Emite eventos de exemplo (log/progress/finding/asset). Serve pra testar o hub e como molde de ferramenta.",
+  "validation": "Exemplo: o finding \"Finding de exemplo N\" e o asset \"hostN.<alvo>\" são sempre sintéticos — servem só pra validar que o pipeline está rodando ponta-a-ponta, não pra achar nada real. Opere com 'count' baixo (2-3) só pra checar a stream de eventos.",
   "exec": [
     "bash",
     "./run.sh"

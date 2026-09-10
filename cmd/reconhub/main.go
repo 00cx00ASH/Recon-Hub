@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"log"
@@ -148,9 +149,28 @@ func main() {
 		if strings.TrimSpace(job.Program) == "" {
 			return
 		}
-		if _, err := project.SyncFromStore(cfg.DataDir, job.Program, programs, st); err != nil {
+		if _, err := project.SyncFromStore(cfg.DataDir, job.Program, programs, st, reg); err != nil {
 			log.Printf("project sync (%s): %v", job.Program, err)
 		}
+	}
+	eng.AuthLookup = func(program string) []string {
+		a, err := project.LoadAuth(cfg.DataDir, program)
+		if err != nil || a.Empty() {
+			return nil
+		}
+		var env []string
+		if a.Cookie != "" {
+			env = append(env, "RECONHUB_AUTH_COOKIE="+a.Cookie)
+		}
+		if a.Bearer != "" {
+			env = append(env, "RECONHUB_AUTH_BEARER="+a.Bearer)
+		}
+		if len(a.Headers) > 0 {
+			if b, merr := json.Marshal(a.Headers); merr == nil {
+				env = append(env, "RECONHUB_AUTH_HEADERS="+string(b))
+			}
+		}
+		return env
 	}
 
 	watches, err := monitor.Load(cfg.WatchesDir)
@@ -348,6 +368,34 @@ func (h monHub) FindingKeys(id string) []string {
 				seen[k] = true
 				out = append(out, k)
 			}
+		}
+	}
+	return out
+}
+
+// jsAssetKinds are the asset kinds tools emit from parsing JS bundles
+// (js-hunter's endpoints, recon-web-enum's crawled urls, …) — what a
+// watch's JS-diff check compares between runs.
+var jsAssetKinds = map[string]bool{"endpoint": true, "url": true}
+
+func (h monHub) JSAssets(id string) []string {
+	run, ok := h.st.GetPipelineRun(id)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range run.Steps {
+		if s.JobID == "" {
+			continue
+		}
+		as, _ := h.st.ListAssets(store.AssetFilter{JobID: s.JobID, Limit: 100000})
+		for _, a := range as {
+			if !jsAssetKinds[a.Kind] || seen[a.Value] {
+				continue
+			}
+			seen[a.Value] = true
+			out = append(out, a.Value)
 		}
 	}
 	return out

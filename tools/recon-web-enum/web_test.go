@@ -2,10 +2,70 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"testing"
 )
+
+func TestApplyAuth(t *testing.T) {
+	t.Setenv("RECONHUB_TARGET", "https://x.com")
+	t.Setenv("RECONHUB_AUTH_COOKIE", "session=abc123")
+	t.Setenv("RECONHUB_AUTH_BEARER", "tok-xyz")
+	t.Setenv("RECONHUB_AUTH_HEADERS", `{"X-Api-Key":"k1"}`)
+	req, _ := http.NewRequest(http.MethodGet, "https://x.com", nil)
+	applyAuth(req)
+	if req.Header.Get("Cookie") != "session=abc123" {
+		t.Errorf("Cookie = %q", req.Header.Get("Cookie"))
+	}
+	if req.Header.Get("Authorization") != "Bearer tok-xyz" {
+		t.Errorf("Authorization = %q", req.Header.Get("Authorization"))
+	}
+	if req.Header.Get("X-Api-Key") != "k1" {
+		t.Errorf("X-Api-Key = %q", req.Header.Get("X-Api-Key"))
+	}
+}
+
+func TestApplyAuthSkipsThirdPartyHost(t *testing.T) {
+	// achado no design: js-bucket-scanner/js-firebase-enum/js-gtm-osint
+	// reusam a mesma função de fetch pra chamadas a terceiros (S3, Firebase,
+	// CDN do Google) — o cookie/token do ALVO não pode vazar pra lá.
+	t.Setenv("RECONHUB_TARGET", "https://x.com")
+	t.Setenv("RECONHUB_AUTH_COOKIE", "session=abc123")
+	req, _ := http.NewRequest(http.MethodGet, "https://storage.googleapis.com/bucket", nil)
+	applyAuth(req)
+	if req.Header.Get("Cookie") != "" {
+		t.Errorf("não deveria enviar o cookie do alvo pra um host diferente: %q", req.Header.Get("Cookie"))
+	}
+}
+
+func TestSameHostAsTargetIgnoresPort(t *testing.T) {
+	t.Setenv("RECONHUB_TARGET", "https://x.com:8443/app")
+	if !sameHostAsTarget("x.com:9000") {
+		t.Error("mesmo host, porta diferente ainda deveria bater (ignora porta)")
+	}
+	if sameHostAsTarget("evil.com") {
+		t.Error("host diferente não deveria bater")
+	}
+}
+
+func TestSameHostAsTargetNoTargetSetAllows(t *testing.T) {
+	os.Unsetenv("RECONHUB_TARGET")
+	if !sameHostAsTarget("qualquer.com") {
+		t.Error("sem RECONHUB_TARGET não deveria bloquear")
+	}
+}
+
+func TestApplyAuthNoEnvIsNoop(t *testing.T) {
+	os.Unsetenv("RECONHUB_AUTH_COOKIE")
+	os.Unsetenv("RECONHUB_AUTH_BEARER")
+	os.Unsetenv("RECONHUB_AUTH_HEADERS")
+	req, _ := http.NewRequest(http.MethodGet, "https://x.com", nil)
+	applyAuth(req)
+	if req.Header.Get("Cookie") != "" || req.Header.Get("Authorization") != "" {
+		t.Errorf("sem env, não deveria setar nada: %v", req.Header)
+	}
+}
 
 func TestSameSite(t *testing.T) {
 	if !sameSite("https://blog.example.com/x", "www.example.com") {

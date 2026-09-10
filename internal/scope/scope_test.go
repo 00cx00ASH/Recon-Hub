@@ -107,3 +107,62 @@ func TestSave(t *testing.T) {
 		t.Fatal("deveria recusar nome inválido")
 	}
 }
+
+func TestUpdate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "programs")
+	r, _ := Load(dir)
+
+	// não existe ainda -> Update recusa (usar Save pra criar)
+	if err := r.Update("acme", Program{InScope: []string{"*.acme.com"}}); err == nil {
+		t.Fatal("Update deveria recusar programa inexistente")
+	}
+
+	if err := r.Save(Program{Name: "acme", Platform: "hackerone", InScope: []string{"*.acme.com"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// atualiza o escopo
+	if err := r.Update("acme", Program{InScope: []string{"*.acme.com", "acme.io"}, OutOfScope: []string{"blog.acme.com"}}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	p, ok := r.Get("acme")
+	if !ok || len(p.InScope) != 2 || !p.Contains("acme.io") || p.Contains("blog.acme.com") {
+		t.Fatalf("escopo não atualizou: %+v", p)
+	}
+	// o nome vem da URL/registro, não do corpo — mesmo mandando outro nome no Program, o arquivo continua acme.json
+	if _, err := os.Stat(filepath.Join(dir, "acme.json")); err != nil {
+		t.Fatalf("arquivo original deveria continuar existindo: %v", err)
+	}
+
+	// in_scope vazio continua inválido no Update também
+	if err := r.Update("acme", Program{InScope: nil}); err == nil {
+		t.Fatal("Update deveria recusar in_scope vazio")
+	}
+}
+
+func TestDelete(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "programs")
+	r, _ := Load(dir)
+
+	if err := r.Delete("ghost"); err == nil {
+		t.Fatal("Delete deveria recusar programa inexistente")
+	}
+
+	if err := r.Save(Program{Name: "acme", InScope: []string{"*.acme.com"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Delete("acme"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, ok := r.Get("acme"); ok {
+		t.Fatal("programa deveria ter sumido do registro depois do Delete")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "acme.json")); !os.IsNotExist(err) {
+		t.Fatalf("arquivo deveria ter sido removido: %v", err)
+	}
+
+	// depois de deletado, dá pra criar de novo com o mesmo nome (Save não acha mais conflito)
+	if err := r.Save(Program{Name: "acme", InScope: []string{"*.acme.com"}}); err != nil {
+		t.Fatalf("recriar após delete: %v", err)
+	}
+}

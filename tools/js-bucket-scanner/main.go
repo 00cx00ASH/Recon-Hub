@@ -7,10 +7,12 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -171,12 +173,61 @@ func (t *target) fetchMap(jsURL, jsBody string) string {
 	return ""
 }
 
+// applyAuth attaches the operator's shared auth context for this program —
+// set once via PUT /api/programs/{name}/auth (internal/project.Auth),
+// injected by the engine as env vars — to a request, but ONLY when it's
+// going to the same host as the job's own target. get() below is shared
+// between fetching the target's own page/JS and probing cloud-storage
+// bucket URLs (S3, GCS, …) — the host check is what keeps the target's
+// session cookie/token from leaking to those unrelated third-party hosts.
+func applyAuth(req *http.Request) {
+	if !sameHostAsTarget(req.URL.Host) {
+		return
+	}
+	if v := os.Getenv("RECONHUB_AUTH_COOKIE"); v != "" {
+		req.Header.Set("Cookie", v)
+	}
+	if v := os.Getenv("RECONHUB_AUTH_BEARER"); v != "" {
+		req.Header.Set("Authorization", "Bearer "+v)
+	}
+	if v := os.Getenv("RECONHUB_AUTH_HEADERS"); v != "" {
+		var extra map[string]string
+		if json.Unmarshal([]byte(v), &extra) == nil {
+			for k, val := range extra {
+				req.Header.Set(k, val)
+			}
+		}
+	}
+}
+
+// sameHostAsTarget reports whether host matches RECONHUB_TARGET's host
+// (port ignored). No RECONHUB_TARGET set (e.g. running outside the hub)
+// doesn't block — there's nothing to compare against.
+func sameHostAsTarget(host string) bool {
+	t := strings.TrimSpace(os.Getenv("RECONHUB_TARGET"))
+	if t == "" {
+		return true
+	}
+	th := t
+	if u, err := url.Parse(t); err == nil && u.Host != "" {
+		th = u.Host
+	}
+	strip := func(h string) string {
+		if i := strings.LastIndexByte(h, ':'); i >= 0 {
+			h = h[:i]
+		}
+		return strings.ToLower(h)
+	}
+	return strip(host) == strip(th)
+}
+
 func (t *target) get(c *http.Client, u string) (body string, status int, ok bool) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return "", 0, false
 	}
 	req.Header.Set("User-Agent", "recon-hub/js-bucket-scanner")
+	applyAuth(req)
 	resp, err := c.Do(req)
 	if err != nil {
 		return "", 0, false

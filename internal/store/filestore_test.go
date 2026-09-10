@@ -83,6 +83,28 @@ func TestSetFindingTriage(t *testing.T) {
 	}
 }
 
+func TestGetFinding(t *testing.T) {
+	fs, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fs.Close()
+
+	f := &Finding{ID: "f1", JobID: "j1", Tool: "scan-x", Type: "takeover", Title: "t", Asset: "a.acme.com", Severity: "high", CreatedAt: time.Now().UTC()}
+	if _, err := fs.AddFinding(f); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := fs.GetFinding("f1")
+	if !ok || got.Title != "t" || got.Asset != "a.acme.com" {
+		t.Fatalf("GetFinding: ok=%v got=%+v", ok, got)
+	}
+
+	if _, ok := fs.GetFinding("ghost"); ok {
+		t.Fatal("esperava ok=false para finding inexistente")
+	}
+}
+
 func TestAddFindingDedupSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	fs, _ := Open(dir)

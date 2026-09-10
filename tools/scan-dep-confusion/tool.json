@@ -5,6 +5,7 @@
   "category": "scan",
   "summary": "Dependency confusion multi-ecossistema (npm, PyPI, Cargo, Composer): lê um manifesto (package.json, requirements.txt, pyproject.toml, Cargo.toml, composer.json) OU varre uma página web pelos módulos que ela importa, e checa cada nome no registro público. Nome ausente = build interno sequestrável por um pacote público homônimo.",
   "guide": "Escolha o modo. 'url': Alvo = URL crua de um manifesto (ex .../raw/main/package.json). 'site': Alvo = URL de uma página; a ferramenta baixa a página + os <script src> e extrai os imports bare (trata como npm). 'paste': cole o manifesto em params.manifest. 'file': caminho no servidor em params.manifest_file. O ecossistema é detectado pelo nome/conteúdo; force em params.ecosystem se precisar. Não usa wordlist. Não publica nada — só faz GET nos registros públicos.",
+  "validation": "Exemplo válido: um pacote interno tipo 'acme-internal-utils' no package.json que não existe no npm público — nome livre pra qualquer um publicar e ser puxado no próximo build. Opere em modo 'site' quando não tiver acesso ao repositório — a ferramenta extrai os imports direto do JS de produção, o que já cobre boa parte do caso sem precisar do manifesto.",
   "exec": ["go", "run", "."],
   "timeout": "10m",
   "modes": [

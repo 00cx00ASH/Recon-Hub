@@ -332,6 +332,26 @@ func (s *SQLiteStore) ListFindings(f FindingFilter) ([]*Finding, error) {
 	return out, rows.Err()
 }
 
+// GetFinding looks up one finding by id.
+func (s *SQLiteStore) GetFinding(id string) (*Finding, bool) {
+	row := s.db.QueryRow(`SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at FROM findings WHERE id=?`, id)
+	var fd Finding
+	var meta, created, last string
+	var triage, triagedAt sql.NullString
+	if err := row.Scan(&fd.ID, &fd.JobID, &fd.Tool, &fd.Program, &fd.Target, &fd.Type, &fd.Severity,
+		&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt); err != nil {
+		return nil, false
+	}
+	if meta != "" {
+		fd.Meta = json.RawMessage(meta)
+	}
+	fd.CreatedAt = rtime(created)
+	fd.LastSeen = rtime(last)
+	fd.Triage = triage.String
+	fd.TriagedAt = ptime(triagedAt)
+	return &fd, true
+}
+
 // SetFindingTriage records operator feedback on a finding by ID.
 func (s *SQLiteStore) SetFindingTriage(id, verdict string) (*Finding, error) {
 	s.mu.Lock()

@@ -5,6 +5,7 @@
   "category": "recon",
   "summary": "Enumeração passiva de subdomínios de 7 fontes gratuitas em paralelo: crt.sh e certspotter (Certificate Transparency), api.hackertarget.com, AlienVault OTX passive DNS, Anubis/jldc.me, RapidDNS e Wayback Machine (web.archive.org). Cada fonte degrada sozinha; o resultado é mesclado, deduplicado e validado no escopo. Superset do recon-crtsh — melhor 1º step de pipeline.",
   "guide": "Alvo = o domínio RAIZ (exemplo.com), sem http:// e sem www. Não usa wordlist — é 100% passivo, nenhuma requisição ao alvo. 'sources' limita as fontes (csv: crtsh,certspotter,hackertarget,alienvault,anubis,rapiddns,wayback). 'resolve' descarta os hosts que não resolvem em DNS. Emite assets kind=subdomain; veja na aba Assets.",
+  "validation": "Como recon-crtsh, mas com 7 fontes — prefira essa como 1º passo padrão de qualquer programa novo (é estritamente superset). Opere com 'resolve' ligado se for alimentar direto uma ferramenta ativa em seguida, pra não desperdiçar tempo escaneando hosts que nem respondem em DNS.",
   "exec": ["go", "run", "."],
   "timeout": "8m",
   "params": [

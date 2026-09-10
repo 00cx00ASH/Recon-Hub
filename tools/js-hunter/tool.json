@@ -5,6 +5,7 @@
   "category": "js",
   "summary": "Recon de JavaScript: baixa a página + os <script src>, tenta os source maps (.js.map declarado + o palpite <js>.map) e RECONSTRÓI o código-fonte original a partir do sourcesContent. Depois extrai endpoints de API de tudo (fetch/axios/XHR/constantes url/uri/endpoint + caminhos /api /v1 /graphql /internal /admin), deduplica e marca os interessantes (/admin, /graphql, /actuator, /debug, /.env, /token, /oauth, /export…).",
   "guide": "Alvo = a URL de uma página (ex https://app.exemplo.com). Sem wordlist. Source map exposto vira finding de baixa severidade (revela o código não-minificado). Os endpoints saem como assets kind=endpoint; os sensíveis viram finding medium. Bom para achar a superfície de API antes de fuzzar. Modos lista/arquivo varrem várias páginas.",
+  "validation": "Exemplo: um endpoint /api/internal/admin/users extraído de um bundle reconstruído via source map — vira asset kind=endpoint, teste depois com scan-fuzz ou manualmente. Opere com 'no_maps' desligado (padrão) sempre que puder — é a reconstrução via source map que costuma revelar os endpoints mais interessantes, não o bundle minificado.",
   "exec": ["go", "run", "."],
   "timeout": "12m",
   "modes": [

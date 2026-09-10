@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"reconhub/internal/auth"
+	"reconhub/internal/copilot"
 	"reconhub/internal/engine"
 	"reconhub/internal/intel"
 	"reconhub/internal/monitor"
@@ -55,6 +57,31 @@ func (s *Server) resolveProgram(name string) (*scope.Program, error) {
 	return &p, nil
 }
 
+// scopeExempt lists tools whose "target" is never the program's own domain —
+// checking it against in_scope/out_of_scope would be meaningless (and would
+// wrongly block legitimate runs).
+var scopeExempt = map[string]bool{
+	"int-github-audit":   true, // target is an org/repo or username
+	"scan-postman-net":   true, // target is a Postman workspace/collection ID
+	"scan-postman-audit": true, // target is a Postman workspace/collection ID
+}
+
+// inScope reports whether target is allowed to run under prog for the given
+// tool. A nil program (no program selected) or an exempt tool always passes.
+// A target that doesn't look like a hostname (no dot — e.g. a pasted blob, a
+// search query, a file path used by "paste"/"file" modes) also passes: scope
+// is defined in terms of hosts, so it has nothing to say about those.
+func inScope(tool string, prog *scope.Program, target string) bool {
+	if prog == nil || scopeExempt[tool] {
+		return true
+	}
+	h := scope.Host(target)
+	if !strings.Contains(h, ".") {
+		return true
+	}
+	return prog.Contains(target)
+}
+
 var (
 	errNoPrograms     = &apiErr{"nenhum programa configurado em ./programs"}
 	errUnknownProgram = &apiErr{"programa desconhecido"}
@@ -78,7 +105,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", s.auth(s.cancelJob))
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.authSSE(s.jobEvents))
 	mux.HandleFunc("GET /api/findings", s.auth(s.listFindings))
+	mux.HandleFunc("GET /api/search", s.auth(s.search))
 	mux.HandleFunc("POST /api/findings/{id}/triage", s.auth(s.triageFinding))
+	mux.HandleFunc("GET /api/findings/{id}/draft.md", s.authSSE(s.findingDraft)) // authSSE: baixável por link
 	mux.HandleFunc("GET /api/intel/findings", s.auth(s.intelFindings))
 	mux.HandleFunc("GET /api/assets", s.auth(s.listAssets))
 
@@ -93,6 +122,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/programs", s.auth(s.listPrograms))
 	mux.HandleFunc("POST /api/programs", s.auth(s.createProgram))
 	mux.HandleFunc("GET /api/programs/{name}", s.auth(s.getProgram))
+	mux.HandleFunc("PUT /api/programs/{name}", s.auth(s.updateProgram))
+	mux.HandleFunc("DELETE /api/programs/{name}", s.auth(s.deleteProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
 
 	// projeto: pasta física em data/projects/<name>/ — notas + snapshot sincronizado
@@ -100,6 +131,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/programs/{name}/sync", s.auth(s.syncProject))
 	mux.HandleFunc("GET /api/programs/{name}/notes", s.auth(s.getNotes))
 	mux.HandleFunc("PUT /api/programs/{name}/notes", s.auth(s.putNotes))
+	mux.HandleFunc("GET /api/programs/{name}/coverage", s.auth(s.programCoverage))
+	mux.HandleFunc("GET /api/programs/{name}/auth", s.auth(s.getAuth))
+	mux.HandleFunc("PUT /api/programs/{name}/auth", s.auth(s.putAuth))
 
 	mux.HandleFunc("GET /api/watches", s.auth(s.listWatches))
 	mux.HandleFunc("POST /api/watches", s.auth(s.createWatch))
@@ -216,6 +250,10 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 	name := ""
 	if prog != nil {
 		name = prog.Name
+		if !inScope(req.Tool, prog, req.Target) {
+			writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q", req.Target, name))
+			return
+		}
 	}
 	job, err := s.Engine.Submit(req.Tool, req.Target, name, req.Params)
 	if err != nil {
@@ -259,6 +297,105 @@ func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
 	writeErr(w, http.StatusConflict, "job não está em execução")
 }
 
+// searchHit is one match from the global search bar — a finding, an asset,
+// or a hit inside a project's notes. Kind + the id/job_id it carries is
+// enough for the frontend to jump straight to the right tab and row.
+type searchHit struct {
+	Kind    string `json:"kind"` // finding | asset | note
+	Program string `json:"program,omitempty"`
+	Title   string `json:"title"`
+	Detail  string `json:"detail,omitempty"`
+	ID      string `json:"id,omitempty"`
+	JobID   string `json:"job_id,omitempty"`
+	Tool    string `json:"tool,omitempty"`
+}
+
+// search looks across findings, assets and project notes for a substring —
+// case-insensitive, no index, just a linear scan. That's the right trade
+// for what this hub actually holds (one operator's recon data, not a
+// multi-tenant SaaS): simple beats fast here, and it's still instant at
+// the sizes this ever reaches.
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 60
+	}
+	if len(q) < 2 {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []searchHit{}, "query": q})
+		return
+	}
+
+	hits := []searchHit{}
+	fs, _ := s.Store.ListFindings(store.FindingFilter{Limit: 1000000})
+	for _, f := range fs {
+		if len(hits) >= limit {
+			break
+		}
+		if strings.Contains(strings.ToLower(f.Title), q) || strings.Contains(strings.ToLower(f.Type), q) ||
+			strings.Contains(strings.ToLower(f.Asset), q) || strings.Contains(strings.ToLower(f.Evidence), q) {
+			hits = append(hits, searchHit{
+				Kind: "finding", Program: f.Program, Title: f.Title, Detail: f.Asset,
+				ID: f.ID, JobID: f.JobID, Tool: f.Tool,
+			})
+		}
+	}
+	as, _ := s.Store.ListAssets(store.AssetFilter{Limit: 1000000})
+	for _, a := range as {
+		if len(hits) >= limit {
+			break
+		}
+		if strings.Contains(strings.ToLower(a.Value), q) {
+			hits = append(hits, searchHit{
+				Kind: "asset", Program: a.Program, Title: a.Value, Detail: a.Kind,
+				JobID: a.JobID, Tool: a.Tool,
+			})
+		}
+	}
+	if s.Programs != nil {
+		for _, p := range s.Programs.List() {
+			if len(hits) >= limit {
+				break
+			}
+			notes, err := project.ReadNotes(s.DataDir, p.Name)
+			if err != nil || notes == "" {
+				continue
+			}
+			if low := strings.ToLower(notes); strings.Contains(low, q) {
+				hits = append(hits, searchHit{Kind: "note", Program: p.Name, Title: "notas de " + p.Name, Detail: snippetAround(notes, low, q)})
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": hits, "query": q})
+}
+
+// snippetAround pulls ~60 chars of context around the first match, so a
+// note hit shows *where*, not just *that* it matched. low is the
+// lowercased text (already computed by the caller, so the search doesn't
+// lowercase the whole note body twice).
+func snippetAround(text, low, q string) string {
+	i := strings.Index(low, q)
+	if i < 0 {
+		return ""
+	}
+	start := i - 30
+	if start < 0 {
+		start = 0
+	}
+	end := i + len(q) + 30
+	if end > len(text) {
+		end = len(text)
+	}
+	snippet := strings.TrimSpace(text[start:end])
+	if start > 0 {
+		snippet = "…" + snippet
+	}
+	if end < len(text) {
+		snippet += "…"
+	}
+	return snippet
+}
+
 func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
@@ -275,6 +412,43 @@ func (s *Server) listFindings(w http.ResponseWriter, r *http.Request) {
 		Limit:    limit,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"findings": fs})
+}
+
+// findingDraft renders ONE finding as a submission-ready report (same
+// engine as /api/report.md — report.Build/Markdown — just scoped to a
+// single item, with includeInfo forced on so even an info-severity finding
+// gets its own full section instead of being silently dropped). It's the
+// "generate a draft I can paste into HackerOne/Intigriti" button next to a
+// finding: no direct integration with either platform (their hacker-facing
+// APIs for creating a report were never confirmed to exist), so this is
+// the honest version of that — draft, not auto-submit.
+func (s *Server) findingDraft(w http.ResponseWriter, r *http.Request) {
+	f, ok := s.Store.GetFinding(r.PathValue("id"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "finding não encontrado")
+		return
+	}
+	all, _ := s.Store.ListFindings(store.FindingFilter{Limit: 1000000})
+	assessment := intel.Assess(f, intel.BuildHistory(all))
+
+	item := report.Item{
+		Type: f.Type, Severity: f.Severity, Title: f.Title, Asset: f.Asset,
+		Evidence: f.Evidence, Tool: f.Tool, Target: f.Target, Count: f.Count,
+		FirstAt: f.CreatedAt, LastAt: f.LastSeen,
+		Meta: report.MetaFromRaw(f.Meta),
+	}
+	rep := report.Build(f.Program, f.Target, []report.Item{item}, true)
+	md := rep.Markdown()
+	md += "---\n\n_Prioridade sugerida pelo recon-hub: " + strconv.Itoa(assessment.Score) + "/100 — " + assessment.Action + "._\n"
+	if assessment.Advice != "" {
+		md += "_" + assessment.Advice + "_\n"
+	}
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	if r.URL.Query().Get("dl") != "" {
+		w.Header().Set("Content-Disposition", `attachment; filename="draft-`+f.ID[:min(8, len(f.ID))]+`.md"`)
+	}
+	_, _ = w.Write([]byte(md))
 }
 
 // triageFinding records the operator's verdict on a finding — this is the
@@ -351,7 +525,7 @@ func (s *Server) intelFindings(w http.ResponseWriter, r *http.Request) {
 			Advice: a.Advice, Confidence: a.Confidence, SampleSize: a.SampleSize,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"findings": rows})
+	writeJSON(w, http.StatusOK, map[string]any{"findings": rows, "groups": intel.GroupSimilar(fs)})
 }
 
 // buildReport gathers findings per the request filters and assembles a report.
@@ -510,9 +684,18 @@ func (s *Server) createWatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "pipeline desconhecida: "+wt.Pipeline)
 		return
 	}
+	if !monitor.ValidWebhookType(wt.WebhookType) {
+		writeErr(w, http.StatusBadRequest, "webhook_type inválido — use discord, slack, telegram ou generic")
+		return
+	}
 	if wt.Program != "" {
-		if _, err := s.resolveProgram(wt.Program); err != nil {
+		prog, err := s.resolveProgram(wt.Program)
+		if err != nil {
 			writeErr(w, http.StatusBadRequest, "programa desconhecido: "+wt.Program)
+			return
+		}
+		if pl, ok := s.Pipelines.Get(wt.Pipeline); ok && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, wt.Target) {
+			writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q — um watch recorrente fora do escopo ficaria escaneando indevidamente", wt.Target, prog.Name))
 			return
 		}
 	}
@@ -555,6 +738,43 @@ func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, saved)
 }
 
+// updateProgram edits an existing program's scope (in_scope/out_of_scope,
+// platform, url) — the name in the URL is authoritative, so a typo you
+// only notice after creating the project doesn't mean starting over.
+func (s *Server) updateProgram(w http.ResponseWriter, r *http.Request) {
+	if s.Programs == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de programas indisponível")
+		return
+	}
+	name := r.PathValue("name")
+	var p scope.Program
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := s.Programs.Update(name, p); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, _ := s.Programs.Get(strings.ToLower(strings.TrimSpace(name)))
+	writeJSON(w, http.StatusOK, saved)
+}
+
+// deleteProgram removes a program's scope definition. Jobs/findings/assets
+// and the data/projects/<name>/ folder already tied to that name are left
+// alone — only the in_scope/out_of_scope definition goes away.
+func (s *Server) deleteProgram(w http.ResponseWriter, r *http.Request) {
+	if s.Programs == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de programas indisponível")
+		return
+	}
+	if err := s.Programs.Delete(r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // --- projeto (pasta física em data/projects/<name>/) ---
 
 // syncProject rebuilds the project's snapshot (summary, report, assets) from
@@ -565,7 +785,7 @@ func (s *Server) syncProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "programa não encontrado")
 		return
 	}
-	sum, err := project.SyncFromStore(s.DataDir, name, s.Programs, s.Store)
+	sum, err := project.SyncFromStore(s.DataDir, name, s.Programs, s.Store, s.Reg)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -591,6 +811,57 @@ func (s *Server) getNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"program": name, "notes": txt})
+}
+
+// programCoverage reports which tools have run for a program and which
+// applicable ones (given what's been discovered) haven't — the "o que fazer
+// agora" view.
+func (s *Server) programCoverage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	jobs, _ := s.Store.ListJobs(store.JobFilter{Program: name, Limit: 1000000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: name, Limit: 1000000})
+	writeJSON(w, http.StatusOK, copilot.Compute(name, jobs, assets, s.Reg))
+}
+
+// getAuth returns the program's stored auth context (cookie/bearer/extra
+// headers) verbatim — the operator set it themselves, same trust level as
+// their own token protecting this API.
+func (s *Server) getAuth(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	a, err := project.LoadAuth(s.DataDir, name)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+// putAuth stores the auth context that every job run against this program
+// (via the shared session) gets injected as RECONHUB_AUTH_* env vars.
+func (s *Server) putAuth(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.resolveProgram(name); err != nil {
+		writeErr(w, http.StatusNotFound, "programa não encontrado")
+		return
+	}
+	var a project.Auth
+	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.SaveAuth(s.DataDir, name, a); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) putNotes(w http.ResponseWriter, r *http.Request) {
@@ -732,6 +1003,10 @@ func (s *Server) createPipelineRun(w http.ResponseWriter, r *http.Request) {
 	prog, err := s.resolveProgram(req.Program)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if prog != nil && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, req.Target) {
+		writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q", req.Target, prog.Name))
 		return
 	}
 	run, err := s.Engine.SubmitPipeline(pl, req.Target, prog)

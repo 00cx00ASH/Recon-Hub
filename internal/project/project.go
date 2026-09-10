@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"reconhub/internal/copilot"
+	"reconhub/internal/registry"
 	"reconhub/internal/report"
 	"reconhub/internal/scope"
 	"reconhub/internal/store"
@@ -118,12 +120,16 @@ func WriteNotes(dataDir, name, content string) error {
 //	report.md      bounty-ready report, scoped to this program
 //	assets.json    every asset discovered under this program
 //
+// coverage.json     tools already run vs applicable-but-unused ones (see internal/copilot)
+//
 // The program's scope itself is not duplicated here — it already lives in
 // programs/<name>.json (scope.Registry is the source of truth for it).
 //
 // It's cheap enough to call after every job completes and on every read of
-// the summary — there's no separate "stale" state to track.
-func SyncFromStore(dataDir, name string, progs *scope.Registry, st store.Store) (Summary, error) {
+// the summary — there's no separate "stale" state to track. reg is optional
+// (nil is fine) — when set, it keeps coverage suggestions limited to tools
+// actually registered on this hub.
+func SyncFromStore(dataDir, name string, progs *scope.Registry, st store.Store, reg *registry.Registry) (Summary, error) {
 	dir := Dir(dataDir, name)
 	if dir == "" {
 		return Summary{}, fmt.Errorf("nome de projeto inválido: %q", name)
@@ -198,6 +204,10 @@ func SyncFromStore(dataDir, name string, progs *scope.Registry, st store.Store) 
 	}
 	sortAssets(assets)
 	if err := writeJSON(filepath.Join(dir, "assets.json"), assets); err != nil {
+		return sum, err
+	}
+	cov := copilot.Compute(name, jobs, assets, reg)
+	if err := writeJSON(filepath.Join(dir, "coverage.json"), cov); err != nil {
 		return sum, err
 	}
 	notesPath := filepath.Join(dir, "notes.md")
