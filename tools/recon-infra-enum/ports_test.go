@@ -51,14 +51,61 @@ func TestIdentify(t *testing.T) {
 	}
 }
 
+// TestIdentifyServerHeaderOnRealisticCleanedBanner é o teste de regressão
+// pro bug real: reServer exigia "\r\n" literal antes de "Server:", mas o
+// banner que chega em identify() na vida real JÁ passou por clean() (grab()
+// sempre devolve clean(buf[:n])) — que troca \r\n por espaço. O teste
+// antigo (acima) só "passava" porque chamava identify() com string CRUA
+// direto, nunca testando o formato que realmente chega em produção.
+func TestIdentifyServerHeaderOnRealisticCleanedBanner(t *testing.T) {
+	cleaned := clean([]byte("HTTP/1.1 200 OK\r\nServer: nginx/1.25.3\r\nContent-Type: text/html\r\n"))
+	s, prod := identify(80, cleaned)
+	if s != "http" || prod != "nginx/1.25.3" {
+		t.Fatalf("banner realista (pós-clean) deveria extrair nginx/1.25.3, veio %s / %q (banner=%q)", s, prod, cleaned)
+	}
+
+	cleaned2 := clean([]byte("HTTP/1.1 200 OK\r\nServer: Apache/2.4.41 (Ubuntu)\r\nDate: Mon, 01 Jan 2024\r\n"))
+	_, prod2 := identify(80, cleaned2)
+	if prod2 != "Apache/2.4.41 (Ubuntu)" {
+		t.Fatalf("Server com espaço no valor (parênteses) deveria vir inteiro, veio %q", prod2)
+	}
+}
+
+func TestIdentifyJenkinsViaHeader(t *testing.T) {
+	raw := "HTTP/1.1 200 OK\r\nX-Jenkins: 2.401.3\r\nContent-Type: text/html\r\n"
+	s, prod := identify(8080, clean([]byte(raw)))
+	if s != "jenkins" || prod != "2.401.3" {
+		t.Fatalf("esperava jenkins/2.401.3, veio %s/%q", s, prod)
+	}
+}
+
 func TestNotable(t *testing.T) {
-	for _, svc := range []string{"redis", "mongodb", "docker", "kube-apiserver", "rdp", "elasticsearch"} {
+	for _, svc := range []string{
+		"redis", "mongodb", "docker", "kube-apiserver", "rdp", "elasticsearch",
+		// serviços que já estavam em svc[] (mapa porta->nome) mas nunca
+		// tinham entrada em notable() — parte do gap real corrigido aqui.
+		"jenkins", "solr", "prometheus", "alertmanager", "activemq", "yarn",
+		"hdfs", "hdfs-namenode", "spark", "webmin", "arangodb", "neo4j",
+		"neo4j-https", "sap", "rethinkdb", "git",
+	} {
 		if ok, sev, _ := notable(svc, 0); !ok || sev != "medium" {
 			t.Errorf("%s deveria ser notável", svc)
 		}
 	}
 	if ok, _, _ := notable("http", 80); ok {
 		t.Error("http comum não é notável")
+	}
+}
+
+// TestSvcServiceNamesAllReachableInNotableOrIntentionallyNot é uma checagem
+// estrutural: todo valor em svc[] que corresponde a um dos serviços listados
+// em notable() precisa estar de fato alcançável (bug real corrigido aqui:
+// "jenkins" existia em notable() sem NENHUM caminho em identify() que
+// pudesse setar service="jenkins" — dead code disfarçado de cobertura).
+func TestJenkinsIsReachableFromIdentify(t *testing.T) {
+	s, _ := identify(8080, clean([]byte("HTTP/1.1 200 OK\r\nX-Jenkins: 2.401\r\n")))
+	if ok, _, _ := notable(s, 8080); !ok {
+		t.Fatal("identify() detectou jenkins mas notable() não reconhece o service resultante — desalinhado de novo")
 	}
 }
 

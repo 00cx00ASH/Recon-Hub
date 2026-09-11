@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "language": "Go",
   "category": "recon",
-  "summary": "Port scan TCP (connect) + banner grab + fingerprint de serviço. Aceita host, IP ou CIDR (com teto). Presets top100 (~120 portas curadas com nome de serviço), top1000, web, db, ou csv/ranges (22,80,8000-8100). Grava banner de SSH/SMTP/FTP/HTTP/Redis/Memcached/MySQL e marca serviços sensíveis expostos (redis, mongodb, docker API, kube-apiserver, kubelet, etcd, elasticsearch, rdp, vnc, winrm, mssql/mysql/postgres, jmx, java-rmi…).",
+  "summary": "Port scan TCP (connect) + banner grab + fingerprint de serviço. Aceita host, IP ou CIDR (com teto). Presets top100 (~120 portas curadas com nome de serviço, agora incluindo Solr/Prometheus/Alertmanager), top1000, web, db, ou csv/ranges (22,80,8000-8100). Grava banner de SSH/SMTP/FTP/HTTP/Redis/Memcached/MySQL, detecta Jenkins pelo header X-Jenkins (independente da porta) e marca serviços sensíveis expostos (redis, mongodb, docker API, kube-apiserver, kubelet, etcd, elasticsearch, Jenkins, Solr, Prometheus/Alertmanager, ActiveMQ, Hadoop YARN/HDFS, Spark, rdp, vnc, winrm, mssql/mysql/postgres, jmx, java-rmi…). Também identifica o provedor cloud/CDN de cada host (AWS/GCP/Azure/Cloudflare/DigitalOcean/Oracle/OVH/Fastly/Akamai/Heroku/Hetzner/Vultr/Scaleway…) via PTR (sinal ao vivo, sempre atual) com um fallback pequeno de CIDR conhecido só pro Cloudflare — nunca chuta com lista de IP desatualizada dos provedores grandes.",
   "guide": "Alvo = um host, IP, ou CIDR (ex 10.0.0.0/24 — limitado por max_hosts). 'ports' escolhe o conjunto. Não usa wordlist. É um connect scan (TCP handshake completo, sem SYN raw) — barulhento mas confiável e não precisa de root. Emite as portas abertas como assets kind=port. Use com responsabilidade e só em alvos autorizados.",
-  "validation": "Exemplo de finding crítico: Redis respondendo +PONG sem AUTH, ou a API do Docker (porta 2375) aceitando comandos. Opere com preset 'top100' pra reconhecimento rápido e só suba pra 'top1000' num alvo que já confirmou ter serviços incomuns — o scan completo demora e gera muito mais ruído de rede.",
+  "validation": "Exemplo de finding crítico: Redis respondendo +PONG sem AUTH, ou a API do Docker (porta 2375) aceitando comandos. Opere com preset 'top100' pra reconhecimento rápido e só suba pra 'top1000' num alvo que já confirmou ter serviços incomuns — o scan completo demora e gera muito mais ruído de rede. O log 'host → AWS (PTR ...)' (ou GCP/Azure/etc.) é uma DICA pra priorizar investigação (qual metadata endpoint tentar, qual scan-ssrf candidate faz sentido) — nunca prova de nada sozinho; sem match não significa 'não é cloud', só que o PTR não revelou ou não bateu no fallback do Cloudflare.",
   "exec": ["go", "run", "."],
   "timeout": "20m",
   "modes": [
@@ -18,6 +18,7 @@
     { "name": "hosts_file", "type": "string", "required": false, "help": "arquivo no servidor, um alvo por linha" },
     { "name": "ports", "type": "string", "required": false, "default": "top100", "help": "top100 | top1000 | web | db | csv/ranges" },
     { "name": "no_banner", "type": "bool", "required": false, "default": false, "help": "não fazer banner grab (só descobrir portas abertas)" },
+    { "name": "no_cloud_detect", "type": "bool", "required": false, "default": false, "help": "não tentar identificar o provedor cloud/CDN de cada host" },
     { "name": "max_hosts", "type": "int", "required": false, "default": 1024, "help": "teto de hosts ao expandir um CIDR" },
     { "name": "concurrency", "type": "int", "required": false, "default": 300, "help": "conexões simultâneas" },
     { "name": "timeout_ms", "type": "int", "required": false, "default": 1500, "help": "timeout por conexão" }

@@ -242,6 +242,10 @@ ainda falta rodar num programa.
   log".
 - `recon-infra-enum` — port scan + banner grab, sinaliza serviços
   sensíveis expostos (redis, mongo, docker API, k8s, elastic…).
+  Também identifica o provedor cloud/CDN por host (AWS/GCP/Azure/
+  Cloudflare/DigitalOcean/Oracle/...) via PTR — é uma dica pra priorizar
+  o que investigar (ex: AWS confirmado → `scan-ssrf` tem mais chance de
+  achar metadata endpoint real), nunca prova de nada sozinho.
 - `recon-web-enum` — crawl raso, fingerprint de stack/WAF/CDN, ~46
   caminhos administrativos com calibração de soft-404. Inclui
   `try_bypass` (opt-in): pra cada 401/403 já confirmado em caminho
