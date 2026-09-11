@@ -58,6 +58,7 @@ RECONHUB_AUTH_COOKIE=session=...       # vira o header Cookie
 RECONHUB_AUTH_BEARER=eyJ...            # vira Authorization: Bearer <token>
 RECONHUB_AUTH_HEADERS={"X-Api-Key":"..."}  # JSON de headers extras
 RECONHUB_PROXY_URL=socks5://127.0.0.1:9050 # http://, https:// ou socks5://
+RECONHUB_PROXY_CONTROL_URL=127.0.0.1:9051  # só quando RECONHUB_PROXY_URL é socks5 — control port do Tor
 ```
 
 `RECONHUB_AUTH_*` é injeção **por requisição**: a ferramenta só deve anexar
@@ -73,6 +74,21 @@ trocar o IP de saída depois de um bloqueio). Configure uma vez no
 `applyProxy`/`socks5DialContext` em `tools/recon-web-enum/proxy.go` como
 referência (`http://`/`https://` usam `http.ProxyURL` nativo do Go; `socks5://`
 tem um client SOCKS5 mínimo escrito à mão ali, sem dependência externa).
+
+**Toda ferramenta nova que fala HTTP com o alvo deve chamar `applyProxy()` +
+envolver o `Transport` final do `http.Client` com `withBlockRotation()`** —
+copie `proxy.go`/`proxy_test.go` de `tools/recon-web-enum/` verbatim (é o
+padrão de referência, testado e replicado em 31 das 34 ferramentas atuais) e
+veja `tools/recon-web-enum/main.go` como exemplo de integração. `withBlockRotation`
+conta respostas 403/429 consecutivas e, ao cruzar um limiar, pede um
+circuito Tor novo via `RECONHUB_PROXY_CONTROL_URL` (`SIGNAL NEWNYM`) — é um
+no-op total quando essa env var não está setada, então chamar isso sempre é
+seguro mesmo sem proxy configurado. As únicas exceções válidas pra pular
+esse padrão são ferramentas que não usam `http.Client` de verdade (falam
+TCP/protocolo binário cru — ex: `scan-mongodb`) ou onde rotear por proxy
+degradaria uma técnica que depende de timing preciso numa conexão isolada
+(ex: `scan-smuggling`) — documente o motivo no código se pular por esses
+casos.
 
 ## 3. Saída — NDJSON no stdout
 

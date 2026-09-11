@@ -166,7 +166,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ### Subsistemas prontos
 
-- **29 pipelines** — encadeiam ferramentas, passando `asset` de um step como
+- **31 pipelines** — encadeiam ferramentas, passando `asset` de um step como
   `param` do próximo.
 - **Pipeline DAG / fan-out** — steps ganham `id`, `feed.from`, `needs`; steps sem
   dependência pendente rodam **em paralelo** (ondas). Step falho marca dependentes
@@ -189,6 +189,12 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
   selecionáveis no param `wordlist`.
 - **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
+- **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
+  mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
+  só roteia tráfego se o operador configurar explicitamente pra aquele
+  programa (opt-in — alguns programas proíbem IP anonimizado). 31 das 34
+  ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
+  (429/403 repetido). Ver README > Docker > Proxy/Tor.
 - **MCP** — `cmd/reconhub-mcp`, 21 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +

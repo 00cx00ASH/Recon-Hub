@@ -139,3 +139,17 @@ sobre caçar bugs em programas de terceiros.
   rodar isolado do `data/` real do checkout** — subir o binário sem
   `cwd` dedicado escreve em `data/token`, `data/*.jsonl` de verdade.
   Sempre um diretório `/tmp` separado com symlinks pro resto.
+- **Subagente com `isolation: "worktree"` parte do branch DEFAULT do repo
+  (`main`), não do branch/commit que a sessão principal tem checked out**
+  — mesmo com trabalho commitado na sessão atual num branch de feature,
+  um subagente em worktree não vê nada disso a menos que esteja também
+  em `main`. Isso já causou 3 subagentes em paralelo "não acharem" um
+  arquivo de referência que tinha acabado de ser commitado (porque o
+  commit foi num branch de feature, e o worktree deles partiu de `main`
+  bem mais atrás) — e um deles corrigiu sozinho fazendo `git show
+  <branch-da-sessão>:<caminho>` pra ler o conteúdo certo sem tocar no
+  branch errado, o que é o jeito certo de lidar com isso quando
+  acontece. Pra tarefas que dependem de algo commitado AGORA na sessão
+  atual (não em `main`), ou não use `isolation: "worktree"` (deixa o
+  subagente operar direto no working dir atual, já no branch certo), ou
+  informe explicitamente o branch/commit de origem no prompt.

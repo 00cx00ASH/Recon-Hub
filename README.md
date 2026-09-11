@@ -345,26 +345,41 @@ toda requisição** da ferramenta nesse projeto — é assim que dá pra trocar
 o IP de saída.
 
 **Tor embutido, sem serviço pago:** o repo já traz um sidecar de Tor
-(`docker/tor/`) — sobe junto com um flag, sem publicar nada pro host (só é
-alcançável de dentro do container do hub):
-
-```bash
-docker compose --profile tor up -d --build
-```
+(`docker/tor/`) que sobe **sempre junto**, sem flag nenhuma — `docker compose
+up -d --build` já inclui o container Tor, sem publicar nada pro host (só é
+alcançável de dentro do container do hub). Ele fica disponível o tempo todo,
+mas **nenhum tráfego passa por ele até você configurar** — continua opt-in
+por programa, de propósito: alguns programas de bug bounty proíbem
+explicitamente teste via IP anonimizado, então nada deve ser roteado por Tor
+sem você confirmar isso pra aquele programa específico.
 
 Configure o projeto com `socks5://127.0.0.1:9050` no campo Proxy e pronto —
-o tráfego daquele projeto passa pela rede Tor. Se um alvo te bloquear no
-meio do trabalho, pedir um circuito novo troca o nó de saída (e portanto o
-IP) sem precisar reiniciar nada:
+o tráfego daquele projeto passa pela rede Tor.
+
+**Rotação de circuito automática.** Se um alvo bloquear no meio do trabalho
+(429/403 repetidos), a ferramenta já pede um circuito novo sozinha — troca o
+nó de saída (e portanto o IP) sem você precisar fazer nada. Isso é feito
+falando o protocolo de controle do Tor direto (`AUTHENTICATE ""` +
+`SIGNAL NEWNYM`, só possível porque o control port nunca sai do namespace de
+rede do container), com um limiar de tentativas de bloqueio consecutivas
+antes de rotacionar (`RECONHUB_PROXY_BLOCK_THRESHOLD`, default 5) e um
+cooldown de 20s entre rotações pra não martelar o control port. O comando
+manual continua funcionando como fallback, se você quiser forçar uma
+rotação a qualquer momento:
 
 ```bash
 docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
 ```
 
-Hoje isso está implementado em `recon-web-enum` e `scan-fuzz` (as ferramentas
-que mais geram volume de requisições, portanto as mais propensas a levar
-bloqueio) — o padrão está documentado em `docs/TOOL_CONTRACT.md` pra outras
-ferramentas adotarem aos poucos.
+Hoje isso está implementado em 31 das 34 ferramentas (todas as que falam
+HTTP com o alvo). As 3 que ficam de fora, de propósito, porque não usam
+`http.Client` — falam TCP cru: `scan-mongodb` (wire protocol do MongoDB),
+`recon-infra-enum` (port scan/banner grab) e `scan-smuggling` (mede timing
+numa conexão isolada — rotear por Tor introduziria latência de circuito
+variável que contaminaria o próprio sinal que a técnica depende). O padrão
+(`RECONHUB_PROXY_URL`/`RECONHUB_PROXY_CONTROL_URL`, ver `tools/recon-web-enum/proxy.go`)
+está documentado em `docs/TOOL_CONTRACT.md` pra ferramentas novas adotarem
+desde o início.
 
 ### Token de acesso
 
