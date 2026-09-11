@@ -201,6 +201,16 @@
   .toast .tx{background:none;border:0;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:0}
   @keyframes toastin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
+  /* ---------- barra de seleção — assets/findings escolhidos pra alimentar uma pipeline ---------- */
+  #selBar{position:fixed;left:1.1rem;bottom:1.1rem;z-index:190;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:.6rem .8rem;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12px;max-width:min(680px,calc(100vw - 2.2rem))}
+  #selBar b{color:var(--accent)}
+  #selBar select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.35rem .5rem}
+  #selBar button{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:3px;padding:.4rem .7rem;cursor:pointer}
+  #selRun{background:var(--accent);color:#1a1400;border:0;font-weight:600}
+  #selRun:disabled{opacity:.5;cursor:not-allowed}
+  #selClear{background:none;border:1px solid var(--border-strong);color:var(--dim)}
+  td input[type="checkbox"]{cursor:pointer}
+
   #confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:210;display:flex;align-items:center;justify-content:center;padding:1rem}
   #confirmBox{background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:1.2rem 1.3rem;max-width:440px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.4)}
   #confirmBox p{font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-line;margin:0 0 1rem}
@@ -234,6 +244,13 @@
 </div>
 
 <div id="toasts"></div>
+<div id="selBar" hidden title="assets/findings marcados aqui viram alvo de uma pipeline — inclusive uma diferente da que os descobriu">
+  <span><b id="selCount">0 selecionados</b></span>
+  <select id="selPipeline"></select>
+  <select id="selProgram"><option value="">— sem programa —</option></select>
+  <button id="selRun" disabled>▶ rodar pipeline nos selecionados</button>
+  <button id="selClear">✕ limpar</button>
+</div>
 <div id="confirmOverlay" hidden>
   <div id="confirmBox">
     <p id="confirmMsg"></p>
@@ -489,7 +506,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       </div>
       <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
-        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>http</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="findSelAll" title="selecionar todos (pra usar em pipeline)"></th><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>http</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
         <tbody id="findingsRows"></tbody>
       </table></div>
     </div>
@@ -512,7 +529,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         </select>
       </div>
       <div class="wrapx"><table>
-        <thead><tr><th>tipo</th><th>valor</th><th>http</th><th>ferramenta</th><th>programa</th><th>quando</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="assetSelAll" title="selecionar todos (pra usar em pipeline)"></th><th>tipo</th><th>valor</th><th>http</th><th>ferramenta</th><th>programa</th><th>quando</th></tr></thead>
         <tbody id="assetsRows"></tbody>
       </table></div>
     </div>
@@ -669,6 +686,76 @@ function assetCell(value){
   }
   return el('td', { className:'mono', textContent: value });
 }
+
+/* ---------- seleção de assets/findings pra alimentar uma pipeline ---------- */
+// Pedido do usuário: poder escolher achados espalhados nas duas abas e mandar
+// pra pipeline (inclusive uma diferente da que os descobriu), sem precisar
+// digitar o alvo manualmente. O motor hoje roda uma pipeline por alvo — então
+// "selecionar vários" dispara uma run por valor único selecionado (dedupe
+// automático porque é um Set), mantendo o back-end intocado.
+const PIPELINE_SELECTION = new Set();
+
+function updateSelBar(){
+  const n = PIPELINE_SELECTION.size;
+  $('#selBar').hidden = n === 0;
+  $('#selCount').textContent = n + (n === 1 ? ' selecionado' : ' selecionados');
+  $('#selRun').disabled = n === 0 || !$('#selPipeline').value;
+}
+function toggleSelection(value, checked){
+  if (!value) return;
+  if (checked) PIPELINE_SELECTION.add(value); else PIPELINE_SELECTION.delete(value);
+  updateSelBar();
+}
+function selCheckbox(value){
+  if (!value) return el('td');
+  const cb = el('input', { type:'checkbox' });
+  cb.checked = PIPELINE_SELECTION.has(value);
+  cb.addEventListener('click', e => e.stopPropagation());
+  cb.addEventListener('change', () => toggleSelection(value, cb.checked));
+  return el('td', {}, cb);
+}
+function syncSelAllCheckbox(sel, values){
+  const cb = $(sel);
+  if (!values.length) { cb.checked = false; cb.indeterminate = false; return; }
+  const n = values.filter(v => PIPELINE_SELECTION.has(v)).length;
+  cb.checked = n === values.length;
+  cb.indeterminate = n > 0 && n < values.length;
+}
+$('#findSelAll').addEventListener('change', () => {
+  for (const f of FINDINGS_ALL.filter(matchesFindFilter)) toggleSelection(f.asset, $('#findSelAll').checked);
+  renderFindingsTable();
+});
+$('#assetSelAll').addEventListener('change', () => {
+  const bucket = $('#assetHttpBucket').value;
+  const list = bucket ? ASSETS_ALL.filter(a => httpBucketOf(a) === bucket) : ASSETS_ALL;
+  for (const a of list) toggleSelection(a.value, $('#assetSelAll').checked);
+  renderAssetsTable();
+});
+$('#selPipeline').addEventListener('change', updateSelBar);
+$('#selClear').addEventListener('click', () => {
+  PIPELINE_SELECTION.clear();
+  updateSelBar();
+  renderFindingsTable();
+  renderAssetsTable();
+});
+$('#selRun').addEventListener('click', async () => {
+  const pipeline = $('#selPipeline').value, program = $('#selProgram').value;
+  const targets = [...PIPELINE_SELECTION];
+  if (!pipeline || !targets.length) return;
+  $('#selRun').disabled = true;
+  let ok = 0, fail = 0, lastID = null;
+  for (const target of targets) {
+    try { lastID = (await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) })).id; ok++; }
+    catch { fail++; }
+  }
+  if (ok) toastOk(`${ok} pipeline(s) iniciada(s)` + (fail ? `, ${fail} falharam` : ''));
+  else toastError(`nenhuma pipeline iniciada — ${fail} falha(s)`);
+  PIPELINE_SELECTION.clear();
+  updateSelBar();
+  renderFindingsTable();
+  renderAssetsTable();
+  if (ok) { selectTab('pipelines'); loadPipelineRuns(); if (lastID) openPipelineRun(lastID); }
+});
 
 /* ---------- toast + confirm (substituem alert()/confirm() nativos) ---------- */
 function toast(msg, type){
@@ -1044,6 +1131,7 @@ function renderAssetsTable(){
   const tb = $('#assetsRows'); tb.innerHTML = '';
   for (const a of list) {
     const tr = el('tr');
+    tr.append(selCheckbox(a.value));
     tr.append(el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }));
     tr.append(assetCell(a.value));
     tr.append(el('td', {}, httpStatusBadge(a)));
@@ -1055,7 +1143,8 @@ function renderAssetsTable(){
     tr.addEventListener('click', () => { selectTab('current'); attachJob(a.job_id); });
     tb.append(tr);
   }
-  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:6, className:'muted', textContent: bucket ? 'nenhum asset nesse filtro' : 'nenhum asset ainda' })));
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:7, className:'muted', textContent: bucket ? 'nenhum asset nesse filtro' : 'nenhum asset ainda' })));
+  syncSelAllCheckbox('#assetSelAll', list.map(a => a.value).filter(Boolean));
 }
 function syncExport(sel, link){
   const p = $(sel).value;
@@ -1095,7 +1184,7 @@ async function loadPrograms(){
   let programs = [];
   try { ({ programs } = await api('/programs')); } catch {}
   PROGRAMS = programs || [];
-  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#findProgram', '#assetProgram', '#projSelect']) {
+  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#selProgram', '#findProgram', '#assetProgram', '#projSelect']) {
     const s = $(sel), keep = s.firstElementChild, cur = s.value;
     s.innerHTML = ''; s.append(keep);
     for (const p of programs || []) s.append(el('option', { value: p.name, textContent: p.name }));
@@ -1197,7 +1286,7 @@ function propagateProject(name, opts){
   const val = name || '';
   currentProject = val || null;
   persistProject(val);
-  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#nwProgram', '#findProgram', '#assetProgram', '#projSelect']) {
+  for (const sel of ['#activeProject', '#jobProgram', '#plProgram', '#nwProgram', '#selProgram', '#findProgram', '#assetProgram', '#projSelect']) {
     const s = $(sel);
     if (s && [...s.options].some(o => o.value === val)) s.value = val;
   }
@@ -1557,6 +1646,7 @@ function renderFindingsTable(){
       });
       draftLink.addEventListener('click', e => e.stopPropagation());
       tr.append(
+        selCheckbox(f.asset),
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', {}, prioCell),
         el('td', { className:'mono', textContent: f.type || '—' }),
@@ -1572,7 +1662,8 @@ function renderFindingsTable(){
       tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
       tb.append(tr);
   }
-  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:11, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:12, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
+  syncSelAllCheckbox('#findSelAll', list.map(f => f.asset).filter(Boolean));
 }
 
 async function loadFindings(){
@@ -1685,6 +1776,12 @@ async function loadPipelines(){
     for (const p of PIPELINES) sel.append(el('option', { value: p.name, textContent: p.name }));
     renderPipelineMeta();
     $('#plRun').disabled = !PIPELINES.length;
+    const selSel = $('#selPipeline'), keepSel = selSel.value;
+    selSel.innerHTML = '';
+    if (!PIPELINES.length) selSel.append(el('option', { value:'', textContent:'nenhuma pipeline em ./pipelines' }));
+    for (const p of PIPELINES) selSel.append(el('option', { value: p.name, textContent: p.name }));
+    if ([...selSel.options].some(o => o.value === keepSel)) selSel.value = keepSel;
+    updateSelBar();
   } catch (e) {
     $('#plHelp').textContent = 'erro: ' + e.message;
   }
@@ -2135,6 +2232,7 @@ async function loadWordlists(){
 loadTools();
 loadPrograms();
 loadWordlists();
+loadPipelines(); // popula #selPipeline mesmo sem visitar a aba Pipelines
 </script>
 </body>
 </html>
