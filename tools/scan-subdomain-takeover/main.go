@@ -136,18 +136,20 @@ func main() {
 	out.emit(event{Type: "log", Level: "info",
 		Msg: fmt.Sprintf("checando %d host(s) contra %d fingerprint(s) — %d worker(s), timeout %s", len(hosts), len(fps), conc, timeout)})
 
+	takeoverTransport := &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives:   true,
+		MaxIdleConnsPerHost: 1,
+		DialContext:         (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(takeoverTransport, timeout)
 	sc := &scanner{
 		fps:       fps,
 		httpCheck: httpCheck,
 		dns:       newDNSResolver(timeout),
 		client: &http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{
-				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-				DisableKeepAlives:   true,
-				MaxIdleConnsPerHost: 1,
-				DialContext:         (&net.Dialer{Timeout: timeout}).DialContext,
-			},
+			Timeout:       timeout,
+			Transport:     withBlockRotation(takeoverTransport, func(msg string) { out.emit(event{Type: "log", Level: "info", Msg: msg}) }),
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}

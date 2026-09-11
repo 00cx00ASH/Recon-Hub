@@ -23,7 +23,13 @@ type ghClient struct {
 }
 
 func newGH(token string, timeout time.Duration) *ghClient {
-	return &ghClient{http: &http.Client{Timeout: timeout}, token: token, remain: -1}
+	transport := &http.Transport{}
+	applyProxy(transport, timeout)
+	client := &http.Client{
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
+		Timeout:   timeout,
+	}
+	return &ghClient{http: client, token: token, remain: -1}
 }
 
 func (g *ghClient) get(path string) ([]byte, int, error) {
