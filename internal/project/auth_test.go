@@ -7,6 +7,23 @@ import (
 	"testing"
 )
 
+func TestTorControlAddr(t *testing.T) {
+	cases := map[string]string{
+		"socks5://127.0.0.1:9050":           "127.0.0.1:9051",
+		"socks5://tor:9050":                 "tor:9051",
+		"socks5://user:pass@127.0.0.1:9050": "127.0.0.1:9051",
+		"http://127.0.0.1:8080":             "",
+		"https://proxy.example.com:8443":    "",
+		"":                                  "",
+		"not a url \x7f":                    "",
+	}
+	for in, want := range cases {
+		if got := TorControlAddr(in); got != want {
+			t.Errorf("TorControlAddr(%q) = %q, quer %q", in, got, want)
+		}
+	}
+}
+
 func TestLoadAuthMissingIsEmptyNotError(t *testing.T) {
 	dataDir := t.TempDir()
 	a, err := LoadAuth(dataDir, "acme")

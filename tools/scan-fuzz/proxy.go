@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -149,6 +151,7 @@ func socks5Handshake(conn net.Conn, proxyURL *url.URL, targetAddr string, handsh
 	if head[1] != 0x00 {
 		return fmt.Errorf("socks5 CONNECT falhou (código 0x%02x — %s)", head[1], socks5ReplyText(head[1]))
 	}
+	// consome o endereço "bound" que o servidor devolve (tamanho varia por tipo)
 	var skip int
 	switch head[3] {
 	case 0x01:
@@ -193,4 +196,111 @@ func socks5ReplyText(code byte) string {
 	default:
 		return "erro desconhecido"
 	}
+}
+
+// --- rotação automática de circuito (NEWNYM) ---
+
+// withBlockRotation envolve rt pra contar respostas HTTP que parecem
+// bloqueio (403/429) e pedir um circuito Tor novo (IP de saída novo)
+// quando o streak cruza um threshold — automatiza o que antes exigia rodar
+// `docker compose exec tor ... SIGNAL NEWNYM` na mão. É um no-op (devolve
+// rt sem alterar) quando RECONHUB_PROXY_CONTROL_URL não está setada — a
+// engine só injeta essa env var quando o Proxy do programa é socks5://
+// (ver internal/project/auth.go), então chamar isso sem Tor configurado
+// não muda nada. Chame sempre, logo depois de applyProxy.
+func withBlockRotation(rt http.RoundTripper, onRotate func(string)) http.RoundTripper {
+	addr := strings.TrimSpace(os.Getenv("RECONHUB_PROXY_CONTROL_URL"))
+	if addr == "" {
+		return rt
+	}
+	threshold := 5
+	if v := os.Getenv("RECONHUB_PROXY_BLOCK_THRESHOLD"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			threshold = n
+		}
+	}
+	return &blockRotator{
+		RoundTripper: rt,
+		threshold:    threshold,
+		controlAddr:  addr,
+		cooldown:     20 * time.Second,
+		onRotate:     onRotate,
+	}
+}
+
+type blockRotator struct {
+	http.RoundTripper
+	mu          sync.Mutex
+	streak      int
+	threshold   int
+	controlAddr string
+	cooldown    time.Duration
+	lastRotate  time.Time
+	onRotate    func(string)
+}
+
+func (b *blockRotator) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := b.RoundTripper.RoundTrip(req)
+	if err == nil && resp != nil {
+		b.observe(resp.StatusCode)
+	}
+	return resp, err
+}
+
+func (b *blockRotator) observe(status int) {
+	blocked := status == http.StatusForbidden || status == http.StatusTooManyRequests
+	b.mu.Lock()
+	if blocked {
+		b.streak++
+	} else {
+		b.streak = 0
+	}
+	rotate := blocked && b.streak >= b.threshold && time.Since(b.lastRotate) > b.cooldown
+	if rotate {
+		b.streak = 0
+		b.lastRotate = time.Now()
+	}
+	b.mu.Unlock()
+	if !rotate {
+		return
+	}
+	if err := torNewCircuit(b.controlAddr); err != nil {
+		b.log(fmt.Sprintf("tentativa de trocar de circuito Tor falhou: %v", err))
+	} else {
+		b.log(fmt.Sprintf("bloqueio detectado (status %d) — circuito Tor trocado automaticamente", status))
+	}
+}
+
+func (b *blockRotator) log(msg string) {
+	if b.onRotate != nil {
+		b.onRotate(msg)
+	}
+}
+
+// torNewCircuit fala só o suficiente do protocolo de controle do Tor pra
+// pedir um circuito novo: conecta, AUTHENTICATE "" (só é seguro porque o
+// control port nunca é alcançável fora do container — ver
+// docker/tor/torrc: CookieAuthentication 0 + ControlPort em 127.0.0.1),
+// SIGNAL NEWNYM, QUIT. Um SOCKS5 que não seja o sidecar de Tor deste repo
+// simplesmente falha aqui (porta fechada ou resposta inesperada) — sem
+// travar o scan, só sem rotação automática.
+func torNewCircuit(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := conn.Write([]byte("AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n")); err != nil {
+		return err
+	}
+	buf := make([]byte, 512)
+	n, rerr := conn.Read(buf)
+	if n == 0 && rerr != nil {
+		return rerr
+	}
+	if !strings.Contains(string(buf[:n]), "250") {
+		return fmt.Errorf("resposta inesperada do control port: %s", strings.TrimSpace(string(buf[:n])))
+	}
+	return nil
 }

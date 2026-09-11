@@ -160,7 +160,7 @@ func main() {
 	client := &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		Transport:     fuzzTransport,
+		Transport:     withBlockRotation(fuzzTransport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	// monta a fila de paths uma vez (palavra e palavra+ext)

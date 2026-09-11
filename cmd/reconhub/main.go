@@ -179,6 +179,9 @@ func main() {
 		}
 		if a.Proxy != "" {
 			env = append(env, "RECONHUB_PROXY_URL="+a.Proxy)
+			if ctrl := project.TorControlAddr(a.Proxy); ctrl != "" {
+				env = append(env, "RECONHUB_PROXY_CONTROL_URL="+ctrl)
+			}
 		}
 		return env
 	}

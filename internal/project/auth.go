@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -28,6 +29,25 @@ type Auth struct {
 	// programa sem reconfigurar nada manualmente: pedir um circuito novo ao
 	// Tor derruba a sessão SOCKS atual e a próxima conexão sai por outro nó.
 	Proxy string `json:"proxy,omitempty"`
+}
+
+// TorControlAddr derives the Tor control-port address from a configured
+// socks5:// proxy, by convention: same host, port 9051 (docker/tor/torrc
+// ships SOCKSPort 9050 + ControlPort 9051 on the same sidecar). Returns ""
+// for any other scheme (http/https proxies) or no proxy at all — automatic
+// circuit rotation (SIGNAL NEWNYM) only makes sense for Tor. A socks5://
+// proxy that ISN'T this repo's Tor sidecar just fails the control-port
+// handshake harmlessly at runtime (logged, never fatal) — see
+// tools/*/proxy.go's torNewCircuit.
+func TorControlAddr(proxyRaw string) string {
+	if proxyRaw == "" {
+		return ""
+	}
+	u, err := url.Parse(proxyRaw)
+	if err != nil || u.Scheme != "socks5" || u.Hostname() == "" {
+		return ""
+	}
+	return net.JoinHostPort(u.Hostname(), "9051")
 }
 
 // Empty reports whether there's nothing to inject.
