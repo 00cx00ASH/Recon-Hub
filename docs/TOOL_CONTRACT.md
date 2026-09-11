@@ -78,17 +78,21 @@ tem um client SOCKS5 mínimo escrito à mão ali, sem dependência externa).
 **Toda ferramenta nova que fala HTTP com o alvo deve chamar `applyProxy()` +
 envolver o `Transport` final do `http.Client` com `withBlockRotation()`** —
 copie `proxy.go`/`proxy_test.go` de `tools/recon-web-enum/` verbatim (é o
-padrão de referência, testado e replicado em 31 das 34 ferramentas atuais) e
+padrão de referência, testado e replicado em 33 das 37 ferramentas atuais) e
 veja `tools/recon-web-enum/main.go` como exemplo de integração. `withBlockRotation`
 conta respostas 403/429 consecutivas e, ao cruzar um limiar, pede um
 circuito Tor novo via `RECONHUB_PROXY_CONTROL_URL` (`SIGNAL NEWNYM`) — é um
 no-op total quando essa env var não está setada, então chamar isso sempre é
 seguro mesmo sem proxy configurado. As únicas exceções válidas pra pular
 esse padrão são ferramentas que não usam `http.Client` de verdade (falam
-TCP/protocolo binário cru — ex: `scan-mongodb`) ou onde rotear por proxy
+TCP/protocolo binário cru — ex: `scan-mongodb`), onde rotear por proxy
 degradaria uma técnica que depende de timing preciso numa conexão isolada
-(ex: `scan-smuggling`) — documente o motivo no código se pular por esses
-casos.
+(ex: `scan-smuggling`), ou ferramentas que dirigem um navegador de verdade
+via CDP em vez de fazer requisição HTTP diretamente (ex: `scan-xss-dom`) —
+nesse último caso o proxy só é aplicável no allocator LOCAL (`--proxy-server`
+do Chrome, um processo novo por job), nunca no sidecar remoto compartilhado
+(`RECONHUB_CHROME_URL`), já que não dá pra reconfigurar um Chrome já rodando
+pra outro job. Documente o motivo no código se pular por esses casos.
 
 ## 3. Saída — NDJSON no stdout
 

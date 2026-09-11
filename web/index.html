@@ -398,7 +398,7 @@ docker compose exec reconhub cat /app/data/token</pre>
     </div>
 
     <div class="view" id="view-map">
-      <p class="muted" style="margin-top:0">Por onde começar, e o que vem depois — clique num nó pra já ir com a ferramenta/pipeline certa selecionada. 33 ferramentas e 31 pipelines é fácil de se perder; isto aqui é o mapa.</p>
+      <p class="muted" style="margin-top:0">Por onde começar, e o que vem depois — clique num nó pra já ir com a ferramenta/pipeline certa selecionada. 37 ferramentas e 34 pipelines é fácil de se perder; isto aqui é o mapa.</p>
       <div id="mapBody"></div>
     </div>
 
@@ -1945,6 +1945,7 @@ const METHODOLOGY = [
     phase: '4 · Vulnerabilidades', desc: 'A fase mais larga — cada pipeline confirma pela resposta real, nunca só pelo payload aparecer.',
     items: [
       { type: 'pipeline', name: 'xss-sweep', label: 'xss-sweep' },
+      { type: 'pipeline', name: 'dom-xss-sweep', label: 'dom-xss-sweep' },
       { type: 'pipeline', name: 'sqli-sweep', label: 'sqli-sweep' },
       { type: 'pipeline', name: 'ssti-sweep', label: 'ssti-sweep' },
       { type: 'pipeline', name: 'redirect-hunt', label: 'redirect-hunt' },

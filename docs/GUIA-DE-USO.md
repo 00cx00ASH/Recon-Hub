@@ -105,7 +105,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ## 4. O que temos hoje
 
-### 34 ferramentas, por grupo
+### 37 ferramentas, por grupo
 
 **recon — achar superfície**
 
@@ -139,6 +139,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-bruteforce-check`   | confirma ausência de rate limiting/lockout num login/OTP — tentativas erradas travadas (teto 10), para no 1º sinal de proteção |
 | `scan-auth-flow`          | SSO/OAuth: descobre o `authorization_endpoint`, testa bypass de `redirect_uri` (confirma pelo destino real), inventaria metadata SAML |
 | `scan-xss`                | XSS refletido — marcador único em params clássicos, confirma só quando volta sem escapar (nunca dispara execução) |
+| `scan-xss-dom`            | XSS DOM-based — navegador headless real (CDP), vetor hash + query, confirma por EXECUÇÃO (não por texto na resposta); não é XSS armazenado |
 | `scan-sqli`               | SQL injection por vazamento de erro real de banco, ausente no baseline sem payload — nunca time-based/booleana |
 | `scan-ssti`               | Server-Side Template Injection — resultado calculado aparece e o payload cru NÃO, prova avaliação real (5 sintaxes de engine) |
 | `scan-ssrf`               | injeta URLs internas/metadata cloud em params buscados pelo servidor, só confirma pelo CONTEÚDO da resposta |
@@ -194,9 +195,14 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
   mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
   só roteia tráfego se o operador configurar explicitamente pra aquele
-  programa (opt-in — alguns programas proíbem IP anonimizado). 31 das 34
+  programa (opt-in — alguns programas proíbem IP anonimizado). 33 das 37
   ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
   (429/403 repetido). Ver README > Docker > Proxy/Tor.
+- **Chrome headless** — sidecar próprio (`docker/chrome/`), também sempre
+  no ar, mas SEM opt-in: `scan-xss-dom` usa automaticamente via
+  `RECONHUB_CHROME_URL`, sem configuração por programa (é infra
+  compartilhada, não segredo por programa). Não suporta proxy/Tor por job
+  nesse modo. Ver README > Docker > Chrome headless.
 - **MCP** — `cmd/reconhub-mcp`, 21 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +

@@ -202,3 +202,36 @@ sobre caçar bugs em programas de terceiros.
   `target` principal) precisa entrar num desses três mapas
   (`scopeListParams`/`scopeFileParams`/`scopeSingleParams`) — senão vira
   o mesmo buraco de novo.
+- **Injeção de env var pro subprocesso de uma ferramenta tem DOIS
+  mecanismos bem diferentes — usar o errado cria acoplamento que não
+  devia existir.** `Engine.AuthLookup` (chamado só quando `job.Program !=
+  ""`) é pra segredo/config POR PROGRAMA — cookie, bearer, proxy — porque
+  cada programa pode ter uma sessão/circuito diferente. Mas
+  `runner.Run()` já faz `env := os.Environ()` antes de somar o
+  `extraEnv` do `AuthLookup`: qualquer env var setada no processo do
+  HUB (não por programa — global) já propaga sozinha pra todo
+  subprocesso de ferramenta, sem precisar de nenhum código novo no
+  engine. Foi assim que `RECONHUB_CHROME_URL` (aponta pro sidecar de
+  Chrome, infra compartilhada igual o Tor, mas SEM opt-in por programa)
+  foi ligado: só setar a env var no serviço `reconhub` do
+  `docker-compose.yml`, zero mudança em `internal/engine`/`cmd/reconhub`.
+  Antes de tocar `AuthLookup`/`internal/project.Auth` pra uma env var
+  nova, pergunte se ela é por-programa de verdade (então `AuthLookup` é
+  o lugar certo) ou infra global (então é só env var no serviço do hub
+  no compose, ponto).
+- **Contagem de "N ferramentas"/"N pipelines" espalhada em prosa
+  (README, GUIA-DE-USO, TOOL_CONTRACT, o texto da aba Mapa) já ficou
+  dessincronizada da contagem real mais de uma vez, silenciosamente —
+  ninguém recalcula na hora de adicionar 1 ferramenta nova, e nenhum
+  teste/CI confere esses números contra `tools/*/tool.json` de verdade.**
+  Achado ao adicionar `scan-xss-dom`: o texto dizia "34 ferramentas" em
+  3 lugares diferentes com a contagem real já em 36 antes dessa
+  ferramenta nova (drift de tarefas anteriores nunca propagado). Sempre
+  que adicionar/remover uma ferramenta, recontar com `find tools -maxdepth
+  2 -name tool.json | wc -l` (menos 1 pro `example-echo`, que não conta
+  como ferramenta "prontas") e `grep -c '\*\*pronta\*\*' README.md`, e
+  atualizar os 4 lugares junto: README (linha do catálogo + a tabela em
+  si), `docs/GUIA-DE-USO.md` (título "N ferramentas, por grupo"), texto
+  da aba Mapa em `web/index.html`, e a fração de adoção de proxy em
+  README + `docs/TOOL_CONTRACT.md` (denominador = total; numerador =
+  total menos as que documentadamente não usam `http.Client`).

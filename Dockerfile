@@ -5,7 +5,7 @@
 # toolchain Go: o build compila o hub e "esquenta" os caches de módulo/compilação
 # de todas as ferramentas para que `go run` funcione offline em runtime.
 
-FROM golang:1.22-alpine
+FROM golang:1.23-alpine
 
 ENV GOTOOLCHAIN=local \
     CGO_ENABLED=0 \

@@ -16,6 +16,14 @@
 # rotação de circuito (trocar de IP após bloqueio) já é automática pra
 # ferramentas que suportam RECONHUB_PROXY_URL — ver README > Docker >
 # Proxy/Tor pro comando manual de fallback.
+#
+# Chrome: sidecar de Chrome headless também SEMPRE no ar (CDP em
+# 127.0.0.1:9222, mesma exceção de rede do Tor — nada exposto pro host).
+# Diferente do Tor, esse aqui NÃO é opt-in: RECONHUB_CHROME_URL abaixo
+# aponta toda ferramenta baseada em navegador (scan-xss-dom por enquanto)
+# pra ele automaticamente, sem configuração por programa — é infra
+# compartilhada, não segredo por programa. Não suporta proxy/Tor por job
+# (processo único compartilhado); ver tools/scan-xss-dom/browser.go.
 
 services:
   reconhub:
@@ -37,6 +45,7 @@ services:
     environment:
       RECONHUB_TOKEN: "${RECONHUB_TOKEN:-}"
       RECONHUB_STORE: "${RECONHUB_STORE:-}"
+      RECONHUB_CHROME_URL: "http://127.0.0.1:9222"
     restart: unless-stopped
 
   # Sidecar de Tor — SEMPRE no ar junto do reconhub (sem precisar de
@@ -49,6 +58,21 @@ services:
       context: ./docker/tor
     image: reconhub-tor:local
     container_name: reconhub-tor
+    network_mode: "service:reconhub"
+    depends_on:
+      - reconhub
+    restart: unless-stopped
+
+  # Sidecar de Chrome headless — SEMPRE no ar junto do reconhub, mesmo
+  # padrão do sidecar de Tor acima (network_mode compartilhado, nenhuma
+  # porta exposta pro host). CDP em 127.0.0.1:9222, alcançável só de
+  # dentro do container do hub via RECONHUB_CHROME_URL (setado acima no
+  # serviço reconhub).
+  chrome:
+    build:
+      context: ./docker/chrome
+    image: reconhub-chrome:local
+    container_name: reconhub-chrome
     network_mode: "service:reconhub"
     depends_on:
       - reconhub

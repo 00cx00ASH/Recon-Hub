@@ -291,6 +291,18 @@ ainda falta rodar num programa.
   caracteres voltam sem escapar (nunca dispara payload de execução).
   `high` = quebra de tag HTML real; `medium` = só quebra de
   atributo/string JS, exige seu olho no contexto antes de reportar.
+- XSS DOM-based: `scan-xss-dom` — navegador headless de verdade (CDP),
+  não requisição HTTP. Cobre os dois casos que `scan-xss` é
+  estruturalmente incapaz de ver: vetor hash (`location.hash` nunca
+  chega no servidor) e vetor query onde o JS do CLIENTE relê
+  `location.search` depois da página carregar. Confirma por EXECUÇÃO
+  real (propriedade `window` setada por um `onerror` disparado), nunca
+  por texto na resposta — praticamente sem falso positivo. Roda depois
+  de `scan-xss` num alvo que já demonstrou renderizar JS no cliente
+  (SPA, dashboard); mais caro (cada candidato abre uma aba), por isso
+  fica de fora do `full-recon` e tem pipeline próprio, `dom-xss-sweep`,
+  com `max_params`/`concurrency` bem menores que `xss-sweep`. Ainda NÃO
+  é XSS armazenado — ver gap abaixo.
 - SQL injection: `scan-sqli` — aspa/aspa-dupla anexada ao valor de
   parâmetros clássicos (id, page, sort, category…), confirma só com
   assinatura real de erro de banco (MySQL/Postgres/MSSQL/Oracle/SQLite/
@@ -536,12 +548,14 @@ sessão autenticada real ou julgamento de lógica de negócio:
   admin) — `scan-idor` cobre só o horizontal (mesma role, dado de outro
   usuário). Vertical precisaria de uma 3ª sessão com role diferente;
   fica de fora por enquanto.
-- **XSS armazenado/DOM-based** — `scan-xss` cobre só o refletido (prova
-  por análise de texto na resposta HTTP, sem navegador). Armazenado
-  (persiste no banco, aparece em OUTRA página/usuário) e DOM-based (só
-  existe depois do JS rodar no navegador) exigem navegador real ou
-  sessão de segundo usuário — fora do que dá pra fazer com requisição
-  HTTP crua.
+- **XSS armazenado** — `scan-xss-dom` cobre o DOM-based (payload no hash
+  ou query, executa na MESMA navegação, via navegador headless real).
+  Armazenado de verdade (valor persiste no servidor — comentário, bio,
+  nome de perfil — e executa depois em OUTRA página/sessão, às vezes de
+  OUTRO usuário) ainda não tem ferramenta: exigiria submeter o payload
+  num fluxo (form/API), depois abrir uma segunda página/sessão pra
+  confirmar a execução — um teste de duas fases que nenhum scanner do
+  hub faz hoje.
 - **SQLi cega (booleana/time-based), NoSQLi** — `scan-sqli` só confirma
   quando o banco vaza um erro de verdade na resposta. Sem erro visível
   (SQLi cega) precisaria de requisições booleanas (1=1 vs 1=2) ou

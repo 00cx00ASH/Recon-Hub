@@ -446,6 +446,27 @@ var templates = map[string]tmpl{
 			return steps
 		},
 	},
+	"dom-xss": {
+		Name: "Cross-Site Scripting (XSS) DOM-based", CWE: "CWE-79",
+		Description: "JavaScript do lado do cliente lê uma fonte controlável pelo atacante (`location.hash` ou `location.search`/`URLSearchParams`) e insere o valor no DOM sem sanitização (tipicamente via `innerHTML` ou equivalente) — confirmado por execução real num navegador headless, não por análise de texto da resposta HTTP.",
+		Impact:      "Execução de JavaScript arbitrário no navegador da vítima no contexto de origem do site: roubo de sessão/token, ações em nome do usuário, phishing in-page — mesmo impacto do XSS refletido clássico. Quando o vetor é `hash`, o payload nunca é enviado ao servidor (fragmento de URL não faz parte da requisição HTTP), então não aparece em log de acesso nem é bloqueável por WAF de borda — a correção precisa ser no código JS do cliente, não em filtro de borda.",
+		Remediation: "Nunca inserir valor vindo de `location.hash`/`location.search`/`URLSearchParams` diretamente via `innerHTML`, `outerHTML`, `document.write` ou similar. Usar `textContent`/`innerText` quando o valor é texto puro, ou sanitizar com uma biblioteca (ex: DOMPurify) quando HTML de verdade é necessário. CSP com `script-src` restritivo reduz o impacto mas não corrige a causa.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/79.html", "https://owasp.org/www-community/attacks/DOM_Based_XSS", "https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			vec, _ := f.Meta["vector"].(string)
+			steps := []string{"Abra num navegador: `" + f.Asset + "`"}
+			switch vec {
+			case "hash":
+				steps = append(steps, "Vetor: fragmento da URL (`location.hash`) — nunca chega no servidor, só existe no navegador.")
+			case "query":
+				if p, ok := f.Meta["param"].(string); ok && p != "" {
+					steps = append(steps, "Vetor: parâmetro de query `"+p+"` relido do lado do cliente via `location.search`/`URLSearchParams` depois da página carregar.")
+				}
+			}
+			steps = append(steps, "Observe: "+f.Evidence, "O navegador executou o payload como código (onerror de uma <img> injetada disparou) — não é reflexo de texto, é execução real confirmada.")
+			return steps
+		},
+	},
 	"sqli-error-based": {
 		Name: "SQL Injection (baseada em erro)", CWE: "CWE-89",
 		Description: "Um caractere de quebra de string SQL (`'` ou `\"`) anexado a um parâmetro faz a aplicação vazar uma mensagem de erro real do banco de dados na resposta — prova que o valor chega numa query sem sanitização/parametrização.",

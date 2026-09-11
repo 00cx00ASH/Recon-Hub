@@ -1,0 +1,12 @@
+{
+  "name": "dom-xss-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de XSS DOM-based via navegador headless real (vetor hash + query) — o caso que scan-xss (HTTP puro) não enxerga. Deliberadamente mais contido que xss-sweep: cada candidato abre uma aba de navegador de verdade, bem mais caro que uma requisição HTTP, então max_params/concurrency ficam baixos por padrão. Pra um alvo único já conhecido, rode scan-xss-dom direto em vez desse pipeline.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 80 } },
+    {
+      "tool": "scan-xss-dom",
+      "params": { "wordlist": "builtin/xss-params", "max_params": 8, "concurrency": 3 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

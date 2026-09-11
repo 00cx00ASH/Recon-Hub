@@ -371,15 +371,42 @@ rotação a qualquer momento:
 docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
 ```
 
-Hoje isso está implementado em 31 das 34 ferramentas (todas as que falam
-HTTP com o alvo). As 3 que ficam de fora, de propósito, porque não usam
-`http.Client` — falam TCP cru: `scan-mongodb` (wire protocol do MongoDB),
-`recon-infra-enum` (port scan/banner grab) e `scan-smuggling` (mede timing
-numa conexão isolada — rotear por Tor introduziria latência de circuito
-variável que contaminaria o próprio sinal que a técnica depende). O padrão
+Hoje isso está implementado em 33 das 37 ferramentas (todas as que falam
+HTTP com o alvo). As 4 que ficam de fora, de propósito, porque não usam
+`http.Client` — falam TCP cru ou dirigem um navegador: `scan-mongodb` (wire
+protocol do MongoDB), `recon-infra-enum` (port scan/banner grab),
+`scan-smuggling` (mede timing numa conexão isolada — rotear por Tor
+introduziria latência de circuito variável que contaminaria o próprio sinal
+que a técnica depende) e `scan-xss-dom` (fala CDP com um navegador headless;
+proxy só é suportado no allocator local, nunca no sidecar remoto
+compartilhado — ver `docs/TOOL_CONTRACT.md`). O padrão
 (`RECONHUB_PROXY_URL`/`RECONHUB_PROXY_CONTROL_URL`, ver `tools/recon-web-enum/proxy.go`)
 está documentado em `docs/TOOL_CONTRACT.md` pra ferramentas novas adotarem
 desde o início.
+
+#### Chrome headless (XSS DOM-based)
+
+Mesmo padrão de sidecar do Tor, mas sem opt-in: o repo traz um sidecar de
+Chrome headless (`docker/chrome/`) que também sobe **sempre junto** no
+`docker compose up -d --build`, com o devtools remoto (CDP) só alcançável de
+dentro do container do hub em `127.0.0.1:9222` — nada publicado pro host. A
+engine já injeta `RECONHUB_CHROME_URL=http://127.0.0.1:9222` no ambiente do
+container do hub (ver `docker-compose.yml`), que qualquer ferramenta baseada
+em navegador (`scan-xss-dom` por enquanto) lê automaticamente — sem
+configuração por programa, porque não é segredo por programa, é infra
+compartilhada.
+
+Diferente do Tor, esse sidecar **não suporta proxy/Tor por job**: o Chrome
+já está rodando como processo único compartilhado entre jobs, então não dá
+pra reconfigurar `--proxy-server` dele por requisição. Se você precisa rotear
+`scan-xss-dom` por Tor/proxy pra um projeto específico, passe o parâmetro
+`chrome_path` apontando pra um binário Chrome/Chromium local em vez de usar
+o sidecar — nesse modo a ferramenta sobe um processo novo por job e aplica
+`RECONHUB_PROXY_URL` normalmente (ver `tools/scan-xss-dom/browser.go`).
+
+Fora do `docker compose` (rodando o hub direto com `go run`/binário), sem
+`RECONHUB_CHROME_URL` setado a ferramenta cai pro Chrome local — precisa de
+um binário instalado no PATH ou do parâmetro `chrome_path` apontando pra um.
 
 ### Token de acesso
 
@@ -814,7 +841,7 @@ fan-out que combina as ferramentas · **`coberta`** = a função existe em outra
 ferramenta(s) da lista · **`fora de escopo`** = extensão de navegador / plugin de
 Burp, não encaixa no contrato de ferramenta CLI.
 
-Hoje: **34 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
+Hoje: **37 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
 pelas categorias acima (nada ficou de fora).
 
 ### recon — Plataformas de Recon
@@ -867,6 +894,7 @@ pelas categorias acima (nada ficou de fora).
 | `scan-postman-net`          | postEvil         | Busca na rede PÚBLICA do Postman por um termo; lista collections/workspaces públicas, baixa o JSON de cada collection (`run.pstmn.io`) e varre por segredos (AWS/Google/GitHub/Slack/Stripe/OpenAI/chave privada/Bearer/basic-auth em URL) e hosts internos/staging | **pronta** |
 | `scan-postman-audit`        | postmanSAAS      | Auditoria profunda de uma collection do Postman que você aponta (id/URL/workspace): inventário dos requests, 18 padrões de segredo, PII (e-mail/CPF/SSN/cartão com Luhn/IBAN/telefone, redigidos), auth hardcoded nos blocos `auth`, hosts internos | **pronta** |
 | `scan-xss`                  | — (nova)         | XSS refletido: marcador único com aspa/apóstrofo/`<` em parâmetros clássicos (q, search, name, message, callback…), confirma só quando os caracteres voltam sem escapar na resposta real — nunca dispara payload de execução. Distingue quebra de tag HTML (high) de quebra só de atributo/string JS (medium, precisa confirmação manual) | **pronta** |
+| `scan-xss-dom`               | — (nova)         | XSS DOM-based via navegador headless real (CDP, não `http.Client`): vetor hash (`location.hash` nunca chega no servidor) e vetor query (JS do cliente relê `location.search` após carregar). Confirma por EXECUÇÃO real — uma propriedade `window` só vira `true` se o navegador tratar o payload como código (via `onerror` de `<img>`), nunca por texto na resposta. Não é XSS armazenado (mesma navegação, sem persistência) | **pronta** |
 | `scan-sqli`                  | — (nova)         | SQL injection por vazamento de erro: aspa/aspa-dupla anexada ao valor de parâmetros clássicos (id, page, sort, category…), confirma só quando um erro de banco conhecido (MySQL/Postgres/MSSQL/Oracle/SQLite/ORMs) aparece com o payload e está ausente no baseline sem payload. Nunca time-based/booleana | **pronta** |
 | `scan-ssti`                  | — (nova)         | Server-Side Template Injection: expressão matemática (5 sintaxes de engine — Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB, Smarty) num parâmetro renderizado de volta (name, message, search…), confirma só quando o resultado CALCULADO aparece na resposta, ausente no baseline, E o texto cru do payload NÃO aparece (prova avaliação, não reflexo tipo XSS). Par de fatores aleatório por requisição | **pronta** |
 | `scan-ssrf`                  | — (nova)         | Server-Side Request Forgery: injeta URLs de recursos internos/bem-conhecidos (metadata AWS/GCP/Azure, loopback, `file:///etc/passwd`) em parâmetros buscados pelo SERVIDOR (webhook, import, proxy, avatar por URL…), só reporta quando o CONTEÚDO da resposta prova que o servidor buscou aquele recurso | **pronta** |
@@ -940,6 +968,7 @@ tools/scan-postman-audit/   auditoria profunda de collection do Postman (Go, mó
 tools/recon-tech-cve/       fingerprint passivo de stack × tabela curada de CVEs (Go, módulo próprio)
 tools/scan-auth-flow/       SSO/OAuth: bypass de redirect_uri + metadata SAML (Go, módulo próprio)
 tools/scan-xss/             XSS refletido confirmado por texto, sem navegador (Go, módulo próprio)
+tools/scan-xss-dom/         XSS DOM-based confirmado por execução real num navegador headless (Go, módulo próprio)
 tools/scan-sqli/            SQL injection por vazamento de erro real (Go, módulo próprio)
 tools/scan-ssti/            Server-Side Template Injection confirmado por avaliação real (Go, módulo próprio)
 tools/scan-ssrf/            SSRF confirmado pelo conteúdo da resposta (Go, módulo próprio)
@@ -956,7 +985,7 @@ pipelines/                  crtsh-takeover, bucket-hunt, content-sweep,
                             jwt-sweep, mongodb-sweep, ai-key-sweep, js-recon,
                             postman-recon, web-enum-sweep, infra-sweep,
                             infra-mongo, cors-sweep, graphql-sweep,
-                            sqli-sweep, xss-sweep,
+                            sqli-sweep, xss-sweep, dom-xss-sweep,
                             recon-fanout, js-suite, full-recon, demo-echo
 programs/                   escopo dos alvos (projetos)
 scope-templates/            templates de escopo salvos (*.json)
