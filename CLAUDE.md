@@ -114,6 +114,22 @@ sobre caçar bugs em programas de terceiros.
   toda linha de filtros/controles ter `flex-wrap:wrap` desde o início —
   já aconteceu de uma aba ter e outra não (Findings ficou sem, só Assets
   tinha) e ninguém notar até testar em viewport estreito de verdade.
+- **Item de CSS Grid sem `min-width:0` não encolhe abaixo do min-content
+  de dentro dele — mesma família do bug acima, causa diferente.** `main`
+  usa `display:grid` com `.panel`/`.content` como itens; o default de
+  grid item é `min-width:auto`, que vira "o maior min-content de
+  qualquer descendente" (ex: a option mais larga de um `<select>`, uma
+  palavra sem ponto de quebra num `<code>`). Um form de parâmetro com
+  nome técnico longo (`max_recursive_dirs`) bastou pra abrir 7px de
+  overflow em mobile — e nenhum elemento individual "aparecia" como
+  culpado numa busca por `scrollWidth > docW` elemento a elemento (só a
+  `.panel` toda, cujo `right` batia o de nenhum filho — sinal de que é
+  min-content do grid, não um elemento específico largo demais).
+  Corrigido de vez com `main > .panel, main > .content{min-width:0}` —
+  regra geral, não um patch pro form que expôs o bug dessa vez. Se
+  aparecer overflow de novo sem um elemento óbvio e largo demais, suspeite
+  de container flex/grid sem `min-width:0` antes de sair procurando o
+  "elemento culpado" um por um.
 - **`renderMarkdown()` (usado no README das ferramentas/docs) não
   escapava aspas na URL de um link nem checava o esquema** — `[x](javascript:...)`
   virava link clicável, e uma URL com `"` escapava do atributo `href`. Se
