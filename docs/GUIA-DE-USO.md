@@ -297,6 +297,69 @@ você conversa: "roda `full-recon` no acme.com no programa acme e me resume os
 findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 `RECONHUB_TOKEN`).
 
+### g.1) O agent `bugbounty` — passo a passo
+
+É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
+ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
+repo, e só age através das 12 tools MCP acima (sem Bash, sem internet
+solta). Isso importa: **todo job/pipeline que ele dispara passa pelo
+mesmo enforcement de escopo do servidor** que qualquer outro caminho
+(UI, API, CLI) — testado na prática: pedir um alvo fora do
+`in_scope`/`out_of_scope` do programa devolve erro do próprio servidor,
+não é o agent "se comportando bem", é o hub recusando de verdade.
+
+**Passo 1 — pré-requisito.** Suba o hub (seção "a"), tenha pelo menos um
+programa criado (seção "c") com `in_scope` preenchido. Sem programa, o
+agent não tem contra o que validar escopo — ele vai pedir um antes de
+rodar qualquer coisa.
+
+**Passo 2 — chame o agent.** Três jeitos de pedir, cada um muda o
+comportamento:
+
+| Você diz (exemplos) | O que ele faz |
+|---|---|
+| "o que eu faço agora no programa acme?" | **Consultivo.** Olha `hub_list_jobs`/`hub_list_findings`/`hub_list_assets`, recomenda o próximo passo com o porquê. Não roda nada. |
+| "roda `xss-sweep` no acme.com, programa acme" | **Ação direta.** Confirma escopo, dispara, avisa o que rodou. Uma coisa por vez, você no controle. |
+| "explora o programa acme sozinho, budget de 15 jobs" | **Autônomo.** Encadeia rodadas sem pedir aprovação a cada passo — ver passo 3. |
+
+**Passo 3 — modo autônomo, o que esperar.** Se você não disser um
+budget (nº de jobs ou tempo máximo), ele pergunta antes de começar —
+não tem "sem limite" de verdade, sempre existe um teto que você definiu.
+A partir daí, cada rodada é: olha o que já rodou (nunca repete
+ferramenta+alvo já testado) → escolhe UMA ação pela metodologia (recon
+passivo → ativo → API/JS → vulnerabilidades → storage/cloud) → dispara
+→ espera terminar → avalia → registra uma linha em
+`data/projects/<programa>/notes.md` → repete.
+
+**Ele para sozinho** (não só pausa) quando: o budget acaba, acha um
+finding com severidade alta e prova real (`score` alto, `meta.confirmed`
+verdadeiro — não um 401/403 cru), 2-3 rodadas seguidas sem achar nada
+novo, ou uma pergunta de escopo que ele não consegue responder sozinho.
+Um achado crítico interrompe o loop **na hora**, não só no relatório
+final — é a única trava que sobrevive mesmo com budget alto sobrando.
+
+**Passo 4 — acompanhe.** Três lugares, sem precisar ficar olhando a
+conversa:
+- `data/projects/<programa>/notes.md` — o diário que ele escreve rodada
+  a rodada (alvo, ferramenta, resultado, por que parou onde parou).
+- Aba **Findings** do hub — cada achado já vem com `score`/`action`
+  calculados (`internal/intel`) e um conselho específico no hover da
+  prioridade.
+- Aba **Mapa** — pra ver visualmente quais fases da metodologia já têm
+  cobertura nesse programa.
+
+**Passo 5 — depois que ele para.** Se parou por achado crítico, decida:
+reportar agora (peça o rascunho — "monta o relatório desse finding") ou
+mandar continuar ("segue explorando o resto, mesmo budget"). Se parou
+por budget, decida se abre mais budget ou encerra a sessão ali.
+
+Exemplo real, ponta a ponta (validado contra um alvo de teste local
+antes de virar documentação): pedir pra rodar `scan-xss` num endpoint
+vulnerável retornou um finding `high`, `score: 100`,
+`action: "reportar agora"` — o agent para o loop exatamente nesse ponto
+e devolve pra você decidir, em vez de seguir rodando mais 10 ferramentas
+por cima de um achado que já merece atenção.
+
 ### h) SQLite — quando trocar
 
 Fica no FileStore enquanto `data/*.jsonl` estiver confortável. Troca quando
