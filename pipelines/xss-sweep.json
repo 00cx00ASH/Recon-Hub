@@ -1,0 +1,12 @@
+{
+  "name": "xss-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de XSS refletido nos parâmetros classicamente vulneráveis (q, search, name, message, callback…) — confirma pela resposta real, nunca dispara payload de execução.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-xss",
+      "params": { "wordlist": "builtin/xss-params", "max_params": 44, "concurrency": 20 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

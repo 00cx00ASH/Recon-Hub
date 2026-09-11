@@ -1,0 +1,25 @@
+{
+  "name": "scan-xss",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Testa parâmetros classicamente refletidos (q, search, name, message, callback…) com um marcador único prefixado por aspa/apóstrofo/`<` e CONFIRMA o XSS refletido só quando esses caracteres voltam sem escapar na resposta real — nunca dispara payload de execução de verdade, é análise de texto sobre o corpo HTTP. Distingue quebra de tag HTML (alta) de quebra só de atributo/string JS (média, precisa confirmação manual do contexto).",
+  "guide": "Alvo = uma URL http/https, de preferência já com o parâmetro suspeito na query (ex: https://site.com/busca?q=teste). Sem query ele testa os nomes da wordlist assim mesmo. Modos lista/arquivo varrem várias URLs.",
+  "validation": "Exemplo confirmado: ?q=teste responde com <div>resultado: \"'><rhxNNNN</div> sem nenhum caractere convertido pra entidade HTML — o marcador aleatório garante que não é conteúdo real da página coincidindo. Trate 'high' (tag HTML) como reportável direto; 'medium' (só aspa/atributo) merece um olhar manual no HTML ao redor antes de reportar — o scanner não faz parsing de HTML de verdade, só a heurística de 'dentro de <script> ou não'.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "uma URL (idealmente já com ?param=)", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "wordlist", "type": "wordlist", "required": false, "default": "builtin/xss-params", "help": "lista de NOMES de parâmetro a testar" },
+    { "name": "params", "type": "string", "required": false, "help": "nomes de parâmetro extra, separados por vírgula" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor, uma URL por linha" },
+    { "name": "max_params", "type": "int", "required": false, "default": 80, "help": "teto de parâmetros testados por URL" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 20, "help": "requisições simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 8000, "help": "timeout por requisição" }
+  ]
+}
