@@ -26,13 +26,16 @@ refletido. Confirmação = a resposta manda o navegador pro **canary**
 | `list`   | `urls`       | várias URLs coladas (vírgula/linha)        |
 | `file`   | `urls_file`  | arquivo no servidor, uma URL por linha     |
 
-## Payloads (17 bypasses)
+## Payloads (22 bypasses)
 
 `https://CANARY` · `http://CANARY` · `//CANARY` · `https:/CANARY` (barra
 faltando) · `/\CANARY` e `\/\/CANARY` (backslash) · `////CANARY` ·
-`//CANARY/%2e%2e` · `%2F%2FCANARY` · `%09…` / `%0A…` (tab/newline) ·
-`https://ALVO@CANARY` (userinfo) · `https://CANARY#.ALVO` · `https://CANARY?.ALVO`
-· `https://CANARY\.ALVO` · `https://CANARY/.ALVO` · ` //CANARY` (espaço).
+`//CANARY/%2e%2e` · `%2F%2FCANARY` · `%09…` / `%0A…` / `%0D…` (tab/newline/CR) ·
+`https://ALVO@CANARY` (userinfo) · `https://CANARY\@ALVO` (backslash antes do
+@, confusão de parser) · `https://CANARY#.ALVO` · `https://CANARY?.ALVO`
+· `https://CANARY\.ALVO` · `https://CANARY/.ALVO` · ` //CANARY` (espaço) ·
+`%252F%252FCANARY` (double-encoded) · `https://ALVO@ALVO@CANARY` (múltiplos
+@) · `／／CANARY` (barra unicode fullwidth).
 
 Para em cada `(URL, parâmetro)` no **1º payload** que confirmar.
 

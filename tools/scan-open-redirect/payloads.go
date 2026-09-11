@@ -50,6 +50,23 @@ func buildPayloads(canary, targetHost string) []payloadEntry {
 		{"backslash depois do host", "https://" + canary + "\\." + targetHost},
 		{"sufixo confuso", "https://" + canary + "/." + targetHost},
 		{"whitespace + //", " //" + canary},
+		{"carriage return antes da url", "%0Dhttps://" + canary},
+		// double-encoded: um filtro que só decodifica uma vez e checa por
+		// "//"/"://" cru nunca bate nisso (o valor bruto do parâmetro é só
+		// "%252F%252F..."), mas o servidor que decodifica duas vezes (comum
+		// quando um proxy/gateway já decodifica uma camada antes de repassar
+		// pro app) resolve pro "//" real e redireciona do mesmo jeito.
+		{"double-encoded //", "%252F%252F" + canary},
+		// múltiplos @: um parser ingênuo que extrai "host" olhando só o
+		// PRIMEIRO "@" (em vez do último, como RFC 3986/navegadores fazem)
+		// vê targetHost logo no início e aprova — mas o navegador resolve
+		// userinfo até o ÚLTIMO "@", host real é o que vem depois dele.
+		{"múltiplos @ (parser pega o 1º, navegador pega o último)", "https://" + targetHost + "@" + targetHost + "@" + canary},
+		// barra unicode fullwidth (U+FF0F) — alguns proxies/CDNs normalizam
+		// esse caractere pra "/" ASCII antes de repassar a URL adiante, mas
+		// um filtro de string que só reconhece "/" ASCII nunca vê "//" no
+		// valor bruto do parâmetro.
+		{"barra unicode fullwidth (／)", "／／" + canary},
 	}
 	out := make([]payloadEntry, 0, len(tmpl))
 	for _, t := range tmpl {
@@ -64,8 +81,11 @@ func hostOf(raw string) string {
 	s := strings.TrimSpace(raw)
 	s = strings.ReplaceAll(s, "\\", "/")
 	// desfaz encodings comuns que servidores já normalizam na resposta
+	s = strings.ReplaceAll(s, "%252f", "/") // double-encoded primeiro — vira %2f decodificando uma vez a mais
+	s = strings.ReplaceAll(s, "%252F", "/")
 	s = strings.ReplaceAll(s, "%2f", "/")
 	s = strings.ReplaceAll(s, "%2F", "/")
+	s = strings.ReplaceAll(s, "／", "/") // barra unicode fullwidth
 	if s == "" {
 		return ""
 	}
