@@ -71,7 +71,7 @@ Uma linha = um objeto JSON. Campo `type` obrigatório.
 | `log`      | `level` (`info`/`warn`/`error`/`debug`), `msg`                 |
 | `progress` | `msg`, `data` (livre; `data.pct` alimenta a barra)            |
 | `finding`  | `severity`, `finding_type`, `title`, `asset`, `evidence`, `meta` |
-| `asset`    | `kind` (`subdomain`/`url`/`bucket`/`endpoint`/`ip`/…), `value`  |
+| `asset`    | `kind` (`subdomain`/`url`/`bucket`/`endpoint`/`ip`/…), `value`, `meta` opcional |
 | `done`     | `ok` (bool), `msg` opcional                                    |
 | `error`    | `msg` — erro fatal reportado pela própria ferramenta          |
 
@@ -80,6 +80,19 @@ deduplica por `job|kind|value` e as **pipelines** usam esses valores para
 alimentar o próximo step (ver README → Pipelines). Uma ferramenta de recon
 (enum de subdomínios, extração de URLs…) emite `asset`; uma de scan emite
 `finding`. Muitas emitem os dois.
+
+**Convenção `meta.http_status` / `meta.confirmed`:** se a ferramenta já fez a
+requisição HTTP na hora de descobrir o asset ou reportar o finding, inclua o
+código de resposta em `meta.http_status` (int) — tanto em `asset` quanto em
+`finding`. O dashboard lê essa chave pra mostrar uma coluna "http" e pra
+filtrar (achados acessíveis/2xx, bloqueados/401-403, erro de servidor/5xx).
+Se o hit é só um 401/403 que prova que o caminho **existe mas está atrás de
+auth** — não uma vulnerabilidade em si —, marque `meta.confirmed: false` e
+mantenha `severity` em `info`. A maioria dos programas de bug bounty exclui
+explicitamente "página de erro 401/403/500 sem prova" e "achado de scanner
+automatizado não validado" — reportar um 403 puro como `high` gera ruído e
+pode até custar reputação no programa. Veja `probeVerdict` em
+`tools/recon-web-enum/web.go` como referência de implementação.
 
 Regras:
 

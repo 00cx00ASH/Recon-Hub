@@ -151,8 +151,8 @@ func Run(ctx context.Context, tool registry.Tool, job *store.Job, extraEnv []str
 					val = strings.TrimSpace(re.Msg)
 				}
 				if val != "" {
-					onAsset(store.Asset{JobID: job.ID, Tool: job.Tool, Kind: re.Kind, Value: val})
-					emit(store.Event{Type: "asset", Level: re.Kind, Msg: val, Time: time.Now().UTC()})
+					onAsset(store.Asset{JobID: job.ID, Tool: job.Tool, Kind: re.Kind, Value: val, Meta: re.Meta})
+					emit(store.Event{Type: "asset", Level: re.Kind, Msg: val, Data: re.Meta, Time: time.Now().UTC()})
 				}
 			case "progress":
 				emit(store.Event{Type: "progress", Msg: re.Msg, Data: re.Data, Time: time.Now().UTC()})

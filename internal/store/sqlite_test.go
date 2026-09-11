@@ -3,6 +3,7 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -187,6 +188,25 @@ func TestSQLiteAssetsAndRuns(t *testing.T) {
 	as, _ := s.ListAssets(AssetFilter{Kind: "subdomain"})
 	if len(as) != 1 {
 		t.Errorf("assets = %d", len(as))
+	}
+
+	if _, err := s.AddAsset(&Asset{JobID: "j", Kind: "url", Value: "https://a.acme.com/admin", Tool: "t",
+		Meta: json.RawMessage(`{"http_status":403,"confirmed":false}`)}); err != nil {
+		t.Fatalf("AddAsset com meta: %v", err)
+	}
+	urlAssets, _ := s.ListAssets(AssetFilter{Kind: "url"})
+	if len(urlAssets) != 1 {
+		t.Fatalf("assets kind=url = %d", len(urlAssets))
+	}
+	var meta struct {
+		HTTPStatus int  `json:"http_status"`
+		Confirmed  bool `json:"confirmed"`
+	}
+	if err := json.Unmarshal(urlAssets[0].Meta, &meta); err != nil {
+		t.Fatalf("meta não voltou como JSON válido: %v (raw: %s)", err, urlAssets[0].Meta)
+	}
+	if meta.HTTPStatus != 403 || meta.Confirmed {
+		t.Errorf("meta do asset não bateu: %+v", meta)
 	}
 
 	run := &PipelineRun{ID: "r1", Pipeline: "p", Target: "acme.com", Status: StatusRunning,

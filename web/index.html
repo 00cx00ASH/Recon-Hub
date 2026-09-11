@@ -107,6 +107,13 @@
   .sev.low,.sev.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
   .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
 
+  .httpstat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:.1rem .4rem;border-radius:2px;border:1px solid var(--border-strong);color:var(--faint);white-space:nowrap}
+  .httpstat.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .httpstat.redirect{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
+  .httpstat.blocked{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent);opacity:.75}
+  .httpstat.clientErr{color:var(--faint)}
+  .httpstat.serverErr{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+
   .urow{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border:1px solid var(--border);border-radius:4px;margin-bottom:.4rem;cursor:pointer;background:var(--surface)}
   .urow:hover{border-color:var(--border-strong)}
   .urow .score{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);flex:none;width:2.2rem;text-align:right}
@@ -465,6 +472,14 @@ docker compose exec reconhub cat /app/data/token</pre>
       <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.8rem;font-size:12px;color:var(--dim)">
         <label for="findProgram">programa</label>
         <select id="findProgram" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem"><option value="">todos</option></select>
+        <label for="findHttpBucket">http</label>
+        <select id="findHttpBucket" title="filtra pelo status HTTP visto pela ferramenta (quando ela reporta um)" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem">
+          <option value="">todos</option>
+          <option value="exploitable">confirmados (2xx/3xx)</option>
+          <option value="blocked">bloqueados (401/403 — candidato a bypass)</option>
+          <option value="serverErr">erro de servidor (5xx)</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:.3rem" title="alguns programas de bug bounty excluem achados vindos de fonte pública (GitHub/gist/Trello/Wayback) — marcados automaticamente por ferramentas tipo int-github-audit"><input type="checkbox" id="findHidePublic"> ocultar fonte pública</label>
         <a id="findExport" hidden style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar projeto</a>
         <span id="findFilterChip" hidden title="clique pra limpar o filtro"></span>
         <span style="flex:1"></span>
@@ -474,7 +489,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       </div>
       <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
-        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
+        <thead><tr><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>http</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
         <tbody id="findingsRows"></tbody>
       </table></div>
     </div>
@@ -488,9 +503,16 @@ docker compose exec reconhub cat /app/data/token</pre>
         <select id="assetKind" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem">
           <option value="">todos</option><option>subdomain</option><option>url</option><option>bucket</option><option>endpoint</option><option>ip</option>
         </select>
+        <label for="assetHttpBucket">http</label>
+        <select id="assetHttpBucket" title="filtra pelo status HTTP visto na descoberta (quando a ferramenta reporta um)" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.3rem .4rem">
+          <option value="">todos</option>
+          <option value="exploitable">acessível (2xx/3xx)</option>
+          <option value="blocked">bloqueado (401/403)</option>
+          <option value="serverErr">erro de servidor (5xx)</option>
+        </select>
       </div>
       <div class="wrapx"><table>
-        <thead><tr><th>tipo</th><th>valor</th><th>ferramenta</th><th>programa</th><th>quando</th></tr></thead>
+        <thead><tr><th>tipo</th><th>valor</th><th>http</th><th>ferramenta</th><th>programa</th><th>quando</th></tr></thead>
         <tbody id="assetsRows"></tbody>
       </table></div>
     </div>
@@ -578,6 +600,70 @@ docker compose exec reconhub cat /app/data/token</pre>
 const $ = (s, r=document) => r.querySelector(s);
 const el = (t, props={}, kids=[]) => { const n=document.createElement(t); Object.assign(n, props); for(const k of [].concat(kids)) n.append(k); return n; };
 const fmtTime = s => { try { return new Date(s).toLocaleTimeString('pt-BR'); } catch { return s; } };
+
+// extrai status HTTP + se foi confirmado (não só "existe mas bloqueado") do
+// meta de um finding/asset — meta chega como objeto já parseado (json.RawMessage
+// no Go vira JSON aninhado na resposta), mas trata string por segurança.
+function httpMetaOf(row){
+  let m = row && row.meta;
+  if (typeof m === 'string') { try { m = JSON.parse(m); } catch { return null; } }
+  if (!m || typeof m !== 'object') return null;
+  const cand = [m.http_status, m.status, m.registry_status];
+  for (const c of cand) {
+    const n = Number(c);
+    if (Number.isInteger(n) && n >= 100 && n <= 599) {
+      return { status: n, confirmed: m.confirmed !== false };
+    }
+  }
+  return null;
+}
+function httpStatusBadge(row){
+  const hm = httpMetaOf(row);
+  if (!hm) return el('span', { className:'mono', style:'color:var(--faint)', textContent:'—' });
+  const { status, confirmed } = hm;
+  let cls = 'clientErr';
+  if (status >= 200 && status < 300) cls = 'ok';
+  else if (status >= 300 && status < 400) cls = 'redirect';
+  else if (status === 401 || status === 403) cls = 'blocked';
+  else if (status >= 500) cls = 'serverErr';
+  const span = el('span', { className: 'httpstat ' + cls, textContent: String(status) });
+  if (!confirmed) span.title = 'só prova que o caminho existe atrás de auth — bloqueado, não confirmado como achado exploitável/reportável isoladamente';
+  return span;
+}
+// classifica pro filtro: exploitable (2xx/3xx confirmado), blocked (401/403 não
+// confirmado — candidato a bypass), serverErr (5xx), outros
+function httpBucketOf(row){
+  const hm = httpMetaOf(row);
+  if (!hm) return '';
+  if (hm.status >= 500) return 'serverErr';
+  if ((hm.status === 401 || hm.status === 403) && !hm.confirmed) return 'blocked';
+  if (hm.status >= 200 && hm.status < 400 && hm.confirmed) return 'exploitable';
+  return 'other';
+}
+// título com marcador quando o achado veio de fonte pública (GitHub/gist/…)
+// — visível mesmo sem usar o filtro "ocultar fonte pública"
+function titleCell(f){
+  const td = el('td', { textContent: f.title || '' });
+  if (isPublicSource(f)) {
+    td.prepend(el('span', {
+      textContent: '🌐 ', title: 'achado de fonte pública — alguns programas de bug bounty não aceitam isso',
+    }));
+  }
+  return td;
+}
+// asset/valor como link clicável quando é uma URL de verdade
+function assetCell(value){
+  if (!value) return el('td', { className:'mono' });
+  if (/^https?:\/\//i.test(value)) {
+    const a = el('a', {
+      className:'mono', textContent: value, href: value, target:'_blank', rel:'noopener noreferrer',
+      style:'text-decoration:underline;word-break:break-all',
+    });
+    a.addEventListener('click', e => e.stopPropagation());
+    return el('td', {}, a);
+  }
+  return el('td', { className:'mono', textContent: value });
+}
 
 /* ---------- toast + confirm (substituem alert()/confirm() nativos) ---------- */
 function toast(msg, type){
@@ -902,12 +988,13 @@ async function refreshJobFindings(id){
       tr.append(
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', { className:'mono', textContent: f.type || '—' }),
-        el('td', { textContent: f.title || '' }),
-        el('td', { className:'mono', textContent: f.asset || '' }),
+        titleCell(f),
+        assetCell(f.asset),
+        el('td', {}, httpStatusBadge(f)),
       );
       tb.append(tr);
       if (f.evidence) {
-        const er = el('tr'); er.append(el('td',{}), el('td',{colSpan:3, className:'mono', style:'color:var(--faint)', textContent: f.evidence}));
+        const er = el('tr'); er.append(el('td',{}), el('td',{colSpan:4, className:'mono', style:'color:var(--faint)', textContent: f.evidence}));
         tb.append(er);
       }
     }
@@ -925,36 +1012,45 @@ async function refreshJobAssets(id){
     const tb = $('#jAssets').querySelector('tbody');
     tb.innerHTML = '';
     for (const a of list) {
-      tb.append(el('tr', {}, [
-        el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }),
-        el('td', { className:'mono', textContent: a.value }),
-      ]));
+      const tr = el('tr');
+      tr.append(el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }));
+      tr.append(assetCell(a.value));
+      tr.append(el('td', {}, httpStatusBadge(a)));
+      tb.append(tr);
     }
   } catch {}
 }
 
 /* ---------- assets tab ---------- */
+let ASSETS_ALL = [];
 async function loadAssets(){
   try {
     const q = new URLSearchParams({ limit: '2000' });
     if ($('#assetProgram').value) q.set('program', $('#assetProgram').value);
     if ($('#assetKind').value) q.set('kind', $('#assetKind').value);
     const { assets } = await api('/assets?' + q);
-    const tb = $('#assetsRows'); tb.innerHTML = '';
-    for (const a of assets || []) {
-      const tr = el('tr');
-      tr.append(
-        el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }),
-        el('td', { className:'mono', textContent: a.value }),
-        el('td', { className:'mono', textContent: a.tool }),
-        el('td', { className:'mono', textContent: a.program || '' }),
-        el('td', { className:'mono', textContent: fmtTime(a.created_at) }),
-      );
-      tr.addEventListener('click', () => { selectTab('current'); attachJob(a.job_id); });
-      tb.append(tr);
-    }
-    if (!(assets||[]).length) tb.append(el('tr', {}, el('td', { colSpan:5, className:'muted', textContent:'nenhum asset ainda' })));
-  } catch {}
+    ASSETS_ALL = assets || [];
+  } catch { ASSETS_ALL = []; }
+  renderAssetsTable();
+}
+function renderAssetsTable(){
+  const bucket = $('#assetHttpBucket').value;
+  const list = bucket ? ASSETS_ALL.filter(a => httpBucketOf(a) === bucket) : ASSETS_ALL;
+  const tb = $('#assetsRows'); tb.innerHTML = '';
+  for (const a of list) {
+    const tr = el('tr');
+    tr.append(el('td', { className:'mono', style:'color:var(--faint)', textContent: a.kind || '—' }));
+    tr.append(assetCell(a.value));
+    tr.append(el('td', {}, httpStatusBadge(a)));
+    tr.append(
+      el('td', { className:'mono', textContent: a.tool }),
+      el('td', { className:'mono', textContent: a.program || '' }),
+      el('td', { className:'mono', textContent: fmtTime(a.created_at) }),
+    );
+    tr.addEventListener('click', () => { selectTab('current'); attachJob(a.job_id); });
+    tb.append(tr);
+  }
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:6, className:'muted', textContent: bucket ? 'nenhum asset nesse filtro' : 'nenhum asset ainda' })));
 }
 function syncExport(sel, link){
   const p = $(sel).value;
@@ -964,6 +1060,7 @@ function syncExport(sel, link){
 }
 $('#assetProgram').addEventListener('change', () => { syncExport('#assetProgram', '#assetExport'); loadAssets(); });
 $('#assetKind').addEventListener('change', loadAssets);
+$('#assetHttpBucket').addEventListener('change', renderAssetsTable);
 
 /* ---------- jobs tab ---------- */
 async function loadJobs(){
@@ -1368,9 +1465,14 @@ function hostOf(asset){
 let FINDINGS_ALL = [];
 let FINDINGS_FILTER = null; // { tool, type, host } | null
 
+function isPublicSource(row){ return !!(row && row.meta && row.meta.source === 'public'); }
+
 function matchesFindFilter(f){
-  if (!FINDINGS_FILTER) return true;
-  return f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host;
+  if (FINDINGS_FILTER && !(f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host)) return false;
+  const bucket = $('#findHttpBucket').value;
+  if (bucket && httpBucketOf(f) !== bucket) return false;
+  if ($('#findHidePublic').checked && isPublicSource(f)) return false;
+  return true;
 }
 
 function renderGroups(groups){
@@ -1451,8 +1553,9 @@ function renderFindingsTable(){
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', {}, prioCell),
         el('td', { className:'mono', textContent: f.type || '—' }),
-        el('td', { textContent: f.title || '' }),
-        el('td', { className:'mono', textContent: f.asset || '' }),
+        titleCell(f),
+        assetCell(f.asset),
+        el('td', {}, httpStatusBadge(f)),
         el('td', { className:'mono', textContent: (f.count && f.count > 1) ? '×' + f.count : '' }),
         el('td', { className:'mono', textContent: f.tool }),
         el('td', { className:'mono', textContent: fmtTime(f.last_seen || f.created_at) }),
@@ -1462,7 +1565,7 @@ function renderFindingsTable(){
       tr.addEventListener('click', () => { selectTab('current'); attachJob(f.job_id); });
       tb.append(tr);
   }
-  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:10, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
+  if (!list.length) tb.append(el('tr', {}, el('td', { colSpan:11, className:'muted', textContent: FINDINGS_FILTER ? 'nenhum finding nesse grupo' : 'nenhum finding ainda' })));
 }
 
 async function loadFindings(){
@@ -1480,6 +1583,8 @@ async function loadFindings(){
   }
 }
 $('#findProgram').addEventListener('change', () => { syncExport('#findProgram', '#findExport'); loadFindings(); });
+$('#findHttpBucket').addEventListener('change', renderFindingsTable);
+$('#findHidePublic').addEventListener('change', renderFindingsTable);
 
 /* ---------- docs tab ---------- */
 function renderMarkdown(src){
@@ -1931,6 +2036,24 @@ async function loadPanel(){
     return;
   }
   const sevColor = { critical:'var(--crit)', high:'var(--crit)', medium:'var(--warn)', low:'var(--info)', info:'var(--faint)' };
+
+  // categorias por status HTTP, cruzando os findings já carregados acima —
+  // sem chamada extra à API. Mesma classificação usada no filtro da aba
+  // Findings (httpBucketOf), então clicar aqui abre já filtrado lá.
+  const httpByProgram = {};
+  for (const f of findings || []) {
+    const b = httpBucketOf(f);
+    if (!b) continue;
+    const key = f.program || '';
+    const slot = (httpByProgram[key] ||= { exploitable: 0, blocked: 0, serverErr: 0 });
+    slot[b] = (slot[b] || 0) + 1;
+  }
+  const httpChipDefs = [
+    { bucket: 'exploitable', cls: 'ok', label: n => `✓ ${n} acessível` },
+    { bucket: 'blocked', cls: 'blocked', label: n => `🔒 ${n} bloqueado` },
+    { bucket: 'serverErr', cls: 'serverErr', label: n => `⚠ ${n} erro 5xx` },
+  ];
+
   const summaries = await Promise.all(programs.map(async p => {
     try { return [p.name, await api('/programs/' + encodeURIComponent(p.name) + '/summary')]; }
     catch { return [p.name, null]; }
@@ -1948,6 +2071,26 @@ async function loadPanel(){
       }
       card.append(bar);
       card.append(el('div', { className:'pcounts', textContent: `${sum.jobs ?? 0} job(s) · ${sum.findings ?? 0} finding(s) · ${sum.assets ?? 0} asset(s)` }));
+
+      const httpCounts = httpByProgram[name];
+      if (httpCounts) {
+        const chipRow = el('div', { className:'pcounts', style:'gap:.35rem' });
+        for (const def of httpChipDefs) {
+          const n = httpCounts[def.bucket] || 0;
+          if (!n) continue;
+          const chip = el('span', { className: 'httpstat ' + def.cls, textContent: def.label(n), style: 'cursor:pointer' });
+          chip.title = 'ver esses findings filtrados na aba Findings';
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            propagateProject(name, { reload: false });
+            $('#findHttpBucket').value = def.bucket;
+            selectTab('findings');
+          });
+          chipRow.append(chip);
+        }
+        if (chipRow.children.length) card.append(chipRow);
+      }
+
       card.append(el('div', { className:'pmeta', textContent: sum.last_activity ? 'última atividade ' + fmtTime(sum.last_activity) : 'sem atividade ainda' }));
     } else {
       card.append(el('div', { className:'pmeta', textContent:'erro ao carregar resumo' }));

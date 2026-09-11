@@ -90,7 +90,9 @@ func main() {
 		flagDepth   = flag.Int("depth", 0, "profundidade do crawl (0 = param/2)")
 		flagMax     = flag.Int("max-pages", 0, "teto de páginas no crawl (0 = param/60)")
 		flagNoProbe = flag.Bool("no-probe", false, "não sondar caminhos administrativos/sensíveis")
+		flagBypass  = flag.Bool("try-bypass", false, "tenta um punhado de técnicas clássicas de bypass (barra dupla, X-Original-URL, X-Forwarded-For…) nos 401/403 achados — opt-in, só dispara nos já bloqueados, não é fuzzing")
 		flagConc    = flag.Int("concurrency", 0, "requisições simultâneas (0 = param/10)")
+		flagDelay   = flag.Int("delay-ms", 0, "pausa entre requisições de cada worker na sondagem (0 = param/25) — espaça o tráfego pra não acionar WAF/rate-limit")
 		flagTOms    = flag.Int("timeout-ms", 0, "timeout req (0 = param/10000)")
 		flagPretty  = flag.Bool("pretty", false, "saída legível")
 	)
@@ -103,7 +105,9 @@ func main() {
 	depth := pick(*flagDepth, intParam(pl.Params, "depth"), 2)
 	maxPages := pick(*flagMax, intParam(pl.Params, "max_pages"), 60)
 	conc := pick(*flagConc, intParam(pl.Params, "concurrency"), 10)
+	delay := time.Duration(pick(*flagDelay, intParam(pl.Params, "delay_ms"), 25)) * time.Millisecond
 	doProbe := !*flagNoProbe && !boolParam(pl.Params, "no_probe")
+	tryBypassFlag := *flagBypass || boolParam(pl.Params, "try_bypass")
 
 	// uma ou mais raízes (o feed de pipeline pode injetar em params.target)
 	seenR := map[string]bool{}
@@ -146,7 +150,7 @@ func main() {
 	}
 	totalPages, totalHits := 0, 0
 	for _, root := range roots {
-		p, h := enumSite(root, depth, maxPages, conc, doProbe)
+		p, h := enumSite(root, depth, maxPages, conc, doProbe, delay, tryBypassFlag)
 		totalPages += p
 		totalHits += h
 	}
@@ -155,7 +159,7 @@ func main() {
 
 // enumSite runs the full crawl + fingerprint + probe for one root URL.
 // Returns (pages crawled, probe paths found).
-func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
+func enumSite(root string, depth, maxPages, conc int, doProbe bool, delay time.Duration, doBypass bool) (int, int) {
 	ru, err := url.Parse(root)
 	if err != nil {
 		emit(ev{Type: "log", Level: "warn", Msg: "URL inválida: " + root})
@@ -264,7 +268,7 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 	}
 
 	base := calibrate(root)
-	emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("baseline soft-404: status %d, ~%d bytes — sondando %d caminho(s)", base.status, base.size, len(probePaths))})
+	emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("baseline soft-404: status %d, ~%d bytes — sondando %d caminho(s) (%d workers, %s de pausa/req)", base.status, base.size, len(probePaths), conc, delay)})
 
 	type task struct {
 		path, kind, sev string
@@ -278,19 +282,22 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 		go func() {
 			defer wg.Done()
 			for t := range ch {
+				if delay > 0 {
+					time.Sleep(delay)
+				}
 				u := strings.TrimRight(root, "/") + t.path
 				body, hdr, status, err := fetch(u)
 				if err != nil {
 					continue
 				}
-				ok, note := probeVerdict(t.kind, status, len(body), hdr.Get("Content-Type"), body, base)
+				ok, confirmed, note := probeVerdict(t.kind, status, len(body), hdr.Get("Content-Type"), body, base)
 				if !ok {
 					continue
 				}
 				mu2.Lock()
 				hitCount++
 				mu2.Unlock()
-				emit(ev{Type: "asset", Kind: "url", Value: u})
+				emit(ev{Type: "asset", Kind: "url", Value: u, Meta: map[string]any{"http_status": status}})
 				sev := t.sev
 				ft := "web-path-found"
 				switch t.kind {
@@ -305,11 +312,35 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 				case "info":
 					ft = "web-info-file"
 				}
+				title := t.kind + ": " + u
+				if !confirmed {
+					// só prova que o caminho existe e está atrás de auth — não é
+					// achado reportável isoladamente, então não infla a severidade
+					// nem marca como confirmado (ver probeVerdict).
+					sev = "info"
+					title = "[bloqueado] " + title
+				}
 				emit(ev{Type: "finding", Severity: sev, FindingType: ft,
-					Title:    t.kind + ": " + u,
+					Title:    title,
 					Asset:    u,
 					Evidence: note,
-					Meta:     map[string]any{"path": t.path, "kind": t.kind, "status": status}})
+					Meta:     map[string]any{"path": t.path, "kind": t.kind, "http_status": status, "confirmed": confirmed}})
+
+				// candidato a bypass: só dispara pra um caminho JÁ confirmado
+				// bloqueado (401/403), com opt-in explícito, e só um punhado de
+				// técnicas fixas — nunca um fuzzer geral. Ver bypass.go.
+				if !confirmed && doBypass && (t.kind == "admin" || t.kind == "debug") {
+					if delay > 0 {
+						time.Sleep(delay)
+					}
+					if bOK, technique, bNote := tryBypass(root, t.path, base); bOK {
+						emit(ev{Type: "finding", Severity: "high", FindingType: "auth-bypass-candidate",
+							Title:    "possível bypass de auth (" + technique + "): " + u,
+							Asset:    u,
+							Evidence: bNote,
+							Meta:     map[string]any{"path": t.path, "kind": t.kind, "technique": technique, "confirmed": true, "needs_manual_review": true}})
+					}
+				}
 			}
 		}()
 	}

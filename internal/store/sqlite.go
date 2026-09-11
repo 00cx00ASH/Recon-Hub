@@ -70,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_findings_last ON findings(last_seen);
 
 CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY, dedup_key TEXT UNIQUE, job_id TEXT, tool TEXT, program TEXT,
-  kind TEXT, value TEXT, created_at TEXT
+  kind TEXT, value TEXT, meta TEXT, created_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_assets_job ON assets(job_id);
 CREATE INDEX IF NOT EXISTS idx_assets_program ON assets(program);
@@ -97,10 +97,11 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("schema: %w", err)
 	}
-	// migração leve pra bancos criados antes do campo triage existir — ignora
+	// migração leve pra bancos criados antes desses campos existirem — ignora
 	// erro de coluna duplicada (não há um framework de migração aqui ainda).
 	_, _ = db.Exec(`ALTER TABLE findings ADD COLUMN triage TEXT`)
 	_, _ = db.Exec(`ALTER TABLE findings ADD COLUMN triaged_at TEXT`)
+	_, _ = db.Exec(`ALTER TABLE assets ADD COLUMN meta TEXT`)
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -402,13 +403,13 @@ func (s *SQLiteStore) AddAsset(a *Asset) (bool, error) {
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = time.Now().UTC()
 	}
-	_, ierr := s.db.Exec(`INSERT INTO assets (id,dedup_key,job_id,tool,program,kind,value,created_at) VALUES (?,?,?,?,?,?,?,?)`,
-		a.ID, key, a.JobID, a.Tool, a.Program, a.Kind, a.Value, tstr(a.CreatedAt))
+	_, ierr := s.db.Exec(`INSERT INTO assets (id,dedup_key,job_id,tool,program,kind,value,meta,created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		a.ID, key, a.JobID, a.Tool, a.Program, a.Kind, a.Value, string(a.Meta), tstr(a.CreatedAt))
 	return true, ierr
 }
 
 func (s *SQLiteStore) ListAssets(f AssetFilter) ([]*Asset, error) {
-	q := `SELECT id,job_id,tool,program,kind,value,created_at FROM assets`
+	q := `SELECT id,job_id,tool,program,kind,value,meta,created_at FROM assets`
 	where, args := whereClause(map[string]string{
 		"job_id": f.JobID, "tool": f.Tool, "program": f.Program, "kind": f.Kind,
 	})
@@ -421,9 +422,13 @@ func (s *SQLiteStore) ListAssets(f AssetFilter) ([]*Asset, error) {
 	var out []*Asset
 	for rows.Next() {
 		var a Asset
+		var meta sql.NullString
 		var created string
-		if err := rows.Scan(&a.ID, &a.JobID, &a.Tool, &a.Program, &a.Kind, &a.Value, &created); err != nil {
+		if err := rows.Scan(&a.ID, &a.JobID, &a.Tool, &a.Program, &a.Kind, &a.Value, &meta, &created); err != nil {
 			return nil, err
+		}
+		if meta.Valid && meta.String != "" {
+			a.Meta = json.RawMessage(meta.String)
 		}
 		a.CreatedAt = rtime(created)
 		out = append(out, &a)
@@ -571,8 +576,8 @@ func Migrate(dataDir, sqlitePath string) error {
 	as, _ := fs.ListAssets(AssetFilter{Limit: 1 << 30})
 	for _, a := range as {
 		key := a.JobID + "\x00" + a.Kind + "\x00" + a.Value
-		if _, err := sq.db.Exec(`INSERT OR IGNORE INTO assets (id,dedup_key,job_id,tool,program,kind,value,created_at) VALUES (?,?,?,?,?,?,?,?)`,
-			orID(a.ID), key, a.JobID, a.Tool, a.Program, a.Kind, a.Value, tstr(a.CreatedAt)); err != nil {
+		if _, err := sq.db.Exec(`INSERT OR IGNORE INTO assets (id,dedup_key,job_id,tool,program,kind,value,meta,created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+			orID(a.ID), key, a.JobID, a.Tool, a.Program, a.Kind, a.Value, string(a.Meta), tstr(a.CreatedAt)); err != nil {
 			return fmt.Errorf("asset: %w", err)
 		}
 	}

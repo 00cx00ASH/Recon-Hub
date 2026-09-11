@@ -81,6 +81,7 @@ func main() {
 		flagCodes  = flag.String("match-codes", "", "status que contam como hit")
 		flagFilter = flag.Int("filter-size", -1, "esconder respostas desse tamanho")
 		flagConc   = flag.Int("concurrency", 0, "workers")
+		flagDelay  = flag.Int("delay-ms", 0, "pausa entre requisições de cada worker (espaça o tráfego pra não acionar WAF/rate-limit; 0 = usa o padrão)")
 		flagTOms   = flag.Int("timeout-ms", 0, "timeout por req")
 		flagPretty = flag.Bool("pretty", false, "saída legível")
 	)
@@ -138,10 +139,15 @@ func main() {
 			filterSize = n
 		}
 	}
-	conc := pick(*flagConc, intParam(pl.Params, "concurrency"), 30)
+	// padrão mais conservador que o clássico "ffuf-style" — content discovery
+	// em rajada de dezenas de req/s é o gatilho mais comum de bloqueio por
+	// WAF/rate-limit, e a maioria dos programas de bug bounty proíbe tráfego
+	// automatizado pesado. delay_ms pausa cada worker entre requisições.
+	conc := pick(*flagConc, intParam(pl.Params, "concurrency"), 10)
 	if conc < 1 {
-		conc = 30
+		conc = 10
 	}
+	delay := time.Duration(pick(*flagDelay, intParam(pl.Params, "delay_ms"), 25)) * time.Millisecond
 	timeout := time.Duration(pick(*flagTOms, intParam(pl.Params, "timeout_ms"), 7000)) * time.Millisecond
 
 	client := &http.Client{
@@ -165,11 +171,11 @@ func main() {
 	}
 
 	emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf(
-		"%d URL(s) base · %d palavras · exts=%v · codes=%v · %d workers", len(bases), len(words), exts, sortedCodes(codes), conc)})
+		"%d URL(s) base · %d palavras · exts=%v · codes=%v · %d workers · %s de pausa/req", len(bases), len(words), exts, sortedCodes(codes), conc, delay)})
 
 	totalReq, totalHits := 0, 0
 	for _, base := range bases {
-		r, h := fuzzBase(client, base, candidates, exts, codes, filterSize, conc)
+		r, h := fuzzBase(client, base, candidates, exts, codes, filterSize, conc, delay)
 		totalReq += r
 		totalHits += h
 	}
@@ -178,7 +184,7 @@ func main() {
 }
 
 // fuzzBase calibra o soft-404 de base e roda a wordlist contra ele.
-func fuzzBase(client *http.Client, base string, candidates, exts []string, codes map[int]bool, filterSize, conc int) (reqs, hits int) {
+func fuzzBase(client *http.Client, base string, candidates, exts []string, codes map[int]bool, filterSize, conc int, delay time.Duration) (reqs, hits int) {
 	bl := calibrate(client, base, exts)
 	if bl.present {
 		emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("%s — soft-404: status %d, ~%d bytes", base, bl.status, bl.size)})
@@ -198,6 +204,9 @@ func fuzzBase(client *http.Client, base string, candidates, exts []string, codes
 		go func() {
 			defer wg.Done()
 			for path := range jobs {
+				if delay > 0 {
+					time.Sleep(delay)
+				}
 				u := base + "/" + path
 				st, sz, ok := probe(client, u)
 

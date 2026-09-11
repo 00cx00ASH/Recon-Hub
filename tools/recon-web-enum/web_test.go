@@ -184,24 +184,25 @@ func TestBaselineSoft(t *testing.T) {
 
 func TestProbeVerdict(t *testing.T) {
 	base := baseline{status: 404, size: 150}
-	// admin 403 -> existe mas protegido
-	if ok, _ := probeVerdict("admin", 403, 500, "text/html", "forbidden", base); !ok {
-		t.Error("admin 403 deveria contar")
+	// admin 403 -> existe mas protegido: conta como hit (pra visibilidade),
+	// mas NÃO confirmado — não é achado reportável isoladamente.
+	if ok, confirmed, _ := probeVerdict("admin", 403, 500, "text/html", "forbidden", base); !ok || confirmed {
+		t.Error("admin 403 deveria contar como hit, mas não confirmado")
 	}
-	// admin 200 real
-	if ok, _ := probeVerdict("admin", 200, 4000, "text/html", "<html>login</html>", base); !ok {
-		t.Error("admin 200 fora do baseline deveria contar")
+	// admin 200 real -> confirmado
+	if ok, confirmed, _ := probeVerdict("admin", 200, 4000, "text/html", "<html>login</html>", base); !ok || !confirmed {
+		t.Error("admin 200 fora do baseline deveria contar e ser confirmado")
 	}
 	// soft-404
-	if ok, _ := probeVerdict("admin", 404, 150, "text/html", "not found", base); ok {
+	if ok, _, _ := probeVerdict("admin", 404, 150, "text/html", "not found", base); ok {
 		t.Error("soft-404 não deveria contar")
 	}
 	// sensitive file that's just an SPA html page
-	if ok, _ := probeVerdict("sensitive-file", 200, 3000, "text/html", "<html><body>app</body></html>", base); ok {
+	if ok, _, _ := probeVerdict("sensitive-file", 200, 3000, "text/html", "<html><body>app</body></html>", base); ok {
 		t.Error("SPA html não é o arquivo sensível")
 	}
 	// .git/config real content
-	if ok, _ := probeVerdict("sensitive-file", 200, 120, "text/plain", "[core]\n\trepositoryformatversion = 0", base); !ok {
-		t.Error("conteúdo real de .git/config deveria contar")
+	if ok, confirmed, _ := probeVerdict("sensitive-file", 200, 120, "text/plain", "[core]\n\trepositoryformatversion = 0", base); !ok || !confirmed {
+		t.Error("conteúdo real de .git/config deveria contar e ser confirmado")
 	}
 }

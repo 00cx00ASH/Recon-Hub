@@ -47,13 +47,14 @@ type Event struct {
 // Asset is something a tool discovered (a subdomain, URL, bucket, endpoint…).
 // Pipelines feed assets from one step into the next step's parameters.
 type Asset struct {
-	ID        string    `json:"id"`
-	JobID     string    `json:"job_id"`
-	Tool      string    `json:"tool"`
-	Program   string    `json:"program,omitempty"`
-	Kind      string    `json:"kind"` // subdomain | url | bucket | endpoint | ip | ""
-	Value     string    `json:"value"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string          `json:"id"`
+	JobID     string          `json:"job_id"`
+	Tool      string          `json:"tool"`
+	Program   string          `json:"program,omitempty"`
+	Kind      string          `json:"kind"` // subdomain | url | bucket | endpoint | ip | ""
+	Value     string          `json:"value"`
+	Meta      json.RawMessage `json:"meta,omitempty"` // optional: http_status, content_type, etc — set by tools that already know it at discovery time
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 // AssetFilter narrows an asset listing. Zero values mean "no filter".
