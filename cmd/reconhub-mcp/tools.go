@@ -23,8 +23,13 @@ func orderedTools(reg map[string]mcpTool) []mcpTool {
 	return out
 }
 
-// obj is a tiny helper to write JSON Schema.
+// obj is a tiny helper to write JSON Schema. A nil props must still serialize
+// as an empty object ({}), not null — strict MCP clients reject a null
+// "properties" and refuse the whole tools/list.
 func obj(props map[string]any, required ...string) map[string]any {
+	if props == nil {
+		props = map[string]any{}
+	}
 	s := map[string]any{"type": "object", "properties": props}
 	if len(required) > 0 {
 		s["required"] = required

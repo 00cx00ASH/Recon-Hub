@@ -82,6 +82,17 @@ func inScope(tool string, prog *scope.Program, target string) bool {
 	return prog.Contains(target)
 }
 
+// outOfScopeMsg builds a 403 message that shows the target and the program's
+// actual in-scope patterns, so a user who set an empty or mismatched scope can
+// see immediately why everything is being rejected.
+func outOfScopeMsg(target string, prog *scope.Program) string {
+	in := strings.Join(prog.InScope, ", ")
+	if strings.TrimSpace(in) == "" {
+		in = "(vazio — defina o in-scope na aba Projetos)"
+	}
+	return fmt.Sprintf("alvo %q fora do escopo do programa %q. In-scope: %s", target, prog.Name, in)
+}
+
 var (
 	errNoPrograms     = &apiErr{"nenhum programa configurado em ./programs"}
 	errUnknownProgram = &apiErr{"programa desconhecido"}
@@ -251,7 +262,7 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 	if prog != nil {
 		name = prog.Name
 		if !inScope(req.Tool, prog, req.Target) {
-			writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q", req.Target, name))
+			writeErr(w, http.StatusForbidden, outOfScopeMsg(req.Target, prog))
 			return
 		}
 	}
@@ -1006,7 +1017,7 @@ func (s *Server) createPipelineRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if prog != nil && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, req.Target) {
-		writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q", req.Target, prog.Name))
+		writeErr(w, http.StatusForbidden, outOfScopeMsg(req.Target, prog))
 		return
 	}
 	run, err := s.Engine.SubmitPipeline(pl, req.Target, prog)

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -71,7 +72,7 @@ func (p Program) Contains(host string) bool {
 //	*.example.com   example.com and any subdomain
 //	.example.com    any subdomain (not the apex)
 func matchPattern(pattern, host string) bool {
-	pattern = strings.TrimSpace(strings.ToLower(pattern))
+	pattern = cleanPattern(pattern)
 	switch {
 	case pattern == "":
 		return false
@@ -241,7 +242,7 @@ func cleanList(in []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, s := range in {
-		s = strings.TrimSpace(strings.ToLower(s))
+		s = cleanPattern(s)
 		if s == "" || seen[s] {
 			continue
 		}
@@ -249,4 +250,26 @@ func cleanList(in []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// cleanPattern normalizes a scope pattern to a bare host pattern: lowercases,
+// trims, and strips a URL scheme, path, or port a user may have pasted in — so
+// "https://*.example.com/api" and "example.com:443" become "*.example.com" and
+// "example.com". The "*." and "." subdomain prefixes are preserved. Applied
+// both when scope is saved and at match time, so programs saved with messy
+// patterns still match correctly without re-editing.
+func cleanPattern(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	if i := strings.IndexByte(s, '/'); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.LastIndexByte(s, ':'); i >= 0 {
+		if _, err := strconv.Atoi(s[i+1:]); err == nil {
+			s = s[:i]
+		}
+	}
+	return strings.TrimSuffix(s, ".")
 }
