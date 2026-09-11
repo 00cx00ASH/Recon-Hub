@@ -354,6 +354,70 @@ pra rodar direto num host novo. As mais úteis pra varredura ampla:
 - `deep-web-audit` — content discovery → segredos nas páginas achadas.
 - `infra-sweep` / `infra-mongo` — port scan e Mongo sem auth.
 
+## Raciocínio de arquitetura, red team e dev (além de seguir a esteira mecanicamente)
+
+A esteira acima é o "o quê" (qual ferramenta pra qual fase). Isto é o "por
+quê escolher X antes de Y" quando mais de uma fase faz sentido ao mesmo
+tempo — reconhecer o padrão de arquitetura por trás do que o recon já
+revelou muda a prioridade, e olhar um achado com olho de dev muda a
+severidade real dele. Isso não abre nenhuma ferramenta nova — é
+raciocínio melhor sobre as mesmas `mcp__reconhub__hub_*` de sempre.
+
+### Ler o padrão de arquitetura no que o recon já mostrou
+- Subdomínios tipo `api-gateway`, `bff`, `<serviço>.internal.<domínio>`
+  exposto por engano, ou `/api/v1` e `/api/v2` respondendo em paralelo no
+  mesmo host → microsserviços atrás de um gateway. Muda a prioridade: a
+  versão velha esquecida (`/api/v1/...`) é candidata a ter perdido uma
+  proteção que só foi aplicada na v2 — teste o MESMO endpoint em ambas as
+  versões antes de assumir que o v1 tem a mesma defesa.
+- Um único host respondendo por dezenas de rotas sem separação de
+  subdomínio → monolito. A superfície de auth tende a ser MENOS
+  segmentada (uma sessão vale pra tudo) — um IDOR (`scan-idor`) ali tende
+  a ter alcance maior que o mesmo bug num serviço isolado.
+- `Authorization: Bearer ey...` em vez de cookie de sessão → JWT sem
+  estado. Priorize `js-jwt-finder` (alg=none/chave fraca) E teste se o
+  MESMO token funciona em outros subdomínios/serviços — audience mal
+  validada é comum nesse desenho e não aparece testando só um host.
+- GraphQL como API principal (não REST) → a introspection do
+  `scan-graphql` vale mais que fuzzing de rota aqui: o schema geralmente
+  revela a superfície inteira de uma vez, mutations administrativas
+  inclusas, que um crawl raso nunca acharia sozinho.
+
+### Priorização de red team quando o budget é curto
+Nem toda superfície vale o mesmo tempo de teste — value scoring antes de
+gastar rodada, não depois:
+1. Dinheiro/pagamento/checkout > autenticação/sessão > dado pessoal >
+   funcionalidade sem dado sensível.
+2. Painel admin/interno exposto por engano > funcionalidade pública do
+   produto — o impacto de QUALQUER classe de bug ali é amplificado pelo
+   nível de privilégio do painel, mesmo sendo a mesma vulnerabilidade que
+   você acharia num lugar público.
+3. Um finding de baixa severidade num componente REUTILIZADO (mesmo JS,
+   mesmo template, mesma lib) em vários ativos > um achado isolado de
+   severidade média num único endpoint — o primeiro vira relatório com
+   causa raiz única e múltiplos ativos afetados, que pesa mais na maioria
+   dos programas do que achados pontuais desconectados (ver também o
+   gatilho "confirmou um finding_type → varre o resto da stack" na seção
+   de gatilhos de aprofundar acima).
+
+### Sinais de dev que mudam a leitura de um achado
+- `int-github-audit` achou código-fonte de verdade → antes de reportar só
+  "segredo exposto", olhe o USO no código. Chave só referenciada em
+  `.github/workflows/*test*.yml`/fixture de teste tem impacto bem menor
+  que a mesma chave usada num caminho de produção — não é o mesmo
+  `critical` só porque o padrão de regex bateu igual.
+- Stack trace vazando em erro (comum quando `scan-sqli` não confirma
+  banco de verdade) → o FRAMEWORK da stack já diz se vale aprofundar
+  manualmente: uma stack de ORM (Sequelize/TypeORM/Hibernate/ActiveRecord)
+  com erro de sintaxe SQL é sinal bem mais forte de injeção real do que
+  um erro genérico de framework web sem nada de banco nele.
+- `scan-dep-confusion` achou pacote não reivindicado com nome muito
+  específico da empresa (`@acme-internal/auth-core`) em vez de um nome
+  genérico (`utils`, `helpers`) → maior probabilidade de ser puxado por
+  CI/build de verdade (nome específico normalmente não é coincidência) —
+  prioriza esse sobre um nome genérico mesmo que os dois deem
+  "unclaimed" no scanner.
+
 ## O que falta (gaps reais — diga isso quando perguntarem "cobre tudo?")
 
 O hub é forte em recon, exposição de segredo/storage, e um punhado de
