@@ -29,6 +29,32 @@ func fakeHub(t *testing.T) (*hubClient, *httptest.Server) {
 		}
 		w.Write([]byte(`{"findings":[]}`))
 	})
+	mux.HandleFunc("POST /api/findings/{id}/triage", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if r.PathValue("id") != "f1" || body["verdict"] != "confirmed" {
+			t.Errorf("triage: id/body inesperado: id=%s body=%v", r.PathValue("id"), body)
+		}
+		reason, _ := body["reason"].(string)
+		w.Write([]byte(`{"id":"f1","triage":"confirmed","triage_reason":"` + reason + `"}`))
+	})
+	mux.HandleFunc("POST /api/programs", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["name"] != "acme" {
+			t.Errorf("create_program: corpo inesperado: %v", body)
+		}
+		w.WriteHeader(201)
+		w.Write([]byte(`{"name":"acme","in_scope":["*.acme.com"]}`))
+	})
+	mux.HandleFunc("GET /api/findings/{id}/draft.md", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Write([]byte("# Relatório de recon — finding " + r.PathValue("id") + "\n"))
+	})
+	mux.HandleFunc("GET /api/programs/{name}/report.md", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Write([]byte("# Relatório — " + r.PathValue("name") + "\n"))
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &hubClient{base: srv.URL, http: &http.Client{Timeout: 5 * time.Second}}, srv
@@ -61,8 +87,8 @@ func TestInitializeAndList(t *testing.T) {
 
 	resp, _ = handle(&rpcRequest{ID: json.RawMessage(`2`), Method: "tools/list"}, reg)
 	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
-	if len(tools) != 12 {
-		t.Fatalf("esperava 12 tools MCP, veio %d", len(tools))
+	if len(tools) != 16 {
+		t.Fatalf("esperava 16 tools MCP, veio %d", len(tools))
 	}
 	if tools[0]["name"] != "hub_list_tools" {
 		t.Fatalf("ordem inesperada: %v", tools[0]["name"])
@@ -91,6 +117,83 @@ func TestCallForwardsToHub(t *testing.T) {
 
 	// query params encaminhados
 	callTool(t, reg, "hub_list_findings", map[string]any{"severity": "high"})
+}
+
+func TestTriageFinding(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_triage_finding", map[string]any{
+		"id": "f1", "verdict": "confirmed", "reason": "testado manualmente, bucket abre de verdade",
+	})
+	if out["isError"] == true {
+		t.Fatalf("triage_finding deu erro: %v", out)
+	}
+	txt := out["content"].([]map[string]any)[0]["text"].(string)
+	if !contains(txt, "confirmed") || !contains(txt, "bucket abre de verdade") {
+		t.Fatalf("triage_finding sem verdict/reason: %s", txt)
+	}
+}
+
+func TestTriageFindingMissingRequiredArgs(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+	out := callTool(t, reg, "hub_triage_finding", map[string]any{"id": "f1"}) // falta verdict
+	if out["isError"] != true {
+		t.Fatalf("esperava isError=true, veio %v", out)
+	}
+}
+
+func TestCreateProgram(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_create_program", map[string]any{
+		"name": "acme", "in_scope": []any{"*.acme.com", "acme.com"},
+	})
+	if out["isError"] == true {
+		t.Fatalf("create_program deu erro: %v", out)
+	}
+	txt := out["content"].([]map[string]any)[0]["text"].(string)
+	if !contains(txt, "acme") {
+		t.Fatalf("create_program sem o nome: %s", txt)
+	}
+}
+
+func TestCreateProgramRequiresInScope(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+	// in_scope ausente inteiramente
+	out := callTool(t, reg, "hub_create_program", map[string]any{"name": "acme"})
+	if out["isError"] != true {
+		t.Fatalf("esperava isError=true (sem in_scope), veio %v", out)
+	}
+	// in_scope presente mas vazio
+	out = callTool(t, reg, "hub_create_program", map[string]any{"name": "acme", "in_scope": []any{}})
+	if out["isError"] != true {
+		t.Fatalf("esperava isError=true (in_scope vazio), veio %v", out)
+	}
+}
+
+func TestDraftFindingAndProgramReport(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_draft_finding", map[string]any{"id": "f1"})
+	if out["isError"] == true {
+		t.Fatalf("draft_finding deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "f1") {
+		t.Fatalf("draft_finding sem o id: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_program_report", map[string]any{"program": "acme"})
+	if out["isError"] == true {
+		t.Fatalf("program_report deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "acme") {
+		t.Fatalf("program_report sem o nome do programa: %s", txt)
+	}
 }
 
 func TestCallMissingRequiredArg(t *testing.T) {

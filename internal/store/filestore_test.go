@@ -66,20 +66,23 @@ func TestSetFindingTriage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := fs.SetFindingTriage("f1", "confirmed")
+	got, err := fs.SetFindingTriage("f1", "confirmed", "testado manualmente, bucket realmente aberto")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Triage != "confirmed" || got.TriagedAt == nil {
 		t.Fatalf("triage não aplicado: %+v", got)
 	}
+	if got.TriageReason != "testado manualmente, bucket realmente aberto" {
+		t.Fatalf("triage_reason não aplicado: %+v", got)
+	}
 
 	list, _ := fs.ListFindings(FindingFilter{})
-	if len(list) != 1 || list[0].Triage != "confirmed" {
+	if len(list) != 1 || list[0].Triage != "confirmed" || list[0].TriageReason == "" {
 		t.Fatalf("triage não persistiu: %+v", list)
 	}
 
-	if _, err := fs.SetFindingTriage("ghost", "confirmed"); err == nil {
+	if _, err := fs.SetFindingTriage("ghost", "confirmed", ""); err == nil {
 		t.Fatal("esperava erro para finding inexistente")
 	}
 }

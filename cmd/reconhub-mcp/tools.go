@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
@@ -43,6 +44,9 @@ func str(desc string) map[string]any  { return map[string]any{"type": "string", 
 func integer(d string) map[string]any { return map[string]any{"type": "integer", "description": d} }
 func object(d string) map[string]any {
 	return map[string]any{"type": "object", "description": d, "additionalProperties": true}
+}
+func strArray(d string) map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": d}
 }
 
 func buildTools(h *hubClient) map[string]mcpTool {
@@ -201,6 +205,82 @@ func buildTools(h *hubClient) map[string]mcpTool {
 		}),
 		func(a map[string]any) (json.RawMessage, error) {
 			return h.call("GET", "/api/assets"+query(a, "program", "kind", "tool", "job", "limit"), nil)
+		})
+
+	add("hub_triage_finding",
+		"Marca o veredito do operador sobre um finding (confirmed, false_positive ou ignored), com um motivo opcional. É o feedback que internal/intel usa pra afinar o score de achados futuros do mesmo tipo+ferramenta — sem isso o hub nunca aprende com o que já foi revisado. Use depois de confirmar (ou descartar) um achado, não antes de checar a evidência.",
+		obj(map[string]any{
+			"id":      str("id do finding (ver hub_list_findings)"),
+			"verdict": str("confirmed | false_positive | ignored"),
+			"reason":  str("opcional: por que esse veredito — fica junto do finding pra reler depois, não afeta o score"),
+		}, "id", "verdict"),
+		func(a map[string]any) (json.RawMessage, error) {
+			id, err := mustStr(a, "id")
+			if err != nil {
+				return nil, err
+			}
+			verdict, err := mustStr(a, "verdict")
+			if err != nil {
+				return nil, err
+			}
+			body := map[string]any{"verdict": verdict}
+			if reason := argStr(a, "reason"); reason != "" {
+				body["reason"] = reason
+			}
+			return h.call("POST", "/api/findings/"+id+"/triage", body)
+		})
+
+	add("hub_create_program",
+		"Cria um programa (escopo de bug bounty) — precisa existir antes de rodar qualquer job/pipeline com enforcement de escopo nesse alvo. in_scope aceita padrões: \"example.com\" (exato), \"*.example.com\" (subdomínios), CIDR.",
+		obj(map[string]any{
+			"name":         str("nome do programa (a-z, 0-9, . _ -, até 63 chars — vira o nome do arquivo em programs/)"),
+			"in_scope":     strArray("padrões em escopo — obrigatório, pelo menos 1"),
+			"out_of_scope": strArray("padrões fora de escopo (tem precedência sobre in_scope)"),
+			"platform":     str("opcional: hackerone | intigriti | bugcrowd | …"),
+			"url":          str("opcional: URL da página do programa na plataforma"),
+		}, "name", "in_scope"),
+		func(a map[string]any) (json.RawMessage, error) {
+			name, err := mustStr(a, "name")
+			if err != nil {
+				return nil, err
+			}
+			inScope := argStrSlice(a, "in_scope")
+			if len(inScope) == 0 {
+				return nil, fmt.Errorf("in_scope precisa de pelo menos 1 padrão")
+			}
+			body := map[string]any{"name": name, "in_scope": inScope}
+			if out := argStrSlice(a, "out_of_scope"); len(out) > 0 {
+				body["out_of_scope"] = out
+			}
+			if p := argStr(a, "platform"); p != "" {
+				body["platform"] = p
+			}
+			if u := argStr(a, "url"); u != "" {
+				body["url"] = u
+			}
+			return h.call("POST", "/api/programs", body)
+		})
+
+	add("hub_draft_finding",
+		"Rascunho de relatório (Markdown) pra UM finding: título, severidade, evidência, passos de reprodução, impacto, correção, CWE/referências quando o hub já tem o template desse finding_type. Pronto pra colar/adaptar pro programa — prefira isso a remontar o texto na mão.",
+		obj(map[string]any{"id": str("id do finding")}, "id"),
+		func(a map[string]any) (json.RawMessage, error) {
+			id, err := mustStr(a, "id")
+			if err != nil {
+				return nil, err
+			}
+			return h.call("GET", "/api/findings/"+id+"/draft.md", nil)
+		})
+
+	add("hub_program_report",
+		"Relatório completo (Markdown) de um programa: todos os findings reportáveis, agrupados por severidade, com resumo executivo.",
+		obj(map[string]any{"program": str("nome do programa")}, "program"),
+		func(a map[string]any) (json.RawMessage, error) {
+			p, err := mustStr(a, "program")
+			if err != nil {
+				return nil, err
+			}
+			return h.call("GET", "/api/programs/"+p+"/report.md", nil)
 		})
 
 	return reg

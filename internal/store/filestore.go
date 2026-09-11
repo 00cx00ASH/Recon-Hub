@@ -404,7 +404,7 @@ func (fs *FileStore) GetFinding(id string) (*Finding, bool) {
 	return nil, false
 }
 
-func (fs *FileStore) SetFindingTriage(id, verdict string) (*Finding, error) {
+func (fs *FileStore) SetFindingTriage(id, verdict, reason string) (*Finding, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	for _, f := range fs.findings {
@@ -412,6 +412,7 @@ func (fs *FileStore) SetFindingTriage(id, verdict string) (*Finding, error) {
 			continue
 		}
 		f.Triage = verdict
+		f.TriageReason = reason
 		now := time.Now().UTC()
 		f.TriagedAt = &now
 		b, err := json.Marshal(f)

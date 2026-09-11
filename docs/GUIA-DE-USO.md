@@ -181,7 +181,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
   selecionáveis no param `wordlist`.
 - **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
-- **MCP** — `cmd/reconhub-mcp`, 12 tools, deixa o Claude dirigir o hub.
+- **MCP** — `cmd/reconhub-mcp`, 16 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +
   job sqlite.
@@ -291,9 +291,10 @@ dep-confusion, secrets — coisas que mudam sozinhas.
 
 ### g) Com o Claude (MCP)
 
-`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 12 tools
-(`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_get_report`…). Aí
-você conversa: "roda `full-recon` no acme.com no programa acme e me resume os
+`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 16 tools
+(`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_triage_finding`,
+`hub_draft_finding`, `hub_program_report`, `hub_create_program`…). Aí você
+conversa: "roda `full-recon` no acme.com no programa acme e me resume os
 findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 `RECONHUB_TOKEN`).
 
@@ -301,17 +302,18 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 
 É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
-repo, e só age através das 12 tools MCP acima (sem Bash, sem internet
+repo, e só age através das 16 tools MCP acima (sem Bash, sem internet
 solta). Isso importa: **todo job/pipeline que ele dispara passa pelo
 mesmo enforcement de escopo do servidor** que qualquer outro caminho
 (UI, API, CLI) — testado na prática: pedir um alvo fora do
 `in_scope`/`out_of_scope` do programa devolve erro do próprio servidor,
 não é o agent "se comportando bem", é o hub recusando de verdade.
 
-**Passo 1 — pré-requisito.** Suba o hub (seção "a"), tenha pelo menos um
-programa criado (seção "c") com `in_scope` preenchido. Sem programa, o
-agent não tem contra o que validar escopo — ele vai pedir um antes de
-rodar qualquer coisa.
+**Passo 1 — pré-requisito.** Suba o hub (seção "a"). Um programa com
+`in_scope` preenchido (seção "c") — sem isso, nada é autorizado. Você
+pode criar antes pela UI, ou deixar o agent criar sozinho ("cria o
+programa acme com in_scope *.acme.com") — ele usa `hub_create_program`,
+mas só com o `in_scope` que você deu, nunca inventando domínio.
 
 **Passo 2 — chame o agent.** Três jeitos de pedir, cada um muda o
 comportamento:

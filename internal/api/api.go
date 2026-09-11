@@ -467,6 +467,10 @@ func (s *Server) findingDraft(w http.ResponseWriter, r *http.Request) {
 func (s *Server) triageFinding(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Verdict string `json:"verdict"`
+		// Reason é opcional: por que esse veredito, não só qual — não entra
+		// no score (isso continua sendo pura contagem confirmed/false_positive
+		// por tool+type), mas fica junto do finding pra reler depois.
+		Reason string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
@@ -476,7 +480,7 @@ func (s *Server) triageFinding(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "verdict inválido — use confirmed, false_positive ou ignored")
 		return
 	}
-	f, err := s.Store.SetFindingTriage(r.PathValue("id"), body.Verdict)
+	f, err := s.Store.SetFindingTriage(r.PathValue("id"), body.Verdict, strings.TrimSpace(body.Reason))
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
