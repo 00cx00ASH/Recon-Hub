@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -155,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/pipeline-runs", s.auth(s.createPipelineRun))
 	mux.HandleFunc("GET /api/pipeline-runs", s.auth(s.listPipelineRuns))
 	mux.HandleFunc("GET /api/pipeline-runs/{id}", s.auth(s.getPipelineRun))
+	mux.HandleFunc("GET /api/pipeline-runs/compare", s.auth(s.comparePipelineRuns))
 	mux.HandleFunc("POST /api/pipeline-runs/{id}/cancel", s.auth(s.cancelPipelineRun))
 	mux.HandleFunc("GET /api/pipeline-runs/{id}/events", s.authSSE(s.pipelineRunEvents))
 
@@ -1063,6 +1065,185 @@ func (s *Server) getPipelineRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": run, "jobs": jobs})
+}
+
+type pipelineRunSummary struct {
+	ID        string     `json:"id"`
+	Pipeline  string     `json:"pipeline"`
+	Target    string     `json:"target"`
+	Status    string     `json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	StartedAt *time.Time `json:"started_at,omitempty"`
+	EndedAt   *time.Time `json:"ended_at,omitempty"`
+}
+
+func toPipelineRunSummary(r *store.PipelineRun) pipelineRunSummary {
+	return pipelineRunSummary{
+		ID: r.ID, Pipeline: r.Pipeline, Target: r.Target, Status: r.Status,
+		CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, EndedAt: r.EndedAt,
+	}
+}
+
+func pipelineRunEffStart(r *store.PipelineRun) time.Time {
+	if r.StartedAt != nil {
+		return *r.StartedAt
+	}
+	return r.CreatedAt
+}
+
+func pipelineRunEffEnd(r *store.PipelineRun) time.Time {
+	if r.EndedAt != nil {
+		return *r.EndedAt
+	}
+	return time.Now()
+}
+
+type findingDiffItem struct {
+	Type     string    `json:"type"`
+	Severity string    `json:"severity"`
+	Title    string    `json:"title"`
+	Tool     string    `json:"tool"`
+	Asset    string    `json:"asset,omitempty"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+func toFindingDiffItem(f *store.Finding) findingDiffItem {
+	return findingDiffItem{
+		Type: f.Type, Severity: f.Severity, Title: f.Title, Tool: f.Tool,
+		Asset: f.Asset, Count: f.Count, LastSeen: f.LastSeen,
+	}
+}
+
+type assetDiffItem struct {
+	Kind      string    `json:"kind"`
+	Value     string    `json:"value"`
+	Tool      string    `json:"tool"`
+	FirstSeen time.Time `json:"first_seen"`
+}
+
+type pipelineRunCompareResp struct {
+	RunEarlier             pipelineRunSummary `json:"run_earlier"`
+	RunLater               pipelineRunSummary `json:"run_later"`
+	NewFindings            []findingDiffItem  `json:"new_findings"`
+	ResolvedFindings       []findingDiffItem  `json:"resolved_findings"`
+	PersistedFindingsCount int                `json:"persisted_findings_count"`
+	NewAssets              []assetDiffItem    `json:"new_assets"`
+	Note                   string             `json:"note"`
+}
+
+// comparePipelineRuns diffs findings/assets between two runs of the SAME
+// pipeline against the SAME target+program — the only pairing where "sumiu
+// desde a última vez" reliably means "o tool rodou de novo e não achou mais",
+// not just "esse tool não rodou nesta run". Findings are deduplicated
+// globally by Key() (program+tool+type+asset+title), so a finding's JobID
+// always points at whichever job first created the row — re-confirmations
+// only bump Count/LastSeen on that same row. That's why this diff classifies
+// by CreatedAt/LastSeen falling inside each run's time window rather than by
+// JobID membership: it's the only signal that survives dedupe. Assets have
+// no such dedup (a fresh row per job even for an already-known value), so
+// "new asset" is decided by first-ever CreatedAt across the whole program.
+func (s *Server) comparePipelineRuns(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	idA, idB := strings.TrimSpace(q.Get("a")), strings.TrimSpace(q.Get("b"))
+	if idA == "" || idB == "" {
+		writeErr(w, http.StatusBadRequest, "informe ?a=<run_id>&b=<run_id>")
+		return
+	}
+	runA, ok := s.Store.GetPipelineRun(idA)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "run 'a' não encontrada")
+		return
+	}
+	runB, ok := s.Store.GetPipelineRun(idB)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "run 'b' não encontrada")
+		return
+	}
+	if runA.ID == runB.ID {
+		writeErr(w, http.StatusBadRequest, "'a' e 'b' são a mesma run")
+		return
+	}
+	if runA.Pipeline != runB.Pipeline {
+		writeErr(w, http.StatusBadRequest, "as duas runs precisam ser da MESMA pipeline — conjuntos de ferramentas diferentes tornam 'resolvido' inválido (o tool pode simplesmente não ter rodado de novo)")
+		return
+	}
+	if runA.Program == "" || runA.Program != runB.Program {
+		writeErr(w, http.StatusBadRequest, "as duas runs precisam ser do MESMO programa")
+		return
+	}
+	if runA.Target != runB.Target {
+		writeErr(w, http.StatusBadRequest, "as duas runs precisam ser do MESMO alvo")
+		return
+	}
+
+	earlier, later := runA, runB
+	if pipelineRunEffStart(later).Before(pipelineRunEffStart(earlier)) {
+		earlier, later = later, earlier
+	}
+	earlierEnd := pipelineRunEffEnd(earlier)
+	laterStart := pipelineRunEffStart(later)
+	laterEnd := pipelineRunEffEnd(later)
+	if laterStart.Before(earlierEnd) {
+		writeErr(w, http.StatusBadRequest, "as runs se sobrepõem no tempo — a comparação exige duas execuções sequenciais, não concorrentes")
+		return
+	}
+
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: earlier.Program, Target: earlier.Target, Limit: 100000})
+	var newF, resolvedF []findingDiffItem
+	persisted := 0
+	for _, f := range findings {
+		existedBeforeLater := !f.CreatedAt.After(earlierEnd)
+		reconfirmedInLater := !f.LastSeen.Before(laterStart) && !f.LastSeen.After(laterEnd)
+		newInLater := !f.CreatedAt.Before(laterStart) && !f.CreatedAt.After(laterEnd)
+		switch {
+		case newInLater:
+			newF = append(newF, toFindingDiffItem(f))
+		case existedBeforeLater && reconfirmedInLater:
+			persisted++
+		case existedBeforeLater && !reconfirmedInLater:
+			resolvedF = append(resolvedF, toFindingDiffItem(f))
+		}
+	}
+	sort.Slice(newF, func(i, j int) bool { return newF[i].LastSeen.Before(newF[j].LastSeen) })
+	sort.Slice(resolvedF, func(i, j int) bool { return resolvedF[i].LastSeen.Before(resolvedF[j].LastSeen) })
+
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: earlier.Program, Limit: 100000})
+	type firstSeenInfo struct {
+		at   time.Time
+		tool string
+	}
+	firstSeen := map[string]firstSeenInfo{}
+	for _, a := range assets {
+		k := a.Kind + "\x00" + a.Value
+		if cur, ok := firstSeen[k]; !ok || a.CreatedAt.Before(cur.at) {
+			firstSeen[k] = firstSeenInfo{at: a.CreatedAt, tool: a.Tool}
+		}
+	}
+	var newA []assetDiffItem
+	for k, info := range firstSeen {
+		if info.at.Before(laterStart) || info.at.After(laterEnd) {
+			continue
+		}
+		parts := strings.SplitN(k, "\x00", 2)
+		kind := parts[0]
+		value := ""
+		if len(parts) > 1 {
+			value = parts[1]
+		}
+		newA = append(newA, assetDiffItem{Kind: kind, Value: value, Tool: info.tool, FirstSeen: info.at})
+	}
+	sort.Slice(newA, func(i, j int) bool { return newA[i].FirstSeen.Before(newA[j].FirstSeen) })
+
+	writeJSON(w, http.StatusOK, pipelineRunCompareResp{
+		RunEarlier:             toPipelineRunSummary(earlier),
+		RunLater:               toPipelineRunSummary(later),
+		NewFindings:            newF,
+		ResolvedFindings:       resolvedF,
+		PersistedFindingsCount: persisted,
+		NewAssets:              newA,
+		Note:                   "classificação por janela de tempo (created_at/last_seen de cada run), não por execução exata — um job manual do mesmo tool+alvo rodado por fora dessas duas pipeline runs, bem no meio de uma das janelas, pode ser contado por engano. 'resolved' assume que o mesmo tool rodou de novo na run mais recente (mesma pipeline) e não reportou mais — se o achado for crítico, confirme manualmente antes de marcar como corrigido.",
+	})
 }
 
 func (s *Server) cancelPipelineRun(w http.ResponseWriter, r *http.Request) {

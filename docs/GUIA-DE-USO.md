@@ -181,7 +181,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
   selecionáveis no param `wordlist`.
 - **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
-- **MCP** — `cmd/reconhub-mcp`, 16 tools, deixa o Claude dirigir o hub.
+- **MCP** — `cmd/reconhub-mcp`, 17 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +
   job sqlite.
@@ -291,7 +291,7 @@ dep-confusion, secrets — coisas que mudam sozinhas.
 
 ### g) Com o Claude (MCP)
 
-`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 16 tools
+`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 17 tools
 (`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_triage_finding`,
 `hub_draft_finding`, `hub_program_report`, `hub_create_program`…). Aí você
 conversa: "roda `full-recon` no acme.com no programa acme e me resume os
@@ -302,7 +302,7 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 
 É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
-repo, e só age através das 16 tools MCP acima (sem Bash, sem internet
+repo, e só age através das 17 tools MCP acima (sem Bash, sem internet
 solta). Isso importa: **todo job/pipeline que ele dispara passa pelo
 mesmo enforcement de escopo do servidor** que qualquer outro caminho
 (UI, API, CLI) — testado na prática: pedir um alvo fora do

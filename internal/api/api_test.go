@@ -316,6 +316,106 @@ func TestUpdateAndDeleteProgram(t *testing.T) {
 	}
 }
 
+func timePtr(t time.Time) *time.Time { return &t }
+
+func TestComparePipelineRuns(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg, _ := registry.Load(t.TempDir())
+	eng := engine.New(st, reg, bus.New(), 2)
+	h := (&Server{Store: st, Reg: reg, Engine: eng, Token: auth.Token{Source: "disabled"}}).Handler()
+
+	t0 := time.Now().UTC().Add(-10 * time.Hour)
+	runA := &store.PipelineRun{
+		ID: "runA", Pipeline: "full-recon", Target: "acme.com", Program: "acme", Status: "succeeded",
+		CreatedAt: t0, StartedAt: timePtr(t0), EndedAt: timePtr(t0.Add(5 * time.Minute)),
+	}
+	runB := &store.PipelineRun{
+		ID: "runB", Pipeline: "full-recon", Target: "acme.com", Program: "acme", Status: "succeeded",
+		CreatedAt: t0.Add(time.Hour), StartedAt: timePtr(t0.Add(time.Hour)), EndedAt: timePtr(t0.Add(time.Hour + 5*time.Minute)),
+	}
+	if err := st.CreatePipelineRun(runA); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreatePipelineRun(runB); err != nil {
+		t.Fatal(err)
+	}
+
+	// existia antes da run A e foi reconfirmado durante a run B -> persiste
+	_, _ = st.AddFinding(&store.Finding{
+		ID: "f-persists", JobID: "j0", Tool: "scan-cors", Program: "acme", Target: "acme.com",
+		Type: "cors-wildcard", Title: "persiste", Asset: "api.acme.com", Severity: "low",
+		CreatedAt: t0.Add(-time.Hour), LastSeen: t0.Add(time.Hour + 2*time.Minute),
+	})
+	// existia antes da run A, só foi visto de novo DURANTE a run A -> não reapareceu na run B -> resolvido
+	_, _ = st.AddFinding(&store.Finding{
+		ID: "f-resolved", JobID: "j0", Tool: "scan-cors", Program: "acme", Target: "acme.com",
+		Type: "cors-null-origin", Title: "resolvido", Asset: "old.acme.com", Severity: "low",
+		CreatedAt: t0.Add(-time.Hour), LastSeen: t0.Add(2 * time.Minute),
+	})
+	// apareceu pela 1ª vez durante a run B -> novo
+	_, _ = st.AddFinding(&store.Finding{
+		ID: "f-new", JobID: "j1", Tool: "scan-cors", Program: "acme", Target: "acme.com",
+		Type: "cors-reflect-origin", Title: "novo", Asset: "new.acme.com", Severity: "medium",
+		CreatedAt: t0.Add(time.Hour + time.Minute), LastSeen: t0.Add(time.Hour + time.Minute),
+	})
+
+	// ativo já conhecido antes da run B -> não é novo
+	_, _ = st.AddAsset(&store.Asset{ID: "a-old", JobID: "j0", Tool: "recon-crtsh", Program: "acme", Kind: "subdomain", Value: "old.acme.com", CreatedAt: t0.Add(-2 * time.Hour)})
+	// ativo descoberto pela 1ª vez durante a run B -> novo
+	_, _ = st.AddAsset(&store.Asset{ID: "a-new", JobID: "j1", Tool: "recon-crtsh", Program: "acme", Kind: "subdomain", Value: "new.acme.com", CreatedAt: t0.Add(time.Hour + time.Minute)})
+
+	w := do(h, "GET", "/api/pipeline-runs/compare?a=runA&b=runB", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("compare: got %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{`"title":"novo"`, `"title":"resolvido"`, `"persisted_findings_count":1`, `"value":"new.acme.com"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("compare sem %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `"title":"persiste"`) {
+		t.Errorf("finding persistente não deveria aparecer em new_findings nem resolved_findings:\n%s", body)
+	}
+	if strings.Contains(body, `"value":"old.acme.com"`) {
+		t.Errorf("ativo já conhecido não deveria aparecer em new_assets:\n%s", body)
+	}
+
+	// ordem invertida (b=A, a=B) deve dar o mesmo resultado (detecta sozinho qual é a mais antiga)
+	w2 := do(h, "GET", "/api/pipeline-runs/compare?a=runB&b=runA", nil)
+	if w2.Code != http.StatusOK || w2.Body.String() != body {
+		t.Fatalf("ordem invertida deveria dar o mesmo resultado: %d %s", w2.Code, w2.Body.String())
+	}
+
+	// runs de pipelines diferentes -> 400
+	runC := &store.PipelineRun{ID: "runC", Pipeline: "js-suite", Target: "acme.com", Program: "acme", Status: "succeeded", CreatedAt: t0}
+	_ = st.CreatePipelineRun(runC)
+	if w := do(h, "GET", "/api/pipeline-runs/compare?a=runA&b=runC", nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("pipelines diferentes: got %d, want 400", w.Code)
+	}
+
+	// runs de alvos diferentes -> 400
+	runD := &store.PipelineRun{ID: "runD", Pipeline: "full-recon", Target: "other.com", Program: "acme", Status: "succeeded", CreatedAt: t0}
+	_ = st.CreatePipelineRun(runD)
+	if w := do(h, "GET", "/api/pipeline-runs/compare?a=runA&b=runD", nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("alvos diferentes: got %d, want 400", w.Code)
+	}
+
+	// mesma run duas vezes -> 400
+	if w := do(h, "GET", "/api/pipeline-runs/compare?a=runA&b=runA", nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("mesma run: got %d, want 400", w.Code)
+	}
+
+	// run inexistente -> 404
+	if w := do(h, "GET", "/api/pipeline-runs/compare?a=runA&b=ghost", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("run inexistente: got %d, want 404", w.Code)
+	}
+}
+
 func TestSearch(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {

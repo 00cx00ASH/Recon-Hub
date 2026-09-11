@@ -55,6 +55,12 @@ func fakeHub(t *testing.T) (*hubClient, *httptest.Server) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Write([]byte("# Relatório — " + r.PathValue("name") + "\n"))
 	})
+	mux.HandleFunc("GET /api/pipeline-runs/compare", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("a") != "runA" || r.URL.Query().Get("b") != "runB" {
+			t.Errorf("compare: query inesperada: %s", r.URL.RawQuery)
+		}
+		w.Write([]byte(`{"new_findings":[],"resolved_findings":[],"persisted_findings_count":0,"new_assets":[]}`))
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &hubClient{base: srv.URL, http: &http.Client{Timeout: 5 * time.Second}}, srv
@@ -87,8 +93,8 @@ func TestInitializeAndList(t *testing.T) {
 
 	resp, _ = handle(&rpcRequest{ID: json.RawMessage(`2`), Method: "tools/list"}, reg)
 	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
-	if len(tools) != 16 {
-		t.Fatalf("esperava 16 tools MCP, veio %d", len(tools))
+	if len(tools) != 17 {
+		t.Fatalf("esperava 17 tools MCP, veio %d", len(tools))
 	}
 	if tools[0]["name"] != "hub_list_tools" {
 		t.Fatalf("ordem inesperada: %v", tools[0]["name"])
@@ -193,6 +199,24 @@ func TestDraftFindingAndProgramReport(t *testing.T) {
 	}
 	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "acme") {
 		t.Fatalf("program_report sem o nome do programa: %s", txt)
+	}
+}
+
+func TestComparePipelineRuns(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_compare_pipeline_runs", map[string]any{"a": "runA", "b": "runB"})
+	if out["isError"] == true {
+		t.Fatalf("compare_pipeline_runs deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "persisted_findings_count") {
+		t.Fatalf("compare_pipeline_runs sem o campo esperado: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_compare_pipeline_runs", map[string]any{"a": "runA"}) // falta b
+	if out["isError"] != true {
+		t.Fatalf("faltando b deveria dar erro: %v", out)
 	}
 }
 

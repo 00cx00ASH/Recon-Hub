@@ -180,6 +180,22 @@ func buildTools(h *hubClient) map[string]mcpTool {
 			return h.call("GET", "/api/pipeline-runs"+query(a, "pipeline", "program", "status", "limit"), nil)
 		})
 
+	add("hub_compare_pipeline_runs",
+		"Compara duas pipeline-runs da MESMA pipeline+alvo+programa: o que é novo, o que sumiu (provável correção) e o que persiste, em findings; e ativos novos. Útil pra confirmar retest ('o fix realmente resolveu?') ou ver o que mudou desde a última rodada.",
+		obj(map[string]any{
+			"a": str("id de uma pipeline-run"),
+			"b": str("id da outra pipeline-run (ordem não importa — o hub detecta sozinho qual é a mais antiga)"),
+		}, "a", "b"),
+		func(a map[string]any) (json.RawMessage, error) {
+			if _, err := mustStr(a, "a"); err != nil {
+				return nil, err
+			}
+			if _, err := mustStr(a, "b"); err != nil {
+				return nil, err
+			}
+			return h.call("GET", "/api/pipeline-runs/compare"+query(a, "a", "b"), nil)
+		})
+
 	add("hub_list_findings",
 		"Lista findings normalizados (deduplicados; campo count = quantas vezes reapareceu).",
 		obj(map[string]any{
