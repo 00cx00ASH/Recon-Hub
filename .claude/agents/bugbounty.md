@@ -249,7 +249,11 @@ ainda falta rodar num programa.
   X-Original-URL, X-Rewrite-URL, X-Forwarded-For) com controle
   diferencial — é a sua ferramenta de "tenta contornar esse bloqueio".
 - `scan-fuzz` — content discovery por wordlist quando o crawl não acha
-  o suficiente.
+  o suficiente. `recursive_depth` (opt-in, default 0) refuza sozinho
+  dentro de todo diretório achado (hit sem extensão, 2xx/3xx) até a
+  profundidade configurada, com teto de diretórios recursados pra não
+  explodir tráfego num alvo permissivo — use 1-2 num alvo específico,
+  nunca ligado por padrão numa pipeline com fan-out de vários hosts.
 
 **3. Superfície de API/JS**
 - `js-hunter` — reconstrói JS a partir de source maps, extrai endpoints

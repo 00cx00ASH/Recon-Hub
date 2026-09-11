@@ -123,7 +123,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | ferramenta                | o que faz                                                        |
 |---------------------------|---------------------------------------------------------------|
 | `scan-subdomain-takeover` | CNAME dangling, ~58 fingerprints, confirmação HTTP             |
-| `scan-fuzz`               | content discovery por wordlist, calibra soft-404               |
+| `scan-fuzz`               | content discovery por wordlist, calibra soft-404; `recursive_depth` opt-in refuza dentro de diretório achado |
 | `scan-actuator`           | Spring Boot Actuator exposto (`/env`, `/heapdump`, Jolokia…)   |
 | `scan-open-redirect`      | 17 payloads de bypass em params comuns, confirma pelo destino real |
 | `scan-cors`               | reflexão de origem, `null`, wildcard + credentials             |

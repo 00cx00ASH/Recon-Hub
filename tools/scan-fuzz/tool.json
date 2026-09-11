@@ -3,9 +3,9 @@
   "version": "0.2.0",
   "language": "Go",
   "category": "scan",
-  "summary": "Content discovery (dir/arquivo) por wordlist: calibra o soft-404 do alvo, testa cada palavra (+ extensões) e reporta os hits por status. Estilo ffuf/gobuster. Aceita 1 URL ou uma lista.",
-  "guide": "Alvo = a URL base, ex https://app.exemplo.com. Escolha a wordlist no seletor (traz as embutidas; configure seclists_dir p/ ter o SecLists inteiro). Ele calibra o 404 do alvo pra não gerar lixo. extensions = .php,.bak,~ etc. Nos modos lista/arquivo varre várias URLs base.",
-  "validation": "Exemplo de hit válido: /backup.zip retornando 200 com Content-Length real, destacado da calibração de soft-404 do alvo. Opere escolhendo a wordlist pelo contexto do alvo (ex: uma wordlist de API se o recon-web-enum já indicou stack de API) em vez da lista genérica — resultado mais rápido e mais relevante que forçar uma wordlist enorme.",
+  "summary": "Content discovery (dir/arquivo) por wordlist: calibra o soft-404 do alvo, testa cada palavra (+ extensões) e reporta os hits por status. Estilo ffuf/gobuster. Aceita 1 URL ou uma lista. Modo recursivo opcional: todo hit 'bare' (sem extensão) com status 2xx/3xx vira um novo nível a fuzzar, com teto de profundidade e de total de diretórios recursados — sem isso, um alvo permissivo faria a recursão explodir.",
+  "guide": "Alvo = a URL base, ex https://app.exemplo.com. Escolha a wordlist no seletor (traz as embutidas; configure seclists_dir p/ ter o SecLists inteiro). Ele calibra o 404 do alvo pra não gerar lixo. extensions = .php,.bak,~ etc. Nos modos lista/arquivo varre várias URLs base. recursive_depth > 0 ativa recursão em diretório achado — comece com 1 ou 2, nunca alto sem necessidade (multiplica o tráfego).",
+  "validation": "Exemplo de hit válido: /backup.zip retornando 200 com Content-Length real, destacado da calibração de soft-404 do alvo. Opere escolhendo a wordlist pelo contexto do alvo (ex: uma wordlist de API se o recon-web-enum já indicou stack de API) em vez da lista genérica — resultado mais rápido e mais relevante que forçar uma wordlist enorme. Com recursive_depth=1: se /admin for um diretório (hit sem extensão), a mesma wordlist roda de novo dentro de /admin/ automaticamente — /admin/backup.zip aparece sem você precisar rodar a ferramenta de novo manualmente ali.",
   "exec": ["go", "run", "."],
   "timeout": "30m",
   "modes": [
@@ -22,6 +22,8 @@
     { "name": "filter_size", "type": "int", "required": false, "help": "esconder respostas com exatamente esse tamanho (bytes)" },
     { "name": "concurrency", "type": "int", "required": false, "default": 10, "help": "requisições simultâneas — padrão já conservador pra não acionar WAF/rate-limit; suba com cautela" },
     { "name": "delay_ms", "type": "int", "required": false, "default": 25, "help": "pausa entre requisições de cada worker — espaça o tráfego. 0 só se o programa expressamente permitir tráfego automatizado pesado" },
-    { "name": "timeout_ms", "type": "int", "required": false, "default": 7000, "help": "timeout por requisição" }
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 7000, "help": "timeout por requisição" },
+    { "name": "recursive_depth", "type": "int", "required": false, "default": 0, "help": "níveis de recursão em diretório achado (0 = desligado, comportamento de sempre)" },
+    { "name": "max_recursive_dirs", "type": "int", "required": false, "default": 50, "help": "teto de diretórios recursados no total, cruzando qualquer profundidade" }
   ]
 }
