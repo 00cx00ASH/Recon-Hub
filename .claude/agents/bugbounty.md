@@ -309,12 +309,13 @@ ainda falta rodar num programa.
   ORMs) ausente no baseline sem payload. Nunca time-based — SQLi cega
   sem erro visível fica pra teste manual.
 - Server-Side Template Injection: `scan-ssti` — expressão matemática em
-  5 sintaxes de engine (Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB,
-  Smarty) em parâmetros renderizados de volta (name, message, search,
-  comment…), confirma só quando o resultado CALCULADO aparece (ausente
-  no baseline) E o texto do payload NÃO aparece — prova avaliação real,
-  não reflexo tipo XSS. Não confirma RCE (isso é o passo manual
-  seguinte, específico do engine identificado em `meta.engine`).
+  7 sintaxes de engine (Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB,
+  Smarty, Razor .NET, Pug/Jade Node.js) em parâmetros renderizados de
+  volta (name, message, search, comment…), confirma só quando o
+  resultado CALCULADO aparece (ausente no baseline) E o texto do
+  payload NÃO aparece — prova avaliação real, não reflexo tipo XSS.
+  Não confirma RCE (isso é o passo manual seguinte, específico do
+  engine identificado em `meta.engine`).
 - Cache poisoning: `scan-cache-poisoning` — headers não-chaveados
   (X-Forwarded-Host etc.), isolado por cache-buster.
 - Request smuggling: `scan-smuggling` — timing oracle, nunca encadeia

@@ -58,6 +58,8 @@ func TestEngineProbesCoverMainTemplateSyntaxes(t *testing.T) {
 		"Velocity":             "#set($x=7*13)$x",
 		"ERB (Ruby)":           "<%= 7*13 %>",
 		"Smarty":               "{7*13}",
+		"Razor (.NET)":         "@(7*13)",
+		"Pug/Jade (Node.js)":   "#{7*13}",
 	}
 	if len(engineProbes) != len(want) {
 		t.Fatalf("esperava %d engines, veio %d", len(want), len(engineProbes))

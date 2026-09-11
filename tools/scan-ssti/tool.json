@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "language": "Go",
   "category": "scan",
-  "summary": "Testa parâmetros classicamente renderizados de volta (name, message, search, comment…) com uma expressão matemática na sintaxe de 5 engines de template (Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB, Smarty) e CONFIRMA Server-Side Template Injection só quando o resultado CALCULADO (ex: 8633 pra 89*97) aparece na resposta e está AUSENTE no baseline — E o texto cru do payload NÃO aparece, provando avaliação de verdade em vez de simples reflexão (o mesmo bug que reflexão crua causaria num scanner ingênuo). Par de fatores aleatório por requisição, nunca um clássico fixo tipo 7*7. Nunca lê arquivo nem spawna processo.",
+  "summary": "Testa parâmetros classicamente renderizados de volta (name, message, search, comment…) com uma expressão matemática na sintaxe de 7 engines de template (Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB, Smarty, Razor .NET, Pug/Jade Node.js) e CONFIRMA Server-Side Template Injection só quando o resultado CALCULADO (ex: 8633 pra 89*97) aparece na resposta e está AUSENTE no baseline — E o texto cru do payload NÃO aparece, provando avaliação de verdade em vez de simples reflexão (o mesmo bug que reflexão crua causaria num scanner ingênuo). Par de fatores aleatório por requisição, nunca um clássico fixo tipo 7*7. Nunca lê arquivo nem spawna processo.",
   "guide": "Alvo = uma URL http/https, de preferência já com o parâmetro suspeito na query (ex: https://site.com/perfil?name=joao). Sem query ele testa os nomes da wordlist do mesmo jeito, anexando o payload como valor único. Modos lista/arquivo varrem várias URLs.",
   "validation": "Exemplo confirmado: ?name=joao{{89*97}} responde com 'Olá, joao8633' no corpo — 8633 é o resultado de 89*97, calculado pelo motor de template no servidor, ausente na resposta de ?name=joao sozinho, e o texto '{{89*97}}' não aparece em lugar nenhum da resposta (se aparecesse cru, seria reflexão/XSS, não avaliação). Essa combinação (resultado presente + payload ausente + diferença do baseline) é o que distingue SSTI real de um app que só ecoa a entrada sem processar.",
   "exec": ["go", "run", "."],
@@ -19,7 +19,7 @@
     { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
     { "name": "urls_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor, uma URL por linha" },
     { "name": "max_params", "type": "int", "required": false, "default": 80, "help": "teto de parâmetros testados por URL" },
-    { "name": "concurrency", "type": "int", "required": false, "default": 12, "help": "requisições simultâneas (cada parâmetro pode fazer até 6: baseline + 5 engines)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 12, "help": "requisições simultâneas (cada parâmetro pode fazer até 8: baseline + 7 engines)" },
     { "name": "timeout_ms", "type": "int", "required": false, "default": 8000, "help": "timeout por requisição" }
   ]
 }

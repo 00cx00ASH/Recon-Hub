@@ -141,7 +141,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-xss`                | XSS refletido — marcador único em params clássicos, confirma só quando volta sem escapar (nunca dispara execução) |
 | `scan-xss-dom`            | XSS DOM-based — navegador headless real (CDP), vetor hash + query, confirma por EXECUÇÃO (não por texto na resposta); não é XSS armazenado |
 | `scan-sqli`               | SQL injection por vazamento de erro real de banco, ausente no baseline sem payload — nunca time-based/booleana |
-| `scan-ssti`               | Server-Side Template Injection — resultado calculado aparece e o payload cru NÃO, prova avaliação real (5 sintaxes de engine) |
+| `scan-ssti`               | Server-Side Template Injection — resultado calculado aparece e o payload cru NÃO, prova avaliação real (7 sintaxes de engine) |
 | `scan-ssrf`               | injeta URLs internas/metadata cloud em params buscados pelo servidor, só confirma pelo CONTEÚDO da resposta |
 | `scan-smuggling`          | request smuggling (CL.TE/TE.CL) por timing oracle — nunca encadeia 2ª requisição real pra confirmar |
 

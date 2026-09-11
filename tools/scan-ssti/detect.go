@@ -23,6 +23,13 @@ var engineProbes = []engineProbe{
 	{"Velocity", func(a, b int) string { return fmt.Sprintf("#set($x=%d*%d)$x", a, b) }},
 	{"ERB (Ruby)", func(a, b int) string { return fmt.Sprintf("<%%= %d*%d %%>", a, b) }},
 	{"Smarty", func(a, b int) string { return fmt.Sprintf("{%d*%d}", a, b) }},
+	// Razor (.NET/ASP.NET) — @(expr) avalia C# arbitrário. Cobre stacks
+	// .NET que nenhuma das sintaxes acima toca (nenhuma delas é válida
+	// como C#, então um Razor vulnerável nunca daria falso positivo nas
+	// outras — cada probe só bate na engine cuja sintaxe realmente é).
+	{"Razor (.NET)", func(a, b int) string { return fmt.Sprintf("@(%d*%d)", a, b) }},
+	// Pug/Jade (Node.js/Express) — #{expr} interpola JS arbitrário.
+	{"Pug/Jade (Node.js)", func(a, b int) string { return fmt.Sprintf("#{%d*%d}", a, b) }},
 }
 
 // randPair picks two 3-digit factors per probe (crypto/rand, same house
