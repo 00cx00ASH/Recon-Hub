@@ -127,6 +127,11 @@ ainda falta rodar num programa.
   caracteres voltam sem escapar (nunca dispara payload de execução).
   `high` = quebra de tag HTML real; `medium` = só quebra de
   atributo/string JS, exige seu olho no contexto antes de reportar.
+- SQL injection: `scan-sqli` — aspa/aspa-dupla anexada ao valor de
+  parâmetros clássicos (id, page, sort, category…), confirma só com
+  assinatura real de erro de banco (MySQL/Postgres/MSSQL/Oracle/SQLite/
+  ORMs) ausente no baseline sem payload. Nunca time-based — SQLi cega
+  sem erro visível fica pra teste manual.
 - Cache poisoning: `scan-cache-poisoning` — headers não-chaveados
   (X-Forwarded-Host etc.), isolado por cache-buster.
 - Request smuggling: `scan-smuggling` — timing oracle, nunca encadeia
@@ -172,14 +177,19 @@ sessão autenticada real ou julgamento de lógica de negócio:
 - **IDOR / broken access control horizontal-vertical** — precisa de duas
   sessões (usuário A vs B) comparando respostas; nenhuma ferramenta do
   hub faz isso hoje. É teste manual (ou Burp/scripted à parte).
-- **XSS armazenado/DOM-based, SSTI, SQLi/NoSQLi clássica** — `scan-xss`
-  cobre só o refletido (prova por análise de texto na resposta HTTP, sem
-  navegador). Armazenado (persiste no banco, aparece em OUTRA página/
-  usuário) e DOM-based (só existe depois do JS rodar no navegador) exigem
-  navegador real ou sessão de segundo usuário — fora do que dá pra fazer
-  com requisição HTTP crua. SQLi/SSTI seguem de fora de propósito:
-  confirmar de verdade normalmente pede um payload de exploração real,
-  o que foge do "PoC seguro" que toda ferramenta do hub segue.
+- **XSS armazenado/DOM-based** — `scan-xss` cobre só o refletido (prova
+  por análise de texto na resposta HTTP, sem navegador). Armazenado
+  (persiste no banco, aparece em OUTRA página/usuário) e DOM-based (só
+  existe depois do JS rodar no navegador) exigem navegador real ou
+  sessão de segundo usuário — fora do que dá pra fazer com requisição
+  HTTP crua.
+- **SQLi cega (booleana/time-based), NoSQLi, SSTI** — `scan-sqli` só
+  confirma quando o banco vaza um erro de verdade na resposta. Sem erro
+  visível (SQLi cega) precisaria de requisições booleanas (1=1 vs 1=2)
+  ou SLEEP() — a 2ª adiciona carga real no alvo, então fica de fora de
+  propósito, igual ao scan-smuggling nunca confirmar com uma 2ª
+  requisição de verdade. NoSQLi (Mongo/etc.) e SSTI (template injection)
+  não têm ferramenta dedicada ainda.
 - **Lógica de negócio** (ex: burlar fluxo de checkout, cupom, limite de
   taxa de negócio) — inerentemente manual, nenhum scanner genérico
   resolve isso direito.

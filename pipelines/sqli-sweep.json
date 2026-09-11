@@ -1,0 +1,12 @@
+{
+  "name": "sqli-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de SQL injection por vazamento de erro de banco nos parâmetros classicamente injetáveis (id, page, sort, category, search…) — confirma só com assinatura de erro real ausente no baseline, nunca time-based.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-sqli",
+      "params": { "wordlist": "builtin/sqli-params", "max_params": 37, "concurrency": 15 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}
