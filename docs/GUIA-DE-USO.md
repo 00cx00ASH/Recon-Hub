@@ -317,11 +317,43 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
 repo, e só age através das 21 tools MCP acima (sem Bash, sem internet
-solta). Isso importa: **todo job/pipeline que ele dispara passa pelo
-mesmo enforcement de escopo do servidor** que qualquer outro caminho
-(UI, API, CLI) — testado na prática: pedir um alvo fora do
+solta — o `tools:` do frontmatter do agente nem lista essas duas). Isso
+importa: **todo job/pipeline que ele dispara passa pelo mesmo
+enforcement de escopo do servidor** que qualquer outro caminho (UI,
+API, CLI) — testado na prática: pedir um alvo fora do
 `in_scope`/`out_of_scope` do programa devolve erro do próprio servidor,
 não é o agent "se comportando bem", é o hub recusando de verdade.
+
+> **⚠️ Isso só vale garantido se for de fato O AGENTE quem está agindo —
+> não a sessão raiz do Claude Code.** A sessão raiz TEM Bash/WebFetch
+> normalmente, e nada garante que ela delega automaticamente pro
+> subagente só porque seu pedido "parece" bug bounty — principalmente
+> em mensagens de continuação soltas ("cava mais fundo nesse finding")
+> no meio de uma conversa já em andamento, ou com `auto mode` ligado
+> (aprova tool calls sem perguntar — isso NÃO tem relação com decidir
+> delegar pro subagente, só facilita a sessão raiz agir sozinha sem
+> você perceber). Já aconteceu na prática: a sessão raiz baixou um
+> arquivo JS inteiro com `curl` direto pra investigar um segredo
+> exposto, contornando toda a redação/enforcement que o hub existe pra
+> garantir. Pra evitar isso:
+> - Use **`@bugbounty`** explícito no pedido (`@bugbounty cava mais
+>   fundo nesse finding`) — garante que É aquele subagente quem trata,
+>   não a sessão raiz decidindo sozinha. Repita `@bugbounty` em CADA
+>   mensagem de investigação, inclusive follow-ups — não há garantia
+>   documentada de que o contexto "continua" dentro do subagente entre
+>   turnos sem isso.
+> - Pra uma sessão inteira dedicada a testar um programa de verdade,
+>   `claude --agent bugbounty` no terminal já sobe a sessão inteira
+>   como o agente, do primeiro ao último turno.
+> - Não existe hoje um indicador visual confirmado no terminal pra
+>   diferenciar "isso rodou no subagente" de "isso rodou na sessão
+>   raiz" — na dúvida, prefira sempre `@bugbounty` explícito a confiar
+>   na delegação automática.
+> - Se quiser bloqueio de verdade (não só convenção), a sessão raiz
+>   pode ter Bash desabilitado via `permissions.deny` num
+>   `settings.json` — mas isso é uma escolha pra uma sessão dedicada a
+>   engajamento, não pro repo inteiro (o próprio desenvolvimento do hub
+>   usa Bash o tempo todo pra `gofmt`/`go build`/`go test`).
 
 **Passo 1 — pré-requisito.** Suba o hub (seção "a"). Um programa com
 `in_scope` preenchido (seção "c") — sem isso, nada é autorizado. Você

@@ -153,3 +153,17 @@ sobre caçar bugs em programas de terceiros.
   atual (não em `main`), ou não use `isolation: "worktree"` (deixa o
   subagente operar direto no working dir atual, já no branch certo), ou
   informe explicitamente o branch/commit de origem no prompt.
+- **O subagente `bugbounty` só age sem Bash/internet solta se ELE de
+  fato tratar o pedido — a sessão raiz do Claude Code tem Bash e pode
+  decidir agir sozinha em vez de delegar**, principalmente em mensagens
+  de continuação soltas ("cava mais fundo nesse finding") numa conversa
+  já em andamento. Não existe garantia documentada de que o contexto
+  "continua" dentro do subagente entre turnos, nem indicador visual no
+  terminal pra diferenciar quem agiu. Isso já aconteceu na prática: a
+  sessão raiz baixou com `curl` direto o arquivo inteiro onde um
+  `js-secret-hunter` tinha achado uma chave privada (o scanner do hub
+  redige o valor por design; baixar o arquivo cru contorna isso por
+  completo). Sempre use `@bugbounty` explícito (repetido em cada
+  mensagem de investigação) ou `claude --agent bugbounty` pra garantir
+  que é o agente restrito quem age — ver aviso em
+  `docs/GUIA-DE-USO.md` seção g.1.
