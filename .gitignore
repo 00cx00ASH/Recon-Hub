@@ -10,6 +10,7 @@ reconhub.db-wal
 *.log
 .DS_Store
 /watches/*.json
+/.claude/scheduled_tasks.lock
 
 # cada tools/<nome>/ é um módulo Go próprio — `go build ./...` sem -o ali
 # gera um binário com o nome da pasta; nunca deve ser versionado.
