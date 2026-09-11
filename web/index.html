@@ -170,6 +170,23 @@
   .log .step_start,.log .step_end{color:var(--accent-2)}
   .log .asset{color:var(--ok)}
 
+  /* ---------- mapa de metodologia (aba Mapa) ---------- */
+  .mapshortcut{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;border:1px solid var(--accent);border-radius:var(--radius);background:color-mix(in srgb,var(--accent) 8%,var(--surface));padding:1rem 1.2rem;margin-bottom:1.4rem;box-shadow:var(--shadow-card)}
+  .mapshortcut b{font-family:"IBM Plex Mono",monospace;font-size:15px;color:var(--accent)}
+  .mapshortcut p{margin:0;font-size:12.5px;color:var(--dim);flex:1;min-width:200px}
+  .mapflow{display:flex;flex-direction:column;gap:0}
+  .mapphase{display:flex;flex-direction:column;gap:.5rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:.9rem 1.1rem;box-shadow:var(--shadow-card)}
+  .mapphase h3{margin:0;font-family:"IBM Plex Mono",monospace;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:.5rem}
+  .mapphase h3 .n{background:var(--accent);color:#1a1400;border-radius:50%;width:1.5em;height:1.5em;display:inline-flex;align-items:center;justify-content:center;font-size:.85em;flex:none}
+  .mapphase .d{margin:0;font-size:12px;color:var(--faint)}
+  .mapchips{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.2rem}
+  .mapchip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;border:1px solid var(--border-strong);border-radius:999px;padding:.3rem .75rem;background:var(--bg);color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
+  .mapchip:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg))}
+  .mapchip.tool{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 40%,transparent)}
+  .mapchip.tab{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .mapdown{display:flex;justify-content:center;color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:16px;padding:.3rem 0;line-height:1}
+  @media (max-width:820px){ .mapshortcut{flex-direction:column;align-items:flex-start} }
+
   .md{max-width:78ch;font-size:13.5px;line-height:1.65}
   .md h1,.md h2,.md h3,.md h4{font-family:"IBM Plex Mono",monospace;line-height:1.25;margin:1.8em 0 .6em;color:var(--text);text-transform:none;letter-spacing:0}
   .md h1{font-size:1.5rem;border-bottom:1px solid var(--border);padding-bottom:.3em}
@@ -349,6 +366,7 @@ docker compose exec reconhub cat /app/data/token</pre>
   <section class="content">
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="false" data-view="panel">Painel</button>
+      <button role="tab" aria-selected="false" data-view="map">Mapa</button>
       <button role="tab" aria-selected="true" data-view="current">Job atual</button>
       <button role="tab" aria-selected="false" data-view="jobs">Jobs</button>
       <button role="tab" aria-selected="false" data-view="pipelines">Pipelines</button>
@@ -367,6 +385,11 @@ docker compose exec reconhub cat /app/data/token</pre>
 
       <h2 style="margin-top:1.6rem">Programas</h2>
       <div id="panelPrograms" class="proggrid"></div>
+    </div>
+
+    <div class="view" id="view-map">
+      <p class="muted" style="margin-top:0">Por onde começar, e o que vem depois — clique num nó pra já ir com a ferramenta/pipeline certa selecionada. 33 ferramentas e 31 pipelines é fácil de se perder; isto aqui é o mapa.</p>
+      <div id="mapBody"></div>
     </div>
 
     <div class="view active" id="view-current">
@@ -1785,14 +1808,17 @@ let PIPELINES = [];
 let pes = null;          // pipeline EventSource
 let currentRun = null;
 
+let pendingPipelineSelect = null; // setado pelo mapa de metodologia antes de trocar de aba
 async function loadPipelines(){
   try {
     const { pipelines } = await api('/pipelines');
     PIPELINES = pipelines || [];
-    const sel = $('#plSelect');
+    const sel = $('#plSelect'), keep = pendingPipelineSelect || sel.value;
+    pendingPipelineSelect = null;
     sel.innerHTML = '';
     if (!PIPELINES.length) sel.append(el('option', { value:'', textContent:'nenhuma pipeline em ./pipelines' }));
     for (const p of PIPELINES) sel.append(el('option', { value: p.name, textContent: p.name }));
+    if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
     renderPipelineMeta();
     $('#plRun').disabled = !PIPELINES.length;
     const selSel = $('#selPipeline'), keepSel = selSel.value;
@@ -1823,6 +1849,127 @@ function renderPipelineMeta(){
     box.append(chip);
   });
 }
+
+/* ---------- mapa de metodologia ---------- */
+// Dado estático (não vem de API) — a ordem e o agrupamento por fase é
+// julgamento de metodologia, não algo que o hub calcula. Ver
+// .claude/agents/bugbounty.md pro mesmo mapeamento em prosa.
+const METHODOLOGY = [
+  {
+    phase: '1 · Recon passivo', desc: 'Não toca o alvo, só fontes públicas — sempre o primeiro passo.',
+    items: [
+      { type: 'pipeline', name: 'passive-takeover', label: 'passive-takeover' },
+      { type: 'pipeline', name: 'infra-sweep', label: 'infra-sweep' },
+      { type: 'tool', name: 'recon-passive-enum', label: 'recon-passive-enum' },
+      { type: 'tool', name: 'recon-tech-cve', label: 'recon-tech-cve' },
+      { type: 'tool', name: 'int-github-audit', label: 'int-github-audit' },
+    ],
+  },
+  {
+    phase: '2 · Recon ativo', desc: 'Toca o alvo, ainda leve — crawl, fingerprint, content discovery.',
+    items: [
+      { type: 'pipeline', name: 'web-enum-sweep', label: 'web-enum-sweep' },
+      { type: 'pipeline', name: 'content-sweep', label: 'content-sweep' },
+      { type: 'tool', name: 'recon-web-enum', label: 'recon-web-enum' },
+      { type: 'tool', name: 'recon-infra-enum', label: 'recon-infra-enum' },
+    ],
+  },
+  {
+    phase: '3 · Superfície API/JS', desc: 'Endpoints escondidos em JS, GraphQL, collections do Postman.',
+    items: [
+      { type: 'pipeline', name: 'js-recon', label: 'js-recon' },
+      { type: 'pipeline', name: 'graphql-sweep', label: 'graphql-sweep' },
+      { type: 'tool', name: 'scan-postman-audit', label: 'scan-postman-audit' },
+      { type: 'tool', name: 'scan-postman-net', label: 'scan-postman-net' },
+    ],
+  },
+  {
+    phase: '4 · Vulnerabilidades', desc: 'A fase mais larga — cada pipeline confirma pela resposta real, nunca só pelo payload aparecer.',
+    items: [
+      { type: 'pipeline', name: 'xss-sweep', label: 'xss-sweep' },
+      { type: 'pipeline', name: 'sqli-sweep', label: 'sqli-sweep' },
+      { type: 'pipeline', name: 'redirect-hunt', label: 'redirect-hunt' },
+      { type: 'pipeline', name: 'cors-sweep', label: 'cors-sweep' },
+      { type: 'pipeline', name: 'cache-poison-sweep', label: 'cache-poison-sweep' },
+      { type: 'tool', name: 'scan-smuggling', label: 'scan-smuggling' },
+      { type: 'tool', name: 'scan-ssrf', label: 'scan-ssrf' },
+      { type: 'tool', name: 'scan-auth-flow', label: 'scan-auth-flow' },
+      { type: 'pipeline', name: 'cognito-audit', label: 'cognito-audit' },
+      { type: 'pipeline', name: 'jwt-sweep', label: 'jwt-sweep' },
+      { type: 'pipeline', name: 'actuator-sweep', label: 'actuator-sweep' },
+      { type: 'pipeline', name: 'crtsh-takeover', label: 'crtsh-takeover' },
+      { type: 'pipeline', name: 'blh-sweep', label: 'blh-sweep' },
+    ],
+  },
+  {
+    phase: '5 · Storage / Cloud / Segredos', desc: 'Cloud mal configurado e credencial vazada em JS/source map.',
+    items: [
+      { type: 'pipeline', name: 'bucket-hunt', label: 'bucket-hunt' },
+      { type: 'pipeline', name: 'firebase-audit', label: 'firebase-audit' },
+      { type: 'pipeline', name: 'supabase-audit', label: 'supabase-audit' },
+      { type: 'pipeline', name: 'secret-sweep', label: 'secret-sweep' },
+      { type: 'pipeline', name: 'ai-key-sweep', label: 'ai-key-sweep' },
+      { type: 'pipeline', name: 'gtm-osint', label: 'gtm-osint' },
+      { type: 'pipeline', name: 'mongodb-sweep', label: 'mongodb-sweep' },
+      { type: 'pipeline', name: 'dep-confusion-sweep', label: 'dep-confusion-sweep' },
+    ],
+  },
+  {
+    phase: '6 · Triagem', desc: 'O hub já pontua cada finding (score/ação) — confirme antes de reportar.',
+    items: [{ type: 'tab', view: 'findings', label: '→ aba Findings' }],
+  },
+  {
+    phase: '7 · Relatório', desc: 'Rascunho por finding ou relatório completo do programa.',
+    items: [{ type: 'tab', view: 'projects', label: '→ aba Projetos' }],
+  },
+];
+
+function goPipeline(name){
+  pendingPipelineSelect = name;
+  selectTab('pipelines'); // dispara loadPipelines(), que aplica o pending após recarregar as options
+  $('#plTarget').focus();
+}
+function goTool(name){
+  selectTab('current');
+  const sel = $('#tool');
+  if ([...sel.options].some(o => o.value === name)) { sel.value = name; renderToolMeta(); }
+  $('#target').focus();
+}
+
+function renderMap(){
+  const body = $('#mapBody');
+  if (body.dataset.rendered) return; // dado estático — renderiza uma vez só
+  body.dataset.rendered = '1';
+
+  const shortcut = el('div', { className:'mapshortcut' }, [
+    el('b', { textContent:'▶ full-recon' }),
+    el('p', { textContent:'~25 ferramentas encadeadas a partir só do domínio — passivo, todas as categorias de vuln em paralelo, port scan. O "roda tudo" quando não sabe por onde começar.' }),
+  ]);
+  const shortcutBtn = el('button', { className:'mapchip', textContent:'usar essa pipeline', style:'align-self:center' });
+  shortcutBtn.addEventListener('click', () => goPipeline('full-recon'));
+  shortcut.append(shortcutBtn);
+  body.append(shortcut);
+
+  const flow = el('div', { className:'mapflow' });
+  METHODOLOGY.forEach((ph, i) => {
+    if (i) flow.append(el('div', { className:'mapdown', textContent:'↓' }));
+    const card = el('div', { className:'mapphase' });
+    card.append(el('h3', {}, [el('span', { className:'n', textContent: i + 1 }), document.createTextNode(ph.phase.replace(/^\d+\s*·\s*/, ''))]));
+    card.append(el('p', { className:'d', textContent: ph.desc }));
+    const chips = el('div', { className:'mapchips' });
+    for (const it of ph.items) {
+      const chip = el('button', { className:'mapchip ' + (it.type === 'tool' ? 'tool' : it.type === 'tab' ? 'tab' : ''), textContent: it.label });
+      if (it.type === 'pipeline') chip.addEventListener('click', () => goPipeline(it.name));
+      else if (it.type === 'tool') chip.addEventListener('click', () => goTool(it.name));
+      else chip.addEventListener('click', () => selectTab(it.view));
+      chips.append(chip);
+    }
+    card.append(chips);
+    flow.append(card);
+  });
+  body.append(flow);
+}
+
 $('#plSelect').addEventListener('change', renderPipelineMeta);
 $('#plTarget').addEventListener('keydown', e => { if (e.key === 'Enter') $('#plRun').click(); });
 
@@ -2228,6 +2375,7 @@ function selectTab(view){
   for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
   for (const v of document.querySelectorAll('.view')) v.classList.toggle('active', v.id === 'view-' + view);
   if (view === 'panel') loadPanel();
+  if (view === 'map') renderMap();
   if (view === 'jobs') loadJobs();
   if (view === 'pipelines') loadPipelines();
   if (view === 'monitor') loadWatches();
