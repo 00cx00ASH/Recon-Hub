@@ -31,6 +31,27 @@ PR do fix. Não deixe pra depois — a lição só vale enquanto está fresca.
 - **Contrato NDJSON é sagrado** — ver `docs/TOOL_CONTRACT.md`. Toda
   ferramenta nova segue o mesmo formato de evento, os mesmos nomes de env
   var, a mesma convenção de severidade/confirmed.
+- **O hub ensina enquanto executa — não é só um runner de ferramenta.**
+  Quem tá aprendendo bug bounty (ou só não decorou todo finding_type) devia
+  entender O QUÊ aconteceu e POR QUE importa sem sair do hub pra pesquisar.
+  Isso já é estrutural em vários lugares — mantenha o padrão em tudo que
+  for novo:
+  - `tool.json.guide` explica o que pôr no alvo e como interpretar; toda
+    ferramenta nova precisa de um, não só as que "parecem confusas".
+  - `tool.json.validation` mostra um exemplo real de confirmação — o que
+    prova que o achado é de verdade, não só "o payload apareceu".
+  - `internal/intel.knownRisk[type].Advice` é o "por que isso importa e o
+    que fazer" que aparece no hover da prioridade em cada finding — toda
+    `finding_type` nova ganha uma entrada aqui, com um conselho específico
+    (não genérico tipo "investigue mais").
+  - A aba Mapa e o agent `bugbounty.md` existem pra dar contexto de
+    metodologia (por que essa fase vem antes daquela), não só listar
+    ferramentas. Um recurso novo que adicione uma categoria de vuln
+    precisa aparecer nos dois, com a mesma explicação do "por quê".
+  - Regra prática: se colar a resposta de UMA finding/UM evento na cara de
+    alguém que nunca usou o hub, essa pessoa devia entender o que aconteceu
+    sem perguntar "e daí?". Se não, falta uma frase de contexto em algum
+    desses lugares.
 
 ## Antes de commitar (sempre)
 

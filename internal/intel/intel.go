@@ -128,6 +128,9 @@ var knownRisk = map[string]risk{
 	"actuator-jolokia":                  {0.75, "Jolokia exposto costuma permitir RCE via MBean — trate como sério até provar o contrário."},
 	"actuator-index":                    {0.20, "índice dos endpoints disponíveis, por si só, é só um mapa — quase sempre informativo."},
 	"cognito-open-signup":               {0.25, "signup aberto é normal na maioria dos apps — só relevante combinado com outra falha."},
+	"reflected-xss":                     {0.85, "\"<\" voltou sem escapar de verdade — injeção de tag confirmada por texto puro, sem navegador. Antes de reportar como crítico, confira CSP/httpOnly no cookie de sessão: eles não desfazem o bug, mas mudam o impacto real que você escreve no relatório."},
+	"reflected-xss-attribute":           {0.40, "só a aspa quebrou, sem \"<\" — pode ser atributo explorável (se desprotegido) ou só um valor de texto solto sem risco. Abra a URL de verdade e confira o HTML ao redor do marcador antes de decidir a severidade."},
+	"sqli-error-based":                  {0.90, "erro real de banco vazado, confirmado por diferença contra o baseline sem payload — sinal forte, poucas chances de falso positivo. Ainda não prova quanto dá pra extrair (isso é SQLi cega/booleana, fora do escopo desta ferramenta) — descreva no relatório que a prova é vazamento de erro, não extração de dado."},
 }
 
 // riskFor looks up knownRisk by exact type, falling back to a neutral prior
