@@ -384,6 +384,51 @@ var templates = map[string]tmpl{
 		Refs:        []string{"https://cwe.mitre.org/data/definitions/94.html", "https://securitylab.github.com/research/github-actions-untrusted-input/"},
 		Repro:       genericRepro,
 	},
+	"reflected-xss": {
+		Name: "Cross-Site Scripting (XSS) refletido", CWE: "CWE-79",
+		Description: "Um parâmetro é refletido na resposta HTML sem sanitização — caracteres que fecham uma tag (`<`, `>`) voltam intactos, permitindo injetar markup arbitrário no contexto da página.",
+		Impact:      "Execução de JavaScript arbitrário no navegador da vítima no contexto de origem do site: roubo de sessão/token, ações em nome do usuário, phishing in-page. Impacto real depende de mitigação em camada (CSP, `HttpOnly` no cookie de sessão) — descreva isso no relatório.",
+		Remediation: "Escapar toda saída dinâmica pro contexto onde ela entra (HTML entity encoding no corpo, JS string escaping dentro de `<script>`, URL encoding em atributos `href`/`src`). Preferir template engines com auto-escape habilitado por padrão. Adicionar CSP como camada extra, não como correção principal.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/79.html", "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Requisite: `curl -s '" + f.Asset + "'`"}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				steps = append(steps, "Payload injetado: `"+p+"`")
+			}
+			steps = append(steps, "Observe: "+f.Evidence, "O marcador do payload aparece cru no HTML da resposta — sem escaping.")
+			return steps
+		},
+	},
+	"reflected-xss-attribute": {
+		Name: "Possível XSS refletido (quebra de atributo/string JS, contexto não confirmado)", CWE: "CWE-79",
+		Description: "Uma aspa (`\"` ou `'`) do payload voltou sem escapar, mas `<`/`>` não — sugere quebra de atributo HTML ou de string dentro de `<script>`, mas o scanner não faz parsing de HTML completo pra confirmar se o contexto ao redor permite exploração de verdade.",
+		Impact:      "Se o contexto permitir (atributo sem aspas ao redor bem definidas, ou string JS concatenada em código executado), o mesmo impacto do XSS refletido comum. Precisa de confirmação manual antes de classificar como reportável — não trate como certeza.",
+		Remediation: "Mesma correção do XSS refletido: escapar a saída pro contexto certo (atributo, string JS). Confirme o contexto exato antes de escrever o relatório.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/79.html", "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Requisite: `curl -s '" + f.Asset + "'`"}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				steps = append(steps, "Payload injetado: `"+p+"`")
+			}
+			steps = append(steps, "Observe: "+f.Evidence, "Abra a URL num navegador e inspecione o HTML ao redor do marcador antes de reportar — confirme se o atributo/script realmente quebra.")
+			return steps
+		},
+	},
+	"sqli-error-based": {
+		Name: "SQL Injection (baseada em erro)", CWE: "CWE-89",
+		Description: "Um caractere de quebra de string SQL (`'` ou `\"`) anexado a um parâmetro faz a aplicação vazar uma mensagem de erro real do banco de dados na resposta — prova que o valor chega numa query sem sanitização/parametrização.",
+		Impact:      "Vazamento de erro por si só já expõe detalhes de implementação (engine, versão, às vezes a query). Se a entrada realmente for concatenada sem parametrização, o risco vai de leitura não autorizada de dados até, dependendo dos privilégios do usuário do banco, escrita/exclusão ou execução de comando — mas isso NÃO foi confirmado por esta ferramenta (que só prova o erro, nunca extrai dado).",
+		Remediation: "Usar queries parametrizadas/prepared statements em toda a aplicação — nunca concatenar entrada do usuário numa query SQL. ORMs bem configurados já fazem isso por padrão; audite os pontos que usam SQL cru.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/89.html", "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Requisite sem payload (baseline): confirme que a resposta normal NÃO menciona erro de banco."}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				steps = append(steps, "Requisite com o payload anexado ao valor do parâmetro: `"+p+"`")
+			}
+			steps = append(steps, "URL de teste: `"+f.Asset+"`", "Observe: "+f.Evidence)
+			return steps
+		},
+	},
 }
 
 // more exact templates for the medium+ variants that a blunt prefix would
