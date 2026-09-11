@@ -1,0 +1,22 @@
+{
+  "name": "recon-subdomain-brute",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "recon",
+  "summary": "Enumeração ATIVA de subdomínio: gera candidatos prefixo+domínio a partir de uma wordlist (335 prefixos clássicos embutidos) e resolve DNS de verdade — acha o que nunca apareceu publicamente (diferente de recon-passive-enum/recon-crtsh, 100% passivos). Detecta DNS wildcard (catch-all) ANTES de gastar a wordlist inteira e filtra achados que são só o catch-all respondendo — nunca reporta milhares de falsos subdomínios num domínio com wildcard.",
+  "guide": "Alvo = o domínio RAIZ (exemplo.com), sem http:// e sem www. Não fala HTTP com o alvo, só DNS — não precisa de proxy/Tor. 'resolver' aponta pra um DNS server específico (ip[:porta]) se o resolvedor padrão do sistema estiver lento/limitado. Emite assets kind=subdomain com meta.ip; use depois num scanner ativo ou no recon-web-enum.",
+  "validation": "Exemplo de hit válido: prefixo 'api' resolve api.exemplo.com para 34.201.x.x, ausente do conjunto de IPs do wildcard (se o domínio tiver um) — meta.ip mostra o(s) IP(s) resolvido(s). Se o log acusar 'DNS wildcard detectado', qualquer subdomínio que resolva EXATAMENTE pro(s) mesmo(s) IP(s) do catch-all já foi filtrado antes de virar asset — só sobra o que resolve pra algo diferente, ou seja, configurado de propósito.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "domínio raiz (ex: exemplo.com)", "target_label": "Domínio" }
+  ],
+  "params": [
+    { "name": "wordlist", "type": "wordlist", "required": false, "default": "builtin/subdomains-common", "help": "lista de prefixos de subdomínio a testar" },
+    { "name": "words", "type": "string", "required": false, "help": "prefixos extra, separados por vírgula" },
+    { "name": "resolver", "type": "string", "required": false, "help": "DNS server específico (ip ou ip:porta) — default: resolvedor do sistema" },
+    { "name": "max_words", "type": "int", "required": false, "default": 20000, "help": "teto de prefixos testados" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 50, "help": "resoluções DNS simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 3000, "help": "timeout por resolução" }
+  ]
+}

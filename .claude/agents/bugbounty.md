@@ -232,6 +232,14 @@ ainda falta rodar num programa.
   ela realmente lê esse arquivo pra decidir o destino da requisição.
 
 **2. Recon ativo** (toca o alvo, ainda leve)
+- `recon-subdomain-brute` — subfinder ATIVO: gera candidato
+  prefixo+domínio a partir de wordlist e resolve DNS de verdade — acha o
+  que nunca apareceu publicamente (diferente do recon passivo acima).
+  Detecta wildcard DNS (catch-all) sozinho antes de gastar a wordlist e
+  filtra o que é só o catch-all respondendo, então não precisa
+  desconfiar de falso positivo em massa. Rode depois do recon passivo,
+  como um "e se tiver mais subdomínio que não apareceu em nenhum CT
+  log".
 - `recon-infra-enum` — port scan + banner grab, sinaliza serviços
   sensíveis expostos (redis, mongo, docker API, k8s, elastic…).
 - `recon-web-enum` — crawl raso, fingerprint de stack/WAF/CDN, ~46

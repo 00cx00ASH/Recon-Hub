@@ -113,6 +113,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 |---------------------|----------------------------------------------------------------------|
 | `recon-passive-enum` | subdomínios de **7 fontes** grátis em paralelo (CT, DNS datasets…) + resolve |
 | `recon-crtsh`        | subdomínios via Certificate Transparency (crt.sh + certspotter, com merge) |
+| `recon-subdomain-brute` | subdomínio ATIVO — wordlist + resolução DNS de verdade, detecta e filtra wildcard sozinho |
 | `recon-web-enum`     | crawl same-site raso, fingerprint de stack (Server/X-Powered-By/cookies) |
 | `recon-infra-enum`   | port scan TCP + banner + fingerprint. Aceita host/IP/CIDR, presets `top100`/… |
 | `recon-tech-cve`     | fingerprint passivo de stack × tabela curada de CVEs — sinaliza "versão velha", nunca confirma exploração |

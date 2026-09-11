@@ -34,6 +34,7 @@ tools/js-supabase-probe/js-supabase-probe
 tools/recon-crtsh/recon-crtsh
 tools/recon-infra-enum/recon-infra-enum
 tools/recon-passive-enum/recon-passive-enum
+tools/recon-subdomain-brute/recon-subdomain-brute
 tools/recon-web-enum/recon-web-enum
 tools/recon-tech-cve/recon-tech-cve
 tools/scan-actuator/scan-actuator

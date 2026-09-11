@@ -538,6 +538,7 @@ Pipelines inclusas:
 | `blh-sweep`      | recon-crtsh → scan-broken-link-hijack                       | links externos registráveis   |
 | `cognito-audit`  | recon-crtsh → scan-cognito                                  | Identity Pool aberto a anônimo |
 | `passive-takeover` | recon-passive-enum → scan-subdomain-takeover              | subdomain takeover (cobertura ampla) |
+| `active-subdomain-sweep` | recon-subdomain-brute → scan-subdomain-takeover       | subdomínio + takeover (achados que CT log nunca revelaria) |
 | `gtm-osint`      | recon-crtsh → js-gtm-osint                                  | análise de containers GTM     |
 | `cache-poison-sweep` | recon-crtsh → scan-cache-poisoning                      | web cache poisoning           |
 | `supabase-audit` | recon-crtsh → js-supabase-probe                             | RLS Supabase ausente          |
@@ -827,6 +828,7 @@ pelas categorias acima (nada ficou de fora).
 | `recon-passive-enum`     | nagliEnum   | Enum passivo de subdomínios de 7 fontes grátis em paralelo (crt.sh, certspotter, hackertarget, AlienVault OTX, Anubis/jldc, RapidDNS, Wayback); mescla, deduplica e valida no escopo. Degrada sozinho. Superset do `recon-crtsh` | **pronta** |
 | `recon-lambda-pipeline`  | lemma       | Pipeline de recon em fases (subs → HTTP → cloud → fuzz → crawl → vulns → secrets) sobre muitas ferramentas | **= pipeline** `full-recon` (fan-out, 3 ondas, 20 ferramentas) |
 | `recon-crtsh`            | — (nova)    | Enum passivo de subdomínios via Certificate Transparency (crt.sh); emite assets `subdomain`. Feita para ser o 1º step de pipelines | **pronta** |
+| `recon-subdomain-brute`  | — (nova)    | Enum ATIVA de subdomínio: wordlist (335 prefixos embutidos) + resolução DNS de verdade — acha o que nunca apareceu num CT log. Detecta DNS wildcard (catch-all) sozinho e filtra achado que é só o catch-all respondendo, não gera falso-positivo em massa | **pronta** |
 | `recon-tech-cve`         | — (nova)    | Fingerprint passivo de stack (Server, X-Powered-By, meta generator, assets versionados como jQuery/Bootstrap/núcleo do WordPress) cruzado com uma tabela curada e estática de CVEs conhecidas — sem API externa nem feed de CVE. Sinaliza "versão velha o bastante", nunca confirma exploração | **pronta** |
 
 ### js — JavaScript, Cloud e Segredos
@@ -920,6 +922,7 @@ tools/js-firebase-enum/     firebaseConfig → RTDB/Firestore/Storage abertos (G
 tools/scan-broken-link-hijack/  links externos registráveis (Go, módulo próprio)
 tools/scan-cognito/         Identity Pool AWS entregando creds a anônimo (Go, módulo próprio)
 tools/recon-passive-enum/   enum passivo de subdomínios, 7 fontes (Go, módulo próprio)
+tools/recon-subdomain-brute/ enum ativa de subdomínio: wordlist + DNS, filtra wildcard (Go, módulo próprio)
 tools/js-gtm-osint/         OSINT de Google Tag Manager (Go, módulo próprio)
 tools/scan-cache-poisoning/ web cache poisoning por entrada não-chaveada (Go, módulo próprio)
 tools/js-supabase-probe/    Supabase: RLS ausente / service_role no cliente (Go, módulo próprio)
