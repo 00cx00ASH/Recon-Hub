@@ -22,6 +22,7 @@ services:
     volumes:
       - reconhub-data:/app/data
       - reconhub-watches:/app/watches   # pipelines agendadas criadas pela API
+      - reconhub-programs:/app/programs # escopo dos projetos criados pela API
     environment:
       RECONHUB_TOKEN: "${RECONHUB_TOKEN:-}"
       RECONHUB_STORE: "${RECONHUB_STORE:-}"
@@ -30,3 +31,4 @@ services:
 volumes:
   reconhub-data:
   reconhub-watches:
+  reconhub-programs:
