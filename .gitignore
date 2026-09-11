@@ -1,4 +1,11 @@
 /data/
+/.env
+# programas de bug bounty são dado local/privado (escopo real, às vezes sob
+# confidencialidade do próprio programa) — nunca vão pro histórico do git.
+# example.json é o único template genérico, fica versionado de propósito.
+/programs/*.json
+!/programs/example.json
+/programs-backup/
 /reconhub
 /reconhub-sqlite
 /reconhub-mcp
