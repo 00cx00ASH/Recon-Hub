@@ -107,6 +107,15 @@ func TestBuildPayloads(t *testing.T) {
 	if !hasUserinfo {
 		t.Error("faltou o payload userinfo com o host alvo")
 	}
+	var hasBackslashAt bool
+	for _, p := range ps {
+		if p.value == "https://example.com\\@victim.com" {
+			hasBackslashAt = true
+		}
+	}
+	if !hasBackslashAt {
+		t.Error("faltou o payload de confusão de parser (backslash antes do @)")
+	}
 }
 
 // integração: servidor que reflete o param `next` no Location.

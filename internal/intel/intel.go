@@ -118,6 +118,7 @@ var knownRisk = map[string]risk{
 	"github-pwn-request":                {0.55, "pwn request é real se o workflow rodar em PR de fork sem aprovação — confirme o trigger exato."},
 	"github-actions-injection":          {0.55, "injeção em `run:` via evento controlável pelo atacante é séria — confirme que o campo é editável por non-collaborator."},
 	"github-self-hosted-runner":         {0.40, "risco depende de quem pode abrir PR nesse repo — confirme visibilidade e permissões antes de escalar."},
+	"github-ambient-config-secret-risk": {0.35, "combinação de sinais (config ambiente + secrets.* + execução não confiável), não confirmação de exploração — confirme se a ferramenta de CLI usada no job realmente lê o destino desse arquivo de config antes de reportar como crítico."},
 	"cors-reflect-origin":               {0.50, "reflexão sem credentials tem impacto bem menor — confirme o header Access-Control-Allow-Credentials."},
 	"cors-wildcard":                     {0.20, "wildcard sem credentials é, no melhor caso, informativo — navegadores já limitam o abuso."},
 	"cors-wildcard-credentials":         {0.60, "combinação estranha (a maioria dos navegadores rejeita `*` com credentials) — confirme que é mesmo isso que o servidor manda."},

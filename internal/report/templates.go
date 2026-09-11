@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -34,6 +35,9 @@ func genericRepro(f Item) []string {
 		if req, ok := m["request"].(string); ok && req != "" {
 			steps = append(steps, "Requisição:\n```\n"+req+"\n```")
 		}
+		if ctrl := negativeControlLine(m); ctrl != "" {
+			steps = append(steps, ctrl)
+		}
 	}
 	if f.Evidence != "" {
 		steps = append(steps, "Observe: "+f.Evidence)
@@ -42,6 +46,31 @@ func genericRepro(f Item) []string {
 		steps = append(steps, "Reproduza a condição descrita na evidência.")
 	}
 	return steps
+}
+
+// negativeControlLine surfaces, as an explicit sentence, any baseline/
+// controle-negativo data a tool already collected in Meta (qualquer chave
+// contendo "baseline" — convenção usada por scan-idor, scan-sqli, scan-ssrf,
+// scan-smuggling…). A diferença entre "achei uma anomalia" e "provei que
+// NÃO é coincidência" é ter comparado contra uma condição de controle sem
+// o bug — a ferramenta já fez essa comparação internamente pra confirmar o
+// finding; isso só torna esse raciocínio visível em quem lê o relatório.
+func negativeControlLine(m map[string]any) string {
+	var keys []string
+	for k := range m {
+		if strings.Contains(strings.ToLower(k), "baseline") {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return ""
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
+	}
+	return "Controle negativo (condição sem o bug, já comparada pela ferramenta): " + strings.Join(parts, ", ") + " — é a diferença contra isso que descarta coincidência, não só o payload/anomalia aparecendo sozinho."
 }
 
 // templates maps a finding type (exact, then prefix) to its knowledge.
@@ -446,12 +475,12 @@ var extra = map[string]tmpl{
 		Remediation: "Validar em toda leitura/escrita que o recurso pedido pertence à sessão autenticada (checagem de autorização por objeto, não só autenticação). Preferir identificadores não sequenciais (UUID) como defesa em profundidade — isso não substitui a checagem de autorização.",
 		Refs:        []string{"https://cwe.mitre.org/data/definitions/639.html", "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"},
 		Repro: func(f Item) []string {
-			steps := []string{"Baseline: peça `" + f.Asset + "` autenticado como o DONO real do recurso — anote status e tamanho do corpo."}
+			steps := []string{"Controle negativo (baseline): peça `" + f.Asset + "` autenticado como o DONO real do recurso — anote status e tamanho do corpo. É contra ISSO que a resposta cruzada é comparada, não contra um 200 genérico."}
 			if s, ok := f.Meta["owner_baseline_status"].(float64); ok {
 				steps = append(steps, fmt.Sprintf("Baseline do dono: status %.0f", s))
 			}
 			steps = append(steps, "Cruzada: peça a MESMA URL autenticado com a OUTRA sessão (dona de um recurso diferente).")
-			steps = append(steps, "Observe: "+f.Evidence, "A resposta cruzada bate estruturalmente com o baseline do dono — não é uma página de erro/shell genérico disfarçado de sucesso.")
+			steps = append(steps, "Observe: "+f.Evidence, "A resposta cruzada bate estruturalmente com o baseline do dono (controle negativo acima) — a diferença contra um 200 genérico/página de erro disfarçada é o que prova que não é coincidência.")
 			return steps
 		},
 	},
@@ -469,6 +498,26 @@ var extra = map[string]tmpl{
 				steps = append(steps, "Envie várias tentativas seguidas de credencial errada pra uma conta de teste descartável.")
 			}
 			steps = append(steps, "Observe: "+f.Evidence, "Nenhuma tentativa recebeu CAPTCHA, 429, Retry-After ou mensagem de bloqueio — todas tratadas de forma idêntica.")
+			return steps
+		},
+	},
+	"github-ambient-config-secret-risk": {
+		Name: "Possível exfiltração de segredo via config \"ambiente\" (não confirmado)", CWE: "CWE-522",
+		Description: "Um workflow expõe um secret do repo como env var (`secrets.*`) E roda sobre conteúdo potencialmente não confiável (checkout de PR via `pull_request_target`, ou runner self-hosted) E o repositório tem versionado um arquivo de config de CLI conhecido por um footgun específico (`.weblate`, `.npmrc`, `.pypirc`, `.netrc`, `.curlrc`, `.wgetrc`): esses arquivos são descobertos subindo diretórios/lidos do checkout, e o destino de requisição que fornecem não é necessariamente vinculado à origem do segredo carregado à parte — se a ferramenta de CLI usada nesse job confiar nesse arquivo pra decidir pra onde manda a requisição, um PR malicioso que edita esse arquivo pode redirecionar o segredo pra um host do atacante. É uma COMBINAÇÃO DE SINAIS, não uma exploração confirmada — o hub não sabe se a ferramenta específica usada no `run:` realmente tem esse comportamento.",
+		Impact:      "Se confirmado, o segredo do repo (token de API, credencial de deploy) vaza pra infraestrutura do atacante assim que o workflow roda sobre um PR malicioso — sem precisar de interpolação `${{ }}` direta num `run:` (por isso não é pego por github-actions-injection).",
+		Remediation: "Não expor secrets em jobs que fazem checkout de conteúdo não confiável (`pull_request_target` + checkout do head, ou self-hosted em repo público). Se a ferramenta de CLI usada aceitar, vincule explicitamente a URL/origem esperada (equivalente ao que corrigiu o caso real: validar a origem com o MESMO parser que faz a requisição, não confiar em arquivo de config descoberto no checkout).",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/522.html", "https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions"},
+		Repro: func(f Item) []string {
+			steps := []string{"Workflow: `" + f.Asset + "`"}
+			if repo, ok := f.Meta["repo"].(string); ok && repo != "" {
+				steps = append(steps, "Repo: `"+repo+"`")
+			}
+			steps = append(steps, "Observe: "+f.Evidence)
+			steps = append(steps,
+				"Leia o workflow: identifique QUAL ferramenta de CLI roda no job que tem o secret exposto.",
+				"Verifique se essa ferramenta lê algum arquivo de config do tipo .weblate/.npmrc/.pypirc/.netrc/.curlrc/.wgetrc pra decidir a URL/host de destino da requisição.",
+				"Se ler: confirme se o segredo (env var) é enviado pra qualquer URL que esse arquivo definir, ou só pra uma origem fixa/confiável — isso é o que decide se é explorável de verdade.",
+				"Sem essa confirmação manual, trate como hipótese a verificar, não como achado confirmado.")
 			return steps
 		},
 	},

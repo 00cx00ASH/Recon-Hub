@@ -116,6 +116,16 @@ o próximo passo sem o operador precisar apontar):
 - Finding de baixa severidade que PODE encadear (ex: open-redirect) →
   cheque se aparece em algum fluxo OAuth/SSO do programa
   (`scan-auth-flow`) antes de descartar como ruído isolado.
+- **Confirmou um finding_type em UM endpoint → rode a mesma técnica nos
+  outros endpoints/parâmetros/subdomínios já descobertos da mesma stack
+  antes de mudar de fase.** Bug sistêmico raramente é isolado — é o mesmo
+  código reusado ou o mesmo dev cometendo o mesmo erro em vários lugares
+  (padrão visto num relatório real: achou um estouro de buffer numa
+  função, auditou o resto do codebase atrás do MESMO padrão e achou mais
+  5 instâncias em 3 binários diferentes). Exemplo prático aqui: XSS
+  confirmado em `?q=` de um endpoint → teste o mesmo parâmetro nos outros
+  hosts/paths que usam o mesmo template/framework antes de considerar a
+  frente esgotada.
 
 **Parar de vez** (não só pausar) quando: budget esgotado, finding
 crítico aguardando decisão do operador, 3+ rodadas seguidas sem nada
@@ -200,7 +210,14 @@ ainda falta rodar num programa.
   conhecidas (não confirma exploração, só sinaliza "versão velha o
   bastante").
 - `int-github-audit` — segredos e workflows vulneráveis na conta/org do
-  GitHub do alvo (se pública).
+  GitHub do alvo (se pública): segredo versionado, pwn request
+  (`pull_request_target` + checkout do PR), injeção de shell via `${{ }}`
+  num `run:`, runner self-hosted em repo público, e config "ambiente"
+  (`.weblate`/`.npmrc`/`.pypirc`/`.netrc`/`.curlrc`/`.wgetrc`) versionada
+  num repo que expõe `secrets.*` e roda sobre conteúdo não confiável —
+  isso é sinal combinado pra verificar manualmente (não confirmação de
+  exploração), porque o hub não executa a ferramenta de CLI pra saber se
+  ela realmente lê esse arquivo pra decidir o destino da requisição.
 
 **2. Recon ativo** (toca o alvo, ainda leve)
 - `recon-infra-enum` — port scan + banner grab, sinaliza serviços
@@ -278,6 +295,28 @@ ainda falta rodar num programa.
 Confirme severidade real antes de reportar: um 403 puro sem prova é
 `info`/`meta.confirmed:false`, não `high`. Registre o veredito com
 `hub_triage_finding` (verdict + reason) — fecha o loop de aprendizado.
+
+Antes de decidir a severidade (e escrever o `reason`), raciocine por eixo em
+vez de chutar um rótulo — é o mesmo padrão usado em relatórios reais bem
+triados (ex: justificativa CVSS por componente):
+- **Quem controla o disparo?** Um atacante externo/não confiável, ou só o
+  próprio dono/desenvolvedor escolhendo mal uma opção? Sem controle
+  externo, não é vulnerabilidade — é o caso clássico de "achado" rejeitado
+  como informativo (viu isso acontecer num relatório real do curl: bug de
+  memória real, mas só disparava se o PRÓPRIO chamador da API escolhesse
+  uma ordem de parâmetro específica — fechado como não-vulnerabilidade por
+  falta de atacante externo).
+- **Que privilégio/acesso ele já precisa ter?** Não autenticado é sempre
+  mais grave que autenticado; autenticado-qualquer-conta é mais grave que
+  precisa-de-conta-específica.
+- **O que ele ganha que NÃO deveria?** Nomeie o limite cruzado com
+  precisão ("o privilégio X permite A, isso entrega B, e B > A") em vez de
+  só "vaza dado"/"é grave" — reporte que faz essa comparação explícita
+  triam mais rápido e rejeitam menos.
+- **Precisa de mais alguma coisa pra explorar de verdade** (interação do
+  usuário, condição de corrida, config não-padrão)? Isso baixa a
+  severidade mesmo com impacto alto — não escreva `critical` só porque o
+  pior cenário é grave.
 
 **6. Relatório** — `hub_draft_finding` (um achado) ou `hub_program_report`
 (o programa inteiro), não remontado na mão.

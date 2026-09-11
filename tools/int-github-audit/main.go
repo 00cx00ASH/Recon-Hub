@@ -271,6 +271,7 @@ func auditRepo(gh *ghClient, r ghRepo) {
 	}
 
 	// workflows
+	ambientConfig := hasAmbientConfigFile(risky)
 	for _, wf := range workflows {
 		if gh.exhausted {
 			break
@@ -279,7 +280,7 @@ func auditRepo(gh *ghClient, r ghRepo) {
 		if cst != 200 {
 			continue
 		}
-		for _, w := range analyzeWorkflow(content) {
+		for _, w := range analyzeWorkflow(content, ambientConfig) {
 			emit(ev{Type: "finding", Severity: w.sev, FindingType: w.kind,
 				Title:    fmt.Sprintf("%s: %s / %s", w.kind, r.Name, wf),
 				Asset:    r.HTMLURL + "/blob/" + branch + "/" + wf,

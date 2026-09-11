@@ -160,6 +160,26 @@ func isWorkflow(path string) bool {
 		(strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml"))
 }
 
+// ambientConfigRe matches filenames de config de CLI conhecidas por um
+// footgun específico: são descobertas subindo diretórios (ou lidas do repo
+// checked-out) e o valor de URL/destino que elas fornecem NÃO é vinculado à
+// origem do segredo carregado separadamente (normalmente uma env var). Um
+// desses arquivos controlado por PR pode redirecionar pra onde esse segredo
+// é enviado — visto num relatório real contra o wlc/Weblate (.weblate
+// descoberto subindo diretórios, WLC_KEY sem escopo de origem). .npmrc/
+// .pypirc/.netrc já são "risky" por poderem CONTER segredo; aqui o ponto é
+// diferente: o arquivo REDIRECIONA um segredo carregado de outro lugar.
+var ambientConfigRe = regexp.MustCompile(`(?i)(^|/)(\.weblate|\.weblate\.ini|weblate\.ini|\.npmrc|\.pypirc|\.netrc|\.curlrc|\.wgetrc)$`)
+
+func hasAmbientConfigFile(paths []string) bool {
+	for _, p := range paths {
+		if ambientConfigRe.MatchString(p) {
+			return true
+		}
+	}
+	return false
+}
+
 // --- workflow analysis ---
 
 type wfFinding struct {
@@ -168,13 +188,18 @@ type wfFinding struct {
 	note string
 }
 
-func analyzeWorkflow(yaml string) []wfFinding {
+// analyzeWorkflow reports risky patterns in one workflow YAML.
+// hasAmbientConfig vem da varredura da árvore do repo inteiro (não dá pra
+// saber só olhando o workflow) — indica se existe um arquivo do tipo
+// ambientConfigRe versionado no repo.
+func analyzeWorkflow(yaml string, hasAmbientConfig bool) []wfFinding {
 	var out []wfFinding
 	l := strings.ToLower(yaml)
 	hasPRTarget := strings.Contains(l, "pull_request_target")
 	hasCheckout := regexp.MustCompile(`(?i)uses:\s*actions/checkout`).MatchString(yaml)
 	refsHeadRef := strings.Contains(l, "github.event.pull_request.head") ||
 		strings.Contains(l, "github.head_ref")
+	hasSelfHosted := regexp.MustCompile(`(?i)runs-on:\s*\[?\s*self-hosted`).MatchString(yaml)
 
 	if hasPRTarget && hasCheckout && refsHeadRef {
 		out = append(out, wfFinding{"github-pwn-request", "high",
@@ -195,9 +220,22 @@ func analyzeWorkflow(yaml string) []wfFinding {
 	}
 
 	// self-hosted runner em repo público → risco de abuso
-	if regexp.MustCompile(`(?i)runs-on:\s*\[?\s*self-hosted`).MatchString(yaml) {
+	if hasSelfHosted {
 		out = append(out, wfFinding{"github-self-hosted-runner", "medium",
 			"runner self-hosted — se o repo for público, um PR pode executar código no runner"})
+	}
+
+	// segredo exposto (secrets.X) + execução sobre conteúdo não confiável
+	// (checkout de PR não confiável OU runner self-hosted) + arquivo de
+	// config ambiente versionado no repo = uma ferramenta de CLI rodando
+	// nesse job pode ter seu destino de requisição redirecionado por esse
+	// arquivo, levando o segredo consigo (mesmo sem `${{ }}` interpolado
+	// direto num run: — por isso não cai em github-actions-injection).
+	hasSecretEnv := regexp.MustCompile(`(?i)\$\{\{\s*secrets\.[a-z0-9_]+\s*\}\}`).MatchString(yaml)
+	untrustedExec := (hasPRTarget && hasCheckout) || hasSelfHosted
+	if hasAmbientConfig && hasSecretEnv && untrustedExec {
+		out = append(out, wfFinding{"github-ambient-config-secret-risk", "high",
+			"workflow expõe secrets.* como env var E roda sobre conteúdo não confiável (checkout de PR/pull_request_target ou runner self-hosted), e o repo tem um arquivo de config \"ambiente\" versionado (.weblate/.npmrc/.pypirc/.netrc/.curlrc/.wgetrc) — se a ferramenta de CLI usada nesse job resolve o destino da requisição a partir desse arquivo sem vincular o segredo à origem confiável, um PR malicioso pode redirecionar o segredo pra fora (mesmo padrão de um caso real: wlc/Weblate, .weblate + WLC_KEY)"})
 	}
 	return out
 }

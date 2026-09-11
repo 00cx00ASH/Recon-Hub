@@ -30,6 +30,60 @@ func TestIsRiskyFile(t *testing.T) {
 	}
 }
 
+func TestHasAmbientConfigFile(t *testing.T) {
+	yes := []string{".weblate", ".weblate.ini", "weblate.ini", "app/.npmrc", ".pypirc", "sub/.netrc", ".curlrc", ".wgetrc"}
+	for _, p := range yes {
+		if !hasAmbientConfigFile([]string{"README.md", p}) {
+			t.Errorf("%q deveria ser detectado como config ambiente", p)
+		}
+	}
+	if hasAmbientConfigFile([]string{"README.md", "src/main.go", "package.json"}) {
+		t.Error("sem arquivo de config ambiente não deveria detectar nada")
+	}
+}
+
+func TestAnalyzeWorkflowAmbientConfigSecretRisk(t *testing.T) {
+	wf := `
+name: sync
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      WLC_KEY: ${{ secrets.WLC_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: wlc list-projects
+`
+	// sem arquivo de config ambiente no repo -> não acende esse finding
+	if fs := analyzeWorkflow(wf, false); hasKind(fs, "github-ambient-config-secret-risk") {
+		t.Fatalf("sem config ambiente no repo não deveria acender: %+v", fs)
+	}
+	// com arquivo de config ambiente no repo -> acende
+	fs := analyzeWorkflow(wf, true)
+	if !hasKind(fs, "github-ambient-config-secret-risk") {
+		t.Fatalf("esperava github-ambient-config-secret-risk: %+v", fs)
+	}
+}
+
+func TestAnalyzeWorkflowAmbientConfigNeedsSecretAndUntrustedExec(t *testing.T) {
+	// config ambiente presente, mas sem secrets.* nem execução não confiável
+	wf := `
+on: [push]
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test
+`
+	if fs := analyzeWorkflow(wf, true); hasKind(fs, "github-ambient-config-secret-risk") {
+		t.Fatalf("sem secrets.*/execução não confiável não deveria acender: %+v", fs)
+	}
+}
+
 func TestIsWorkflow(t *testing.T) {
 	if !isWorkflow(".github/workflows/ci.yml") || !isWorkflow(".github/workflows/deploy.yaml") {
 		t.Error("workflows válidos")
@@ -54,7 +108,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - run: npm ci && npm test
 `
-	fs := analyzeWorkflow(wf)
+	fs := analyzeWorkflow(wf, false)
 	if !hasKind(fs, "github-pwn-request") {
 		t.Fatalf("faltou pwn-request: %+v", fs)
 	}
@@ -76,7 +130,7 @@ jobs:
           echo "title is ${{ github.event.issue.title }}"
           ./build.sh
 `
-	fs := analyzeWorkflow(wf)
+	fs := analyzeWorkflow(wf, false)
 	if !hasKind(fs, "github-actions-injection") {
 		t.Fatalf("faltou injection: %+v", fs)
 	}
@@ -92,7 +146,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: make test
 `
-	if fs := analyzeWorkflow(wf); len(fs) != 0 {
+	if fs := analyzeWorkflow(wf, false); len(fs) != 0 {
 		t.Errorf("workflow limpo não deveria acender nada: %+v", fs)
 	}
 }

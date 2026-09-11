@@ -35,6 +35,16 @@ func buildPayloads(canary, targetHost string) []payloadEntry {
 		{"tab antes da url", "%09https://" + canary},
 		{"newline antes da url", "%0Ahttps://" + canary},
 		{"userinfo (@)", "https://" + targetHost + "@" + canary},
+		// diferente do userinfo comum acima: aqui o CANARY vem primeiro e o
+		// targetHost (parece confiável) depois do "\@" — reproduz uma técnica
+		// real de bypass de validação de origem (visto em relatório público
+		// contra o wlc/Weblate): parsers que tratam "\" como parte do userinfo
+		// (ex: net/url do Go, urllib.parse do Python) resolvem o host pro que
+		// vem DEPOIS do "\@" (o alvo, "confiável"), mas outra biblioteca no
+		// mesmo processo (ex: urllib3) trata "\" como separador de path e
+		// resolve pro que vem ANTES (o canary) — um validador que checa com
+		// um parser e requisita/redireciona com outro pode aprovar isso.
+		{"backslash antes do @ (confusão de parser)", "https://" + canary + "\\@" + targetHost},
 		{"fragmento depois do host", "https://" + canary + "#." + targetHost},
 		{"query depois do host", "https://" + canary + "?." + targetHost},
 		{"backslash depois do host", "https://" + canary + "\\." + targetHost},

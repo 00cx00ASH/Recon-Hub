@@ -134,3 +134,37 @@ func TestLookup(t *testing.T) {
 		t.Error("desconhecido não deveria casar")
 	}
 }
+
+func TestGenericReproSurfacesNegativeControl(t *testing.T) {
+	f := Item{
+		Asset: "https://api.acme.com/x", Evidence: "diferença de latência consistente",
+		Meta: map[string]any{"baseline_ms": 12.0, "probe_ms": 55.0, "payload": "'"},
+	}
+	joined := strings.Join(genericRepro(f), " | ")
+	if !strings.Contains(joined, "Controle negativo") || !strings.Contains(joined, "baseline_ms=12") {
+		t.Fatalf("esperava controle negativo citando baseline_ms, veio: %s", joined)
+	}
+}
+
+func TestGenericReproWithoutBaselineHasNoControlLine(t *testing.T) {
+	f := Item{Asset: "https://api.acme.com/x", Evidence: "algo achado"}
+	joined := strings.Join(genericRepro(f), " | ")
+	if strings.Contains(joined, "Controle negativo") {
+		t.Fatalf("sem meta de baseline não deveria inventar controle negativo: %s", joined)
+	}
+}
+
+func TestIdorHorizontalReproMentionsNegativeControl(t *testing.T) {
+	tp, ok := lookup("idor-horizontal")
+	if !ok {
+		t.Fatal("esperava template pra idor-horizontal")
+	}
+	f := Item{
+		Asset: "https://api.acme.com/orders/1002", Evidence: "bateu com o baseline de B",
+		Meta: map[string]any{"owner_baseline_status": 200.0},
+	}
+	joined := strings.Join(tp.Repro(f), " | ")
+	if !strings.Contains(joined, "Controle negativo") {
+		t.Fatalf("esperava menção a controle negativo no repro de idor-horizontal: %s", joined)
+	}
+}
