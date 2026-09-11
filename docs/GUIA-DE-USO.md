@@ -27,7 +27,7 @@ ferramenta) e o [`README.md`](../README.md) (instalação, auth, catálogo compl
 └───────────────────────────┬───────────────────────────────┘
                             │  stdin JSON + env  →  NDJSON stdout
 ┌─ FERRAMENTAS (tools/<nome>/) ─────────────────────────────┐
-│  27 processos externos, cada um módulo Go isolado.         │
+│  34 processos externos, cada um módulo Go isolado.         │
 │  O hub NÃO depende delas; elas não incham o hub.           │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -105,7 +105,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ## 4. O que temos hoje
 
-### 27 ferramentas, por grupo
+### 34 ferramentas, por grupo
 
 **recon — achar superfície**
 
@@ -133,6 +133,8 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-mongodb`            | MongoDB sem auth — fala OP_MSG direto, lista bancos/coleções (só nomes) |
 | `scan-postman-net`        | busca na rede **pública** do Postman por um termo, varre collections por segredo |
 | `scan-postman-audit`      | auditoria profunda de uma collection que **você aponta** (segredo, PII c/ Luhn, auth hardcoded) |
+| `scan-idor`               | IDOR horizontal com DUAS sessões de teste — compara a resposta cruzada contra o baseline legítimo do dono, só status+tamanho (nunca guarda o corpo) |
+| `scan-bruteforce-check`   | confirma ausência de rate limiting/lockout num login/OTP — tentativas erradas travadas (teto 10), para no 1º sinal de proteção |
 
 **js — JavaScript, cloud, segredos** (todas baixam página + `<script src>` + source maps)
 
@@ -181,7 +183,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
   selecionáveis no param `wordlist`.
 - **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
-- **MCP** — `cmd/reconhub-mcp`, 19 tools, deixa o Claude dirigir o hub.
+- **MCP** — `cmd/reconhub-mcp`, 21 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +
   job sqlite.
@@ -291,7 +293,7 @@ dep-confusion, secrets — coisas que mudam sozinhas.
 
 ### g) Com o Claude (MCP)
 
-`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 19 tools
+`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 21 tools
 (`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_triage_finding`,
 `hub_draft_finding`, `hub_program_report`, `hub_create_program`…). Aí você
 conversa: "roda `full-recon` no acme.com no programa acme e me resume os
@@ -302,7 +304,7 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 
 É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
-repo, e só age através das 19 tools MCP acima (sem Bash, sem internet
+repo, e só age através das 21 tools MCP acima (sem Bash, sem internet
 solta). Isso importa: **todo job/pipeline que ele dispara passa pelo
 mesmo enforcement de escopo do servidor** que qualquer outro caminho
 (UI, API, CLI) — testado na prática: pedir um alvo fora do

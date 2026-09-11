@@ -95,6 +95,14 @@ de leitura de arquivo) quando perguntado "o que já testamos aqui" — texto
 sem estrutura nenhuma ele ainda entende, mas datado e com "próximo passo"
 explícito poupa você de reler tudo pra saber onde parou.
 
+Isso é diferente de `data/lessons.md` (API `GET/POST/PUT /api/lessons`,
+MCP `hub_get_lessons`/`hub_add_lesson`): notes.md é por programa
+("o que testei aqui"); lessons.md é cross-programa ("padrão que vale
+em qualquer programa" — comportamento de WAF, peculiaridade de
+plataforma, técnica que funcionou). E nenhum dos dois é a seção
+"Lições aprendidas" abaixo, que é sobre desenvolver ESTE repo, não
+sobre caçar bugs em programas de terceiros.
+
 ## Lições aprendidas
 
 - **CI falha se `gofmt -l .` não estiver limpo, mesmo com build/vet/test

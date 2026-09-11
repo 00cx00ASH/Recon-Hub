@@ -114,6 +114,94 @@ func WriteNotes(dataDir, name, content string) error {
 	return os.WriteFile(filepath.Join(dir, "notes.md"), []byte(content), 0o644)
 }
 
+// lessonsLockKey is a sentinel that can never collide with a real program
+// name (nameRe requires a lowercase-alnum start; this starts with a NUL).
+const lessonsLockKey = "\x00lessons"
+
+// Lesson is one entry in the cross-program knowledge base: a pattern worth
+// remembering on OTHER programs too, not just the one where it was
+// noticed — unlike notes.md (per-program, freeform), lessons.md lives at
+// the root of dataDir and is shared by every program.
+type Lesson struct {
+	Text    string   `json:"text"`
+	Tags    []string `json:"tags,omitempty"`
+	Program string   `json:"program,omitempty"` // where this was learned — context only, never enforced as scope
+	Tool    string   `json:"tool,omitempty"`
+}
+
+const lessonsHeader = "# Lições cross-programa\n\n" +
+	"Padrões que se repetem entre programas diferentes — comportamento de " +
+	"WAF/rate-limit, peculiaridade de uma plataforma (HackerOne/Bugcrowd/...), " +
+	"técnica que funcionou ou que NÃO funcionou. O valor de uma entrada aqui " +
+	"é ser reaproveitável em QUALQUER programa novo, não só onde foi " +
+	"aprendida — isso é o que distingue lessons.md de notes.md por programa.\n\n"
+
+func lessonsPath(dataDir string) string { return filepath.Join(dataDir, "lessons.md") }
+
+// ReadLessons returns lessons.md content ("" if none recorded yet).
+func ReadLessons(dataDir string) (string, error) {
+	b, err := os.ReadFile(lessonsPath(dataDir))
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	return string(b), err
+}
+
+// WriteLessons overwrites lessons.md wholesale — for manual reorganizing or
+// cleanup. AppendLesson is the safer default for recording a new one: it
+// can never clobber existing entries the way a WriteLessons call built from
+// stale content would.
+func WriteLessons(dataDir, content string) error {
+	l := lockFor(lessonsLockKey)
+	l.Lock()
+	defer l.Unlock()
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(lessonsPath(dataDir), []byte(content), 0o644)
+}
+
+// AppendLesson adds one dated, attributed entry to lessons.md without
+// touching what's already there.
+func AppendLesson(dataDir string, ls Lesson) error {
+	text := strings.TrimSpace(ls.Text)
+	if text == "" {
+		return fmt.Errorf("lição vazia — informe o texto")
+	}
+	l := lockFor(lessonsLockKey)
+	l.Lock()
+	defer l.Unlock()
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return err
+	}
+	path := lessonsPath(dataDir)
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if len(existing) == 0 {
+		existing = []byte(lessonsHeader)
+	}
+	var meta []string
+	if p := strings.TrimSpace(ls.Program); p != "" {
+		meta = append(meta, "programa: "+p)
+	}
+	if t := strings.TrimSpace(ls.Tool); t != "" {
+		meta = append(meta, "tool: "+t)
+	}
+	for _, tag := range ls.Tags {
+		if tag = strings.TrimSpace(tag); tag != "" {
+			meta = append(meta, "#"+tag)
+		}
+	}
+	line := "- **" + time.Now().UTC().Format("2006-01-02") + "** " + text
+	if len(meta) > 0 {
+		line += " _(" + strings.Join(meta, ", ") + ")_"
+	}
+	out := append(existing, []byte(line+"\n")...)
+	return os.WriteFile(path, out, 0o644)
+}
+
 // SyncFromStore rebuilds the project's snapshot from current store state:
 //
 //	summary.json   counts by status/severity/kind + last activity

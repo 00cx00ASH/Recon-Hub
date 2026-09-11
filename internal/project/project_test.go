@@ -3,6 +3,7 @@ package project
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,72 @@ func TestInvalidNameRejected(t *testing.T) {
 	}
 	if Dir(dataDir, "../evil") != "" {
 		t.Fatal("Dir deveria recusar nome inseguro")
+	}
+}
+
+func TestLessonsEmptyByDefault(t *testing.T) {
+	dataDir, _, _ := setup(t)
+	got, err := ReadLessons(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("esperava vazio antes de qualquer lição, veio: %q", got)
+	}
+}
+
+func TestAppendLessonRejectsEmptyText(t *testing.T) {
+	dataDir, _, _ := setup(t)
+	if err := AppendLesson(dataDir, Lesson{}); err == nil {
+		t.Fatal("lição sem texto deveria ser rejeitada")
+	}
+}
+
+func TestAppendLessonAccumulatesAndNeverClobbers(t *testing.T) {
+	dataDir, _, _ := setup(t)
+
+	if err := AppendLesson(dataDir, Lesson{
+		Text: "este WAF bloqueia após ~20 requisições em 10s", Program: "acme", Tool: "scan-fuzz", Tags: []string{"waf", "rate-limit"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendLesson(dataDir, Lesson{Text: "programas HackerOne costumam aceitar CORS wildcard sem credentials como info"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ReadLessons(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"este WAF bloqueia após ~20 requisições em 10s",
+		"programa: acme", "tool: scan-fuzz", "#waf", "#rate-limit",
+		"programas HackerOne costumam aceitar CORS wildcard",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lessons.md sem %q:\n%s", want, got)
+		}
+	}
+	// a 1ª lição continua lá depois da 2ª — nunca foi sobrescrita
+	if strings.Count(got, "- **") != 2 {
+		t.Fatalf("esperava 2 entradas, veio:\n%s", got)
+	}
+}
+
+func TestWriteLessonsOverwritesWholesale(t *testing.T) {
+	dataDir, _, _ := setup(t)
+	if err := AppendLesson(dataDir, Lesson{Text: "lição antiga"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteLessons(dataDir, "# reorganizado\n\n- lição reescrita\n"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadLessons(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "lição antiga") || !strings.Contains(got, "lição reescrita") {
+		t.Fatalf("WriteLessons deveria substituir tudo, veio:\n%s", got)
 	}
 }
 

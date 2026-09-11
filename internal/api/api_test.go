@@ -383,6 +383,47 @@ func TestScopeTemplateCRUDAndApply(t *testing.T) {
 	}
 }
 
+func TestLessonsAppendReadAndOverwrite(t *testing.T) {
+	h := newTestServer(t, auth.Token{Source: "disabled"})
+
+	// vazio antes de qualquer lição
+	w := do(h, "GET", "/api/lessons", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"lessons":""`) {
+		t.Fatalf("esperava lessons vazio: %d %s", w.Code, w.Body.String())
+	}
+
+	// append 1
+	w = doBody(h, "POST", "/api/lessons", `{"text":"este WAF bloqueia apos 20 req/10s","program":"acme","tool":"scan-fuzz","tags":["waf","rate-limit"]}`, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("append: got %d %s", w.Code, w.Body.String())
+	}
+	// append sem texto -> 400
+	if w := doBody(h, "POST", "/api/lessons", `{"program":"acme"}`, nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("texto vazio: got %d, want 400", w.Code)
+	}
+	// append 2 — nunca apaga o 1º
+	w = doBody(h, "POST", "/api/lessons", `{"text":"segunda licao independente"}`, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("append 2: got %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{"este WAF bloqueia apos 20 req/10s", "programa: acme", "tool: scan-fuzz", "#waf", "segunda licao independente"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("lessons sem %q: %s", want, body)
+		}
+	}
+
+	// PUT reescreve tudo
+	w = doBody(h, "PUT", "/api/lessons", `{"lessons":"# do zero\n\n- só isso\n"}`, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("put: got %d %s", w.Code, w.Body.String())
+	}
+	w = do(h, "GET", "/api/lessons", nil)
+	if strings.Contains(w.Body.String(), "segunda licao") || !strings.Contains(w.Body.String(), "só isso") {
+		t.Fatalf("PUT deveria substituir tudo: %s", w.Body.String())
+	}
+}
+
 func timePtr(t time.Time) *time.Time { return &t }
 
 func TestComparePipelineRuns(t *testing.T) {

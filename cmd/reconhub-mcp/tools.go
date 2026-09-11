@@ -315,6 +315,39 @@ func buildTools(h *hubClient) map[string]mcpTool {
 			return h.call("POST", "/api/scope-templates", body)
 		})
 
+	add("hub_get_lessons",
+		"Lê a base de conhecimento cross-programa (lessons.md): padrões que se repetem ENTRE programas diferentes (comportamento de WAF/rate-limit, peculiaridade de plataforma, técnica que funcionou ou não) — diferente de notes.md, que é por programa. Leia isso no início de um programa novo pra reaproveitar o que já foi aprendido em outros.",
+		obj(map[string]any{}),
+		func(a map[string]any) (json.RawMessage, error) {
+			return h.call("GET", "/api/lessons", nil)
+		})
+
+	add("hub_add_lesson",
+		"Registra uma lição reaproveitável em QUALQUER programa (não só o atual) na base de conhecimento cross-programa — acrescenta, nunca apaga o que já tem. Use quando notar um padrão que vale lembrar em outro programa depois: um WAF com limiar específico, uma plataforma que sempre aceita/rejeita certo tipo de achado, uma técnica que funcionou bem. Não é o lugar pra observação específica de UM programa — isso é notes.md.",
+		obj(map[string]any{
+			"text":    str("a lição em si — objetiva, reaproveitável fora do contexto atual"),
+			"program": str("opcional: onde foi aprendida, só como contexto"),
+			"tool":    str("opcional: ferramenta/técnica relacionada"),
+			"tags":    strArray("opcional: palavras-chave pra facilitar achar depois"),
+		}, "text"),
+		func(a map[string]any) (json.RawMessage, error) {
+			text, err := mustStr(a, "text")
+			if err != nil {
+				return nil, err
+			}
+			body := map[string]any{"text": text}
+			if p := argStr(a, "program"); p != "" {
+				body["program"] = p
+			}
+			if tl := argStr(a, "tool"); tl != "" {
+				body["tool"] = tl
+			}
+			if tags := argStrSlice(a, "tags"); len(tags) > 0 {
+				body["tags"] = tags
+			}
+			return h.call("POST", "/api/lessons", body)
+		})
+
 	add("hub_draft_finding",
 		"Rascunho de relatório (Markdown) pra UM finding: título, severidade, evidência, passos de reprodução, impacto, correção, CWE/referências quando o hub já tem o template desse finding_type. Pronto pra colar/adaptar pro programa — prefira isso a remontar o texto na mão.",
 		obj(map[string]any{"id": str("id do finding")}, "id"),

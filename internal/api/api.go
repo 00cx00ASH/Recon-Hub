@@ -140,6 +140,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/programs/{name}", s.auth(s.deleteProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
 
+	mux.HandleFunc("GET /api/lessons", s.auth(s.getLessons))
+	mux.HandleFunc("POST /api/lessons", s.auth(s.appendLesson))
+	mux.HandleFunc("PUT /api/lessons", s.auth(s.putLessons))
+
 	mux.HandleFunc("GET /api/scope-templates", s.auth(s.listScopeTemplates))
 	mux.HandleFunc("POST /api/scope-templates", s.auth(s.createScopeTemplate))
 	mux.HandleFunc("GET /api/scope-templates/{name}", s.auth(s.getScopeTemplate))
@@ -933,6 +937,51 @@ func (s *Server) getNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"program": name, "notes": txt})
+}
+
+// getLessons reads the cross-program knowledge base (data/lessons.md) — one
+// file shared by every program, unlike notes.md which is per-program.
+func (s *Server) getLessons(w http.ResponseWriter, r *http.Request) {
+	txt, err := project.ReadLessons(s.DataDir)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lessons": txt})
+}
+
+// appendLesson adds one dated, attributed entry without touching what's
+// already recorded — the safe default for adding a lesson (see putLessons
+// for a wholesale rewrite).
+func (s *Server) appendLesson(w http.ResponseWriter, r *http.Request) {
+	var ls project.Lesson
+	if err := json.NewDecoder(r.Body).Decode(&ls); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.AppendLesson(s.DataDir, ls); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	txt, _ := project.ReadLessons(s.DataDir)
+	writeJSON(w, http.StatusCreated, map[string]any{"lessons": txt})
+}
+
+// putLessons overwrites lessons.md wholesale — for manual reorganizing or
+// cleanup, not the everyday way to add one lesson (use appendLesson/POST).
+func (s *Server) putLessons(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Lessons string `json:"lessons"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.WriteLessons(s.DataDir, body.Lessons); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // programCoverage reports which tools have run for a program and which

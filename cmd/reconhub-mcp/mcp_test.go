@@ -73,6 +73,18 @@ func fakeHub(t *testing.T) (*hubClient, *httptest.Server) {
 		w.WriteHeader(201)
 		w.Write([]byte(`{"name":"saas-noise","out_of_scope":["status.acme.com"]}`))
 	})
+	mux.HandleFunc("GET /api/lessons", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"lessons":"# Lições\n\n- **2026-01-01** este WAF bloqueia após 20 req/10s\n"}`))
+	})
+	mux.HandleFunc("POST /api/lessons", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["text"] != "este WAF bloqueia após 20 req/10s" {
+			t.Errorf("add_lesson: corpo inesperado: %v", body)
+		}
+		w.WriteHeader(201)
+		w.Write([]byte(`{"lessons":"# Lições\n\n- **2026-01-01** este WAF bloqueia após 20 req/10s\n"}`))
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &hubClient{base: srv.URL, http: &http.Client{Timeout: 5 * time.Second}}, srv
@@ -105,8 +117,8 @@ func TestInitializeAndList(t *testing.T) {
 
 	resp, _ = handle(&rpcRequest{ID: json.RawMessage(`2`), Method: "tools/list"}, reg)
 	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
-	if len(tools) != 19 {
-		t.Fatalf("esperava 19 tools MCP, veio %d", len(tools))
+	if len(tools) != 21 {
+		t.Fatalf("esperava 21 tools MCP, veio %d", len(tools))
 	}
 	if tools[0]["name"] != "hub_list_tools" {
 		t.Fatalf("ordem inesperada: %v", tools[0]["name"])
@@ -254,6 +266,29 @@ func TestScopeTemplates(t *testing.T) {
 	out = callTool(t, reg, "hub_create_scope_template", map[string]any{"name": "no-oos"}) // falta out_of_scope
 	if out["isError"] != true {
 		t.Fatalf("out_of_scope vazio deveria dar erro: %v", out)
+	}
+}
+
+func TestLessons(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_get_lessons", map[string]any{})
+	if out["isError"] == true {
+		t.Fatalf("get_lessons deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "WAF bloqueia") {
+		t.Fatalf("get_lessons sem a lição: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_add_lesson", map[string]any{"text": "este WAF bloqueia após 20 req/10s"})
+	if out["isError"] == true {
+		t.Fatalf("add_lesson deu erro: %v", out)
+	}
+
+	out = callTool(t, reg, "hub_add_lesson", map[string]any{}) // falta text
+	if out["isError"] != true {
+		t.Fatalf("texto ausente deveria dar erro: %v", out)
 	}
 }
 
