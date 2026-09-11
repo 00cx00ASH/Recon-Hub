@@ -2,15 +2,27 @@ package main
 
 import "strings"
 
-// probePayloads are the two characters that break SQL string literals in
-// virtually every backend (single- and double-quoted strings). Deliberately
-// NOT time-based (SLEEP/WAITFOR — adds real load to the target) and NOT
-// boolean-differential extraction (1=1 vs 1=2 chained requests trying to
-// read data) — this tool stops at "the app leaked a raw DB error when we
-// broke its query", the same minimal-footprint bar every other scanner in
-// this repo holds itself to. Confirming further (that it's actually
-// exploitable, how far) is deliberately left to the operator.
-var probePayloads = []string{`'`, `"`}
+// probePayloads are the characters/short sequences that break SQL syntax in
+// virtually every backend, tried one at a time per (URL, param) until one
+// triggers an error (see main.go's worker loop — same "one hit, stop" as
+// every other list-of-variants in this repo). Deliberately NOT time-based
+// (SLEEP/WAITFOR — adds real load to the target) and NOT boolean-differential
+// extraction (1=1 vs 1=2 chained requests trying to read data) — this tool
+// stops at "the app leaked a raw DB error when we broke its query", the same
+// minimal-footprint bar every other scanner in this repo holds itself to.
+// Confirming further (that it's actually exploitable, how far) is
+// deliberately left to the operator.
+//
+//   - `'` / `"` — breaks single-/double-quoted string literals, the most
+//     common case (name=, search=, comment=…).
+//   - `\'` — a lone backslash before the quote: if the app does its own
+//     naive escaping (doubling quotes, or its own regex) rather than
+//     parameterized queries, a backslash can itself need escaping and
+//     produces a DIFFERENT syntax error than a bare quote would.
+//   - `)` — breaks a numeric/unquoted value used inside a function call or
+//     an `IN (...)` list — a context the quote-based payloads above never
+//     touch, since they only break STRING literals, not numeric ones.
+var probePayloads = []string{`'`, `"`, `\'`, `)`}
 
 // errorSignatures are known, specific DB/ORM error strings — not "the
 // response changed", which would be noisy on any app with per-request
@@ -46,6 +58,26 @@ var errorSignatures = []string{
 	"sqlite_error",
 	"unrecognized token:",
 	`near "'"`,
+	// MariaDB (variante do MySQL com assinatura própria em alguns drivers)
+	"mariadb server version",
+	// IBM DB2
+	"sql0104n",
+	"sql0007n",
+	"com.ibm.db2.jcc",
+	"db2 sql error",
+	// Sybase / SAP ASE
+	"sybase message",
+	"com.sybase.jdbc",
+	// Firebird
+	"firebird.dyn",
+	"dynamic sql error",
+	"org.firebirdsql.jdbc",
+	// H2 (embutido em vários apps Java)
+	"org.h2.jdbc",
+	"syntax error in sql statement",
+	// Microsoft Access / Jet
+	"microsoft jet database engine",
+	"microsoft access driver",
 	// genérico / ORM
 	"sql syntax error",
 	"sqlstate[",

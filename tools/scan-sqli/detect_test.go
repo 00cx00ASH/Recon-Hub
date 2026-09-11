@@ -20,6 +20,33 @@ func TestClassifyPostgresErrorLeaked(t *testing.T) {
 	}
 }
 
+func TestClassifyDB2ErrorLeaked(t *testing.T) {
+	baseline := `<html><body>ok</body></html>`
+	injected := `<html><body>DB2 SQL error: SQLCODE=-104, SQLSTATE=42601, SQL0104N an unexpected token</body></html>`
+	sev, ftype, _, ok := classify(baseline, injected)
+	if !ok || sev != "high" || ftype != "sqli-error-based" {
+		t.Fatalf("esperava high/sqli-error-based (DB2), veio sev=%q ftype=%q ok=%v", sev, ftype, ok)
+	}
+}
+
+func TestClassifyAccessJetErrorLeaked(t *testing.T) {
+	baseline := `<html><body>ok</body></html>`
+	injected := `<html><body>Microsoft Access Driver: syntax error in query expression</body></html>`
+	sev, ftype, _, ok := classify(baseline, injected)
+	if !ok || sev != "high" || ftype != "sqli-error-based" {
+		t.Fatalf("esperava high/sqli-error-based (Access/Jet), veio sev=%q ftype=%q ok=%v", sev, ftype, ok)
+	}
+}
+
+func TestClassifyH2ErrorLeaked(t *testing.T) {
+	baseline := `<html><body>ok</body></html>`
+	injected := `<html><body>org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement</body></html>`
+	sev, ftype, _, ok := classify(baseline, injected)
+	if !ok || sev != "high" || ftype != "sqli-error-based" {
+		t.Fatalf("esperava high/sqli-error-based (H2), veio sev=%q ftype=%q ok=%v", sev, ftype, ok)
+	}
+}
+
 func TestClassifyCaseInsensitive(t *testing.T) {
 	baseline := `ok`
 	injected := `YOU HAVE AN ERROR IN YOUR SQL SYNTAX; check the manual`
@@ -64,7 +91,10 @@ func TestClassifyGenericErrorPageIsNotAFinding(t *testing.T) {
 func TestProbePayloadsAreMinimalFootprint(t *testing.T) {
 	for _, p := range probePayloads {
 		if len(p) > 2 {
-			t.Fatalf("payload %q não é um probe mínimo (aspa simples/dupla) — nada de time-based/booleano aqui", p)
+			t.Fatalf("payload %q não é um probe mínimo (1-2 chars de quebra de sintaxe) — nada de time-based/booleano/SLEEP/UNION aqui", p)
 		}
+	}
+	if len(probePayloads) < 2 {
+		t.Fatal("esperava mais de uma variante — filtros seletivos (só escapam aspa dupla, por exemplo) não devem fazer o scanner desistir cedo demais")
 	}
 }

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "language": "Go",
   "category": "scan",
-  "summary": "Testa parâmetros classicamente injetáveis (id, page, sort, search, category…) com aspa/aspa-dupla anexada ao valor existente e CONFIRMA SQL injection só quando um erro de banco conhecido (MySQL/PostgreSQL/MSSQL/Oracle/SQLite/ORMs comuns) aparece na resposta com o payload mas está AUSENTE na resposta baseline (sem payload). Nunca usa time-based (SLEEP/WAITFOR) nem extração booleana — só vazamento de erro, 3 requisições por parâmetro.",
+  "summary": "Testa parâmetros classicamente injetáveis (id, page, sort, search, category…) anexando ao valor existente até 4 variantes de quebra de sintaxe SQL (aspa simples, aspa dupla, backslash-antes-de-aspa — pra apps que fazem escaping ingênuo em vez de query parametrizada — e parêntese, pra contexto numérico/função) e CONFIRMA SQL injection só quando um erro de banco conhecido (MySQL/MariaDB/PostgreSQL/MSSQL/Oracle/SQLite/DB2/Sybase/Firebird/H2/Access/ORMs comuns) aparece na resposta com o payload mas está AUSENTE na resposta baseline (sem payload). Um filtro que escapa só um tipo de quebra não faz o scanner desistir — tenta a próxima variante antes de passar pro parâmetro seguinte. Nunca usa time-based (SLEEP/WAITFOR) nem extração booleana — só vazamento de erro.",
   "guide": "Alvo = uma URL http/https, de preferência já com o parâmetro suspeito na query (ex: https://site.com/produto?id=42). Sem query ele testa os nomes da wordlist do mesmo jeito, anexando o payload como valor único. Modos lista/arquivo varrem várias URLs.",
-  "validation": "Exemplo confirmado: ?id=42' responde com 'You have an error in your SQL syntax' no corpo, e a mesma URL sem o payload (?id=42) não tem essa frase — a diferença prova que foi nosso caractere que quebrou a query, não um erro genérico da página. Detecta só o que vaza mensagem de erro; SQLi cega (sem erro visível) precisa de teste manual (booleano ou time-based) fora do escopo desta ferramenta de propósito.",
+  "validation": "Exemplo confirmado: ?id=42' responde com 'You have an error in your SQL syntax' no corpo, e a mesma URL sem o payload (?id=42) não tem essa frase — a diferença prova que foi nosso caractere que quebrou a query, não um erro genérico da página. O `meta.payload` do finding diz qual das 4 variantes confirmou. Detecta só o que vaza mensagem de erro; SQLi cega (sem erro visível) precisa de teste manual (booleano ou time-based) fora do escopo desta ferramenta de propósito.",
   "exec": ["go", "run", "."],
   "timeout": "15m",
   "modes": [
@@ -19,7 +19,7 @@
     { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
     { "name": "urls_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor, uma URL por linha" },
     { "name": "max_params", "type": "int", "required": false, "default": 80, "help": "teto de parâmetros testados por URL" },
-    { "name": "concurrency", "type": "int", "required": false, "default": 15, "help": "requisições simultâneas (cada parâmetro já faz 3 requisições)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 15, "help": "requisições simultâneas (cada parâmetro faz baseline + até 4 variantes de payload)" },
     { "name": "timeout_ms", "type": "int", "required": false, "default": 8000, "help": "timeout por requisição" }
   ]
 }
