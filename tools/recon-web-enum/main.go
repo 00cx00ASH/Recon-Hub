@@ -129,6 +129,13 @@ func main() {
 		os.Exit(2)
 	}
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+		DisableKeepAlives: false,
+		MaxIdleConns:      32,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client = &http.Client{
 		Timeout: timeout,
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -137,12 +144,7 @@ func main() {
 			}
 			return nil
 		},
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: false,
-			MaxIdleConns:      32,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport: transport,
 	}
 
 	if len(roots) > 1 {

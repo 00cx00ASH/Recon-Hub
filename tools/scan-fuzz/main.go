@@ -150,15 +150,17 @@ func main() {
 	delay := time.Duration(pick(*flagDelay, intParam(pl.Params, "delay_ms"), 25)) * time.Millisecond
 	timeout := time.Duration(pick(*flagTOms, intParam(pl.Params, "timeout_ms"), 7000)) * time.Millisecond
 
+	fuzzTransport := &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:        conc * 2,
+		MaxIdleConnsPerHost: conc * 2,
+		DialContext:         (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(fuzzTransport, timeout)
 	client := &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		Transport: &http.Transport{
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-			MaxIdleConns:        conc * 2,
-			MaxIdleConnsPerHost: conc * 2,
-			DialContext:         (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport:     fuzzTransport,
 	}
 
 	// monta a fila de paths uma vez (palavra e palavra+ext)

@@ -5,6 +5,12 @@
 #
 # O token é gerado no 1º start e persiste no volume reconhub-data (em /app/data/token).
 # Para fixar o seu:  RECONHUB_TOKEN=... docker compose up -d   (ou num .env)
+#
+# Proxy/Tor (opcional): pra rotear o tráfego das ferramentas e poder trocar
+# de IP se um alvo bloquear o seu, suba o sidecar de Tor junto:
+#   docker compose --profile tor up -d --build
+# e configure o projeto (aba Projetos → Autenticação compartilhada → Proxy)
+# com socks5://127.0.0.1:9050. Ver README > Docker > Proxy/Tor.
 
 services:
   reconhub:
@@ -27,6 +33,21 @@ services:
       RECONHUB_TOKEN: "${RECONHUB_TOKEN:-}"
       RECONHUB_STORE: "${RECONHUB_STORE:-}"
     restart: unless-stopped
+
+  # Sidecar opcional (perfil "tor") — SOCKS5 em 127.0.0.1:9050 dentro do
+  # mesmo namespace de rede do reconhub (network_mode abaixo), então essas
+  # portas nunca ficam expostas pro host. Só sobe com --profile tor.
+  tor:
+    build:
+      context: ./docker/tor
+    image: reconhub-tor:local
+    container_name: reconhub-tor
+    network_mode: "service:reconhub"
+    depends_on:
+      - reconhub
+    restart: unless-stopped
+    profiles:
+      - tor
 
 volumes:
   reconhub-data:

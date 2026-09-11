@@ -583,6 +583,11 @@ docker compose exec reconhub cat /app/data/token</pre>
           <label for="authHeaders">Headers extras (um por linha, "Nome: valor")</label>
           <textarea id="authHeaders" rows="3" spellcheck="false" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical" placeholder="X-Api-Key: abc123"></textarea>
         </div>
+        <div class="field">
+          <label for="authProxy">Proxy (opcional)</label>
+          <input id="authProxy" placeholder="http://127.0.0.1:8080 · socks5://127.0.0.1:9050 (Tor) · socks5://user:senha@host:porta" spellcheck="false" autocomplete="off">
+          <span class="help">Diferente de cima: vale pra <b>toda</b> requisição da ferramenta neste projeto, não só as que batem no host do alvo — é assim que a IP de saída muda. <code>socks5://</code> funciona com o sidecar de Tor do docker-compose (perfil <code>tor</code>) pra trocar de IP se um alvo bloquear o seu.</span>
+        </div>
         <div style="display:flex;align-items:center;gap:.6rem">
           <button class="run" id="authSave" style="width:auto;padding:.5rem 1rem">Salvar auth</button>
           <span class="help" id="authMsg"></span>
@@ -1305,8 +1310,9 @@ async function loadAuthForm(name){
     $('#authCookie').value = a.cookie || '';
     $('#authBearer').value = a.bearer || '';
     $('#authHeaders').value = headerLinesFromObj(a.headers);
+    $('#authProxy').value = a.proxy || '';
   } catch {
-    $('#authCookie').value = ''; $('#authBearer').value = ''; $('#authHeaders').value = '';
+    $('#authCookie').value = ''; $('#authBearer').value = ''; $('#authHeaders').value = ''; $('#authProxy').value = '';
   }
 }
 
@@ -1320,6 +1326,7 @@ $('#authSave').addEventListener('click', async () => {
         cookie: $('#authCookie').value.trim(),
         bearer: $('#authBearer').value.trim(),
         headers: parseHeaderLines($('#authHeaders').value),
+        proxy: $('#authProxy').value.trim(),
       }),
     });
     $('#authMsg').textContent = 'salvo ' + new Date().toLocaleTimeString('pt-BR');

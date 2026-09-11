@@ -170,6 +170,9 @@ func main() {
 				env = append(env, "RECONHUB_AUTH_HEADERS="+string(b))
 			}
 		}
+		if a.Proxy != "" {
+			env = append(env, "RECONHUB_PROXY_URL="+a.Proxy)
+		}
 		return env
 	}
 
