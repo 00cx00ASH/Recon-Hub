@@ -171,6 +171,55 @@ func TestCreateJobRejectsOutOfScope(t *testing.T) {
 	}
 }
 
+// TestCreateJobRejectsOutOfScopeInParams é o teste de regressão pro bug real:
+// inScope() só olhava req.Target — mas todo tool com modo "lista"/"arquivo"
+// (urls, hosts, subdomains + seus companheiros _file, e alvos extra de
+// endpoint único como url_b) recebe os alvos DE VERDADE por Params, não por
+// Target. Um job com target=a.acme.com (em escopo) e urls contendo um host
+// fora do programa passava batido — escopo "enforced no servidor" era só
+// decorativo pra qualquer ferramenta com lista colada.
+func TestCreateJobRejectsOutOfScopeInParams(t *testing.T) {
+	h := newTestServer(t, auth.Token{Source: "disabled"})
+
+	// target em escopo, mas um host da lista "urls" não está -> 403
+	w := doBody(h, "POST", "/api/jobs",
+		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"urls":"https://a.acme.com/x, https://evil.example.com/y"}}`, nil)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
+		t.Fatalf("host fora do escopo dentro de params.urls: got %d %s, want 403", w.Code, w.Body.String())
+	}
+
+	// mesma coisa pro companheiro de arquivo (hosts_file) — lê o arquivo e
+	// confere cada linha
+	f := filepath.Join(t.TempDir(), "hosts.txt")
+	_ = os.WriteFile(f, []byte("a.acme.com\nevil.example.com\n"), 0o644)
+	w = doBody(h, "POST", "/api/jobs",
+		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"hosts_file":"`+f+`"}}`, nil)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
+		t.Fatalf("host fora do escopo dentro de hosts_file: got %d %s, want 403", w.Code, w.Body.String())
+	}
+
+	// url_b (segundo endpoint de comparação, ex: scan-idor) também é checado
+	w = doBody(h, "POST", "/api/jobs",
+		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"url_b":"https://evil.example.com/resource/1"}}`, nil)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
+		t.Fatalf("url_b fora do escopo: got %d %s, want 403", w.Code, w.Body.String())
+	}
+
+	// tudo em escopo -> passa da checagem de escopo (falha só por tool inexistente)
+	w = doBody(h, "POST", "/api/jobs",
+		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"urls":"https://a.acme.com/x, https://b.acme.com/y","url_b":"https://c.acme.com/z"}}`, nil)
+	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
+		t.Fatalf("tudo em escopo: got %d %s", w.Code, w.Body.String())
+	}
+
+	// ferramenta isenta (scopeExempt) não tem os params checados mesmo com host de fora
+	w = doBody(h, "POST", "/api/jobs",
+		`{"tool":"int-github-audit","target":"octocat/Hello-World","program":"acme","params":{"urls":"https://evil.example.com/x"}}`, nil)
+	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
+		t.Fatalf("tool isenta com params: got %d %s", w.Code, w.Body.String())
+	}
+}
+
 // newScopeAwareServer is like newTestServer but also wires a real tool and a
 // one-step pipeline, so pipeline-run and watch scope checks (which need to
 // resolve a step's tool) can be exercised end to end.

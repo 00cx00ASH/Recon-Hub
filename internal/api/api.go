@@ -85,6 +85,71 @@ func inScope(tool string, prog *scope.Program, target string) bool {
 	return prog.Contains(target)
 }
 
+// scopeListParams are params whose value is a delimited list of EXTRA
+// hosts/URLs a job actually reaches — the "lista colada" mode that most scan
+// tools have (urls/hosts/subdomains) alongside their single-target mode.
+// Without checking these too, scope enforcement is a no-op for any tool with
+// a list mode: Target can be a single in-scope decoy while the real targets
+// ride along in one of these params, completely unchecked.
+var scopeListParams = map[string]bool{"urls": true, "hosts": true, "subdomains": true}
+
+// scopeFileParams mirror scopeListParams but point at a file on the server
+// (one host/URL per line) instead of carrying values inline — same bypass,
+// checked by reading the file server-side before the job is accepted.
+var scopeFileParams = map[string]bool{"urls_file": true, "hosts_file": true, "subdomains_file": true}
+
+// scopeSingleParams carry exactly one extra URL a tool fetches, distinct
+// from Target: scan-idor's comparison endpoint, scan-auth-flow's known
+// authorization endpoint, js-supabase-probe's project URL.
+var scopeSingleParams = map[string]bool{"url_b": true, "authorize_url": true, "supabase_url": true}
+
+func splitScopeList(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == ' ' || r == '\t'
+	})
+}
+
+// paramsOutOfScope checks every param that names extra hosts/URLs (list
+// mode's urls/hosts/subdomains, their _file companions, and single
+// extra-URL params like url_b) against prog, and returns the first
+// out-of-scope value found, or "" if everything checks out. inScope alone
+// only ever sees the request's single Target field — list/file modes exist
+// specifically to carry many more targets, so they need the same check.
+func paramsOutOfScope(tool string, prog *scope.Program, params map[string]any) string {
+	if prog == nil || scopeExempt[tool] {
+		return ""
+	}
+	for name, raw := range params {
+		s, ok := raw.(string)
+		if !ok || strings.TrimSpace(s) == "" {
+			continue
+		}
+		switch {
+		case scopeListParams[name]:
+			for _, item := range splitScopeList(s) {
+				if !inScope(tool, prog, item) {
+					return item
+				}
+			}
+		case scopeSingleParams[name]:
+			if !inScope(tool, prog, s) {
+				return s
+			}
+		case scopeFileParams[name]:
+			b, err := os.ReadFile(s)
+			if err != nil {
+				continue // arquivo inválido/inacessível é erro do próprio job, não de escopo
+			}
+			for _, item := range splitScopeList(string(b)) {
+				if !inScope(tool, prog, item) {
+					return item
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // outOfScopeMsg builds a 403 message that shows the target and the program's
 // actual in-scope patterns, so a user who set an empty or mismatched scope can
 // see immediately why everything is being rejected.
@@ -277,6 +342,10 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 		name = prog.Name
 		if !inScope(req.Tool, prog, req.Target) {
 			writeErr(w, http.StatusForbidden, outOfScopeMsg(req.Target, prog))
+			return
+		}
+		if bad := paramsOutOfScope(req.Tool, prog, req.Params); bad != "" {
+			writeErr(w, http.StatusForbidden, outOfScopeMsg(bad, prog))
 			return
 		}
 	}

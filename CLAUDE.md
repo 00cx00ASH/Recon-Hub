@@ -167,3 +167,22 @@ sobre caçar bugs em programas de terceiros.
   mensagem de investigação) ou `claude --agent bugbounty` pra garantir
   que é o agente restrito quem age — ver aviso em
   `docs/GUIA-DE-USO.md` seção g.1.
+- **`createJob` só checava `req.Target` contra o escopo — `req.Params`
+  nunca era olhado, e é exatamente ali que os alvos DE VERDADE viajam em
+  todo tool com modo "lista colada"/"arquivo"** (`urls`/`urls_file`,
+  `hosts`/`hosts_file`, `subdomains`/`subdomains_file`, mais alvos extra
+  de endpoint único como `url_b` do scan-idor, `authorize_url` do
+  scan-auth-flow, `supabase_url` do js-supabase-probe — 24+ ferramentas
+  no total). Um job com `target=a.programa-em-escopo.com` (que passava
+  na checagem) e `params.urls` cheio de hosts de fora do programa
+  escaneava tudo sem nenhum bloqueio — "escopo enforced no servidor"
+  citado na filosofia deste arquivo era decorativo pra qualquer tool com
+  lista. Corrigido em `internal/api/api.go` (`paramsOutOfScope`): além do
+  Target, agora valida cada item desses params (inline e lendo o
+  `_file` do disco) contra `prog.Contains()`, rejeitando o job inteiro
+  com 403 se QUALQUER host estiver fora. Teste de regressão:
+  `TestCreateJobRejectsOutOfScopeInParams` em `internal/api/api_test.go`.
+  Qualquer parâmetro novo que carregue host/URL adicional (não só o
+  `target` principal) precisa entrar num desses três mapas
+  (`scopeListParams`/`scopeFileParams`/`scopeSingleParams`) — senão vira
+  o mesmo buraco de novo.
