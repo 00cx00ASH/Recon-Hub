@@ -1704,8 +1704,14 @@ function renderMarkdown(src){
   const inline = s => esc(s)
     .replace(/`([^`]+)`/g, (_, c) => '<code>' + c + '</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
-      '<a href="' + u + '"' + (/^https?:/.test(u) ? ' target="_blank" rel="noopener"' : '') + '>' + t + '</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) => {
+      // só http(s) vira link de verdade — outros esquemas (javascript:, data:…)
+      // ficam como texto puro. Aspas escapadas: u vem da string já escapada
+      // por esc() acima, que não mexe em '"', então sem isso dava pra fugir
+      // do atributo href com um markdown tipo [x]("onmouseover="alert(1)).
+      if (!/^https?:\/\//i.test(u)) return t;
+      return '<a href="' + u.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + t + '</a>';
+    });
 
   const lines = src.replace(/\r\n/g, '\n').split('\n');
   let html = '', i = 0;
