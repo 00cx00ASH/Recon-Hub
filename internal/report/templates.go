@@ -461,6 +461,25 @@ var templates = map[string]tmpl{
 			return steps
 		},
 	},
+	"ssti": {
+		Name: "Server-Side Template Injection (SSTI)", CWE: "CWE-1336",
+		Description: "Uma expressão matemática injetada num parâmetro (sintaxe de Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB ou Smarty) foi AVALIADA pelo motor de template no servidor — o resultado calculado apareceu na resposta, ausente no baseline sem payload, e o texto cru do payload NÃO apareceu (descartando simples reflexão/XSS). Prova que entrada do usuário chega diretamente à renderização de um template em vez de ser tratada como dado inerte.",
+		Impact:      "Motores de template sem sandbox (a maioria das instalações padrão de Jinja2/Twig/FreeMarker/Velocity/ERB) permitem escalar de uma expressão matemática pra execução arbitrária de código no servidor (RCE) — mas isso NÃO foi confirmado por esta ferramenta, que para deliberadamente na prova de avaliação de expressão, nunca executa comando de verdade.",
+		Remediation: "Nunca renderizar entrada do usuário como TEMPLATE — só como DADO passado a um template já definido pelo desenvolvedor (ex: `render_template('pagina.html', nome=entrada_usuario)`, nunca `render_template_string(entrada_usuario)`). Se precisar de personalização dinâmica de verdade, use um motor com sandbox reforçado e allowlist de expressões, nunca `eval`/interpretação livre do texto do usuário.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/1336.html", "https://portswigger.net/research/server-side-template-injection", "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing_for_Server_Side_Template_Injection"},
+		Repro: func(f Item) []string {
+			steps := []string{"Requisite sem payload (baseline): confirme que a resposta normal NÃO contém o resultado calculado."}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				eng, _ := f.Meta["engine"].(string)
+				steps = append(steps, "Requisite com o payload anexado ao valor do parâmetro (sintaxe "+eng+"): `"+p+"`")
+			}
+			if prod, ok := f.Meta["product"].(string); ok && prod != "" {
+				steps = append(steps, "Observe o resultado calculado `"+prod+"` na resposta — não o texto do payload cru, o VALOR já avaliado.")
+			}
+			steps = append(steps, "URL de teste: `"+f.Asset+"`", "Observe: "+f.Evidence)
+			return steps
+		},
+	},
 }
 
 // more exact templates for the medium+ variants that a blunt prefix would

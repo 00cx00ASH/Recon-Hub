@@ -1,0 +1,12 @@
+{
+  "name": "ssti-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de Server-Side Template Injection nos parâmetros classicamente renderizados de volta (name, message, search, comment…) — confirma só quando o resultado calculado aparece na resposta, ausente no baseline, e o texto do payload NÃO aparece (prova avaliação, não reflexo).",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-ssti",
+      "params": { "wordlist": "builtin/ssti-params", "max_params": 33, "concurrency": 12 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

@@ -139,6 +139,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-auth-flow`          | SSO/OAuth: descobre o `authorization_endpoint`, testa bypass de `redirect_uri` (confirma pelo destino real), inventaria metadata SAML |
 | `scan-xss`                | XSS refletido — marcador único em params clássicos, confirma só quando volta sem escapar (nunca dispara execução) |
 | `scan-sqli`               | SQL injection por vazamento de erro real de banco, ausente no baseline sem payload — nunca time-based/booleana |
+| `scan-ssti`               | Server-Side Template Injection — resultado calculado aparece e o payload cru NÃO, prova avaliação real (5 sintaxes de engine) |
 | `scan-ssrf`               | injeta URLs internas/metadata cloud em params buscados pelo servidor, só confirma pelo CONTEÚDO da resposta |
 | `scan-smuggling`          | request smuggling (CL.TE/TE.CL) por timing oracle — nunca encadeia 2ª requisição real pra confirmar |
 
