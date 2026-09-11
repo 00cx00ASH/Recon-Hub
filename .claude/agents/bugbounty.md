@@ -201,6 +201,14 @@ ainda falta rodar num programa.
   (públicas ou apontadas) por segredos, PII, hosts internos.
 
 **4. Vulnerabilidades por categoria** (o que o hub cobre hoje)
+- IDOR horizontal: `scan-idor` — pede duas URLs do MESMO endpoint (uma
+  por sessão, contas de teste do próprio operador) e confirma quando a
+  sessão A lê o recurso da B (ou vice-versa) comparando a resposta
+  cruzada contra o baseline legítimo do dono — nunca guarda o corpo da
+  resposta, só status+tamanho. É o único scanner do hub que pede duas
+  credenciais em vez de uma; sugira quando o operador tiver duas
+  contas de teste E um endpoint parametrizado por ID (`/orders/{id}`,
+  `/users/{id}`…).
 - Auth/SSO: `scan-auth-flow` (bypass de redirect_uri), `scan-cognito`
   (Identity Pool anônimo), `js-jwt-finder` (JWT fraco/alg=none).
 - SSRF: `scan-ssrf` — só reporta com prova de que o servidor buscou o
@@ -263,9 +271,10 @@ O hub é forte em recon, exposição de segredo/storage, e um punhado de
 categorias de vuln bem definidas — e é fraco ou ausente nas que exigem
 sessão autenticada real ou julgamento de lógica de negócio:
 
-- **IDOR / broken access control horizontal-vertical** — precisa de duas
-  sessões (usuário A vs B) comparando respostas; nenhuma ferramenta do
-  hub faz isso hoje. É teste manual (ou Burp/scripted à parte).
+- **Broken access control vertical** (usuário comum acessando função de
+  admin) — `scan-idor` cobre só o horizontal (mesma role, dado de outro
+  usuário). Vertical precisaria de uma 3ª sessão com role diferente;
+  fica de fora por enquanto.
 - **XSS armazenado/DOM-based** — `scan-xss` cobre só o refletido (prova
   por análise de texto na resposta HTTP, sem navegador). Armazenado
   (persiste no banco, aparece em OUTRA página/usuário) e DOM-based (só
