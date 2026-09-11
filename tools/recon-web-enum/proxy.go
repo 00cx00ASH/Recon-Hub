@@ -44,7 +44,7 @@ func socks5DialContext(proxyURL *url.URL, dialTimeout time.Duration) func(ctx co
 		if err != nil {
 			return nil, fmt.Errorf("conectar no proxy socks5 %s: %w", proxyURL.Host, err)
 		}
-		if err := socks5Handshake(conn, proxyURL, addr); err != nil {
+		if err := socks5Handshake(conn, proxyURL, addr, dialTimeout); err != nil {
 			conn.Close()
 			return nil, err
 		}
@@ -56,7 +56,16 @@ func socks5DialContext(proxyURL *url.URL, dialTimeout time.Duration) func(ctx co
 // RFC 1929) to CONNECT through a SOCKS5 proxy: no-auth or user/pass, IPv4/
 // IPv6/domain-name target. Enough for Tor (no auth) and most SOCKS5
 // providers (user/pass).
-func socks5Handshake(conn net.Conn, proxyURL *url.URL, targetAddr string) error {
+func socks5Handshake(conn net.Conn, proxyURL *url.URL, targetAddr string, handshakeTimeout time.Duration) error {
+	// sem isso, um proxy que aceita a conexão TCP mas nunca responde ao
+	// handshake (mal configurado, ou caiu no meio) trava a goroutine pra
+	// sempre — o timeout do http.Client não alcança essa fase porque o
+	// DialContext já teria retornado antes. Solta o deadline no fim: dali
+	// pra frente o tráfego proxiado segue as regras normais do transport.
+	if handshakeTimeout > 0 {
+		_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+		defer conn.SetDeadline(time.Time{})
+	}
 	host, portStr, err := net.SplitHostPort(targetAddr)
 	if err != nil {
 		return fmt.Errorf("endereço de destino inválido %q: %w", targetAddr, err)
