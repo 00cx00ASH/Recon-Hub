@@ -427,6 +427,9 @@ var templates = map[string]tmpl{
 			if p, ok := f.Meta["payload"].(string); ok && p != "" {
 				steps = append(steps, "Payload injetado: `"+p+"`")
 			}
+			if tech, ok := f.Meta["technique"].(string); ok && tech != "" {
+				steps = append(steps, "Técnica: "+tech+" — o scanner testa várias variantes por parâmetro antes de desistir; essa foi a que passou.")
+			}
 			steps = append(steps, "Observe: "+f.Evidence, "O marcador do payload aparece cru no HTML da resposta — sem escaping.")
 			return steps
 		},
