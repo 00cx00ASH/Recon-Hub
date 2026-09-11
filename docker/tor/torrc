@@ -1,0 +1,18 @@
+# torrc do sidecar de Tor do recon-hub.
+#
+# SOCKSPort/ControlPort ficam só em 127.0.0.1 — seguro porque este container
+# roda com network_mode: "service:reconhub" (compartilha a stack de rede do
+# hub, não tem IP/porta própria) e nada aqui é publicado pro host. Só o
+# processo do hub, no mesmo namespace de rede, enxerga essas portas.
+#
+# ControlPort sem senha (CookieAuthentication 0) é aceitável pelo mesmo
+# motivo: não é alcançável de fora do container. É o que permite o hub
+# pedir um circuito novo (IP de saída novo) via SIGNAL NEWNYM depois de
+# levar um bloqueio, sem precisar gerenciar senha/cookie.
+SOCKSPort 127.0.0.1:9050
+ControlPort 127.0.0.1:9051
+CookieAuthentication 0
+DataDirectory /var/lib/tor-data
+
+# limita o quanto NEWNYM pode ser chamado em sequência (comportamento padrão
+# do Tor) — evita abuso da rede Tor, não é coisa nossa pra mexer.

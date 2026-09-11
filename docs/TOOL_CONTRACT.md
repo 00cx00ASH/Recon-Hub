@@ -50,6 +50,30 @@ RECONHUB_JOB_ID=a1b2c3...
 RECONHUB_PARAM_THREADS=40        # um por parâmetro, nome em MAIÚSCULAS
 ```
 
+**contexto compartilhado do projeto** — opcional, só presente quando o operador
+configurou algo na aba Projetos → Autenticação compartilhada:
+
+```
+RECONHUB_AUTH_COOKIE=session=...       # vira o header Cookie
+RECONHUB_AUTH_BEARER=eyJ...            # vira Authorization: Bearer <token>
+RECONHUB_AUTH_HEADERS={"X-Api-Key":"..."}  # JSON de headers extras
+RECONHUB_PROXY_URL=socks5://127.0.0.1:9050 # http://, https:// ou socks5://
+```
+
+`RECONHUB_AUTH_*` é injeção **por requisição**: a ferramenta só deve anexar
+esses valores quando o host da requisição bate com `RECONHUB_TARGET` (ver
+`sameHostAsTarget`/`applyAuth` em `tools/scan-open-redirect/main.go` como
+referência) — nunca vazar credencial de sessão pra um host de terceiros que a
+ferramenta acabou descobrindo (bucket, Firebase, API de IA…).
+
+`RECONHUB_PROXY_URL` é diferente: se aplica a **toda** requisição da
+ferramenta (não é host-gated, já que o objetivo é rotear tudo — inclusive pra
+trocar o IP de saída depois de um bloqueio). Configure uma vez no
+`http.Transport` no início da ferramenta, não por requisição — ver
+`applyProxy`/`socks5DialContext` em `tools/recon-web-enum/proxy.go` como
+referência (`http://`/`https://` usam `http.ProxyURL` nativo do Go; `socks5://`
+tem um client SOCKS5 mínimo escrito à mão ali, sem dependência externa).
+
 ## 3. Saída — NDJSON no stdout
 
 Uma linha = um objeto JSON. Campo `type` obrigatório.

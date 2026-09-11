@@ -154,3 +154,55 @@ jobs:
           echo "job ok: $st"
 
           docker rm -f rh
+
+  docker-tor:
+    name: docker build (tor sidecar)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build reconhub image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: reconhub:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: build tor sidecar image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/tor
+          push: false
+          load: true
+          tags: reconhub-tor:ci
+          cache-from: type=gha,scope=tor
+          cache-to: type=gha,mode=max,scope=tor
+
+      - name: sobe reconhub + tor compartilhando rede (como o compose faz) e confere o SOCKS5
+        run: |
+          set -e
+          docker run -d --name rh reconhub:ci
+          docker run -d --name rh-tor --network container:rh reconhub-tor:ci
+          # nada publicado pro host de propósito (mesma topologia do compose:
+          # network_mode: "service:reconhub") — só verificável de dentro do
+          # namespace de rede do reconhub, então o teste entra por lá.
+          ok=""
+          for _ in $(seq 1 20); do
+            if docker exec rh bash -c 'exec 3<>/dev/tcp/127.0.0.1/9050' 2>/dev/null; then
+              ok=1; break
+            fi
+            sleep 1
+          done
+          docker logs rh-tor
+          test -n "$ok" || { echo "::error::SOCKS5 do Tor (9050) não respondeu dentro do namespace do reconhub"; exit 1; }
+          echo "socks5 alcançável de dentro do container do reconhub: ok"
+
+          # ControlPort responde ao protocolo esperado (mesmo comando que o
+          # README manda o operador rodar pra pedir um circuito/IP novo)
+          resp=$(docker exec rh-tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc -w2 localhost 9051')
+          echo "$resp" | grep -q "250 OK" || { echo "::error::ControlPort não confirmou NEWNYM: $resp"; exit 1; }
+          echo "NEWNYM (rotação de circuito/IP) confirmado: ok"
+
+          docker rm -f rh-tor rh

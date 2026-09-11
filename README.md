@@ -328,6 +328,44 @@ Por padrão ele segue o branch atual do checkout; pra fixar um branch
 específico independente de qual está com `git checkout` no momento, defina
 `RECONHUB_AUTOUPDATE_BRANCH=nome-do-branch` antes da linha do cron.
 
+#### Proxy / Tor (rotear tráfego, trocar de IP após bloqueio)
+
+Cada projeto tem um campo **Proxy** na aba Projetos → Autenticação
+compartilhada, ao lado de Cookie/Bearer/Headers. Aceita:
+
+- `http://host:porta` ou `https://host:porta` — proxy HTTP normal (ex:
+  Burp Suite/mitmproxy rodando na sua máquina, pra interceptar o tráfego
+  das ferramentas manualmente).
+- `socks5://host:porta` ou `socks5://usuário:senha@host:porta` — proxy
+  SOCKS5, com ou sem autenticação.
+
+Diferente do Cookie/Bearer/Headers (que só valem pra requisições que batem
+no host do alvo — nunca vazam credencial pra terceiro), o **Proxy vale pra
+toda requisição** da ferramenta nesse projeto — é assim que dá pra trocar
+o IP de saída.
+
+**Tor embutido, sem serviço pago:** o repo já traz um sidecar de Tor
+(`docker/tor/`) — sobe junto com um flag, sem publicar nada pro host (só é
+alcançável de dentro do container do hub):
+
+```bash
+docker compose --profile tor up -d --build
+```
+
+Configure o projeto com `socks5://127.0.0.1:9050` no campo Proxy e pronto —
+o tráfego daquele projeto passa pela rede Tor. Se um alvo te bloquear no
+meio do trabalho, pedir um circuito novo troca o nó de saída (e portanto o
+IP) sem precisar reiniciar nada:
+
+```bash
+docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
+```
+
+Hoje isso está implementado em `recon-web-enum` e `scan-fuzz` (as ferramentas
+que mais geram volume de requisições, portanto as mais propensas a levar
+bloqueio) — o padrão está documentado em `docs/TOOL_CONTRACT.md` pra outras
+ferramentas adotarem aos poucos.
+
 ### Token de acesso
 
 O hub **nasce fechado**. Toda a API (menos `GET /api/health`) exige

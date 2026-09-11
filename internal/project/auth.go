@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -21,11 +22,17 @@ type Auth struct {
 	Cookie  string            `json:"cookie,omitempty"`  // valor cru do header Cookie
 	Bearer  string            `json:"bearer,omitempty"`  // vira Authorization: Bearer <token>
 	Headers map[string]string `json:"headers,omitempty"` // headers extras (ex: X-Api-Key)
+	// Proxy roteia as requisições da ferramenta por http://, https:// ou
+	// socks5:// (ex: socks5://127.0.0.1:9050 pro Tor do próprio container —
+	// ver docker-compose.yml). Único jeito de trocar de IP no meio de um
+	// programa sem reconfigurar nada manualmente: pedir um circuito novo ao
+	// Tor derruba a sessão SOCKS atual e a próxima conexão sai por outro nó.
+	Proxy string `json:"proxy,omitempty"`
 }
 
 // Empty reports whether there's nothing to inject.
 func (a Auth) Empty() bool {
-	return a.Cookie == "" && a.Bearer == "" && len(a.Headers) == 0
+	return a.Cookie == "" && a.Bearer == "" && len(a.Headers) == 0 && a.Proxy == ""
 }
 
 func authFile(dataDir, name string) (string, error) {
@@ -38,6 +45,12 @@ func authFile(dataDir, name string) (string, error) {
 
 // SaveAuth writes the auth context, creating the project folder if needed.
 func SaveAuth(dataDir, name string, a Auth) error {
+	if a.Proxy != "" {
+		u, perr := url.Parse(a.Proxy)
+		if perr != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5") {
+			return fmt.Errorf("proxy inválido — use http://, https:// ou socks5://host:porta (ex: socks5://127.0.0.1:9050 pro Tor)")
+		}
+	}
 	path, err := authFile(dataDir, name)
 	if err != nil {
 		return err
