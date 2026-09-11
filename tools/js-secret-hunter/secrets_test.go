@@ -11,7 +11,9 @@ func TestScanFindsRealLooking(t *testing.T) {
 	  google: "` + "AIzaSy" + `D1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6X",
 	};
 	const dsn = "postgres://app:s3cr3tp4ss@db.internal:5432/app";
-	const key = "-----BEGIN RSA PRIVATE KEY-----";
+	const key = "-----BEGIN RSA PRIVATE KEY-----
+	MIIEowIBAAKCAQEAtx7DFdz9d0f9D0s7v3qz0y4x8w7v6u5t4s3r2q1p0o9n8m7l
+	-----END RSA PRIVATE KEY-----";
 	const jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5OTk4ODdmZiJ9.q7Xk9mL2pQ7wR4vT8zN1";
 	const notreal = "api_key: \"your_api_key_here_placeholder\"";
 	`
@@ -36,6 +38,17 @@ func TestScanIgnoresDocumentedExampleKeys(t *testing.T) {
 	// AWS's própria chave de documentação — não é vazamento
 	if len(scan(`k="AKIAIOSFODNN7EXAMPLE"`, 12)) != 0 {
 		t.Fatal("AKIAIOSFODNN7EXAMPLE não deveria ser reportada")
+	}
+}
+
+func TestScanIgnoresPEMTemplateLiteral(t *testing.T) {
+	// Shim WebCrypto/PEM-encoding real (visto em bundles Next.js): monta o
+	// PEM em runtime a partir de dados em memória, nunca embute a chave.
+	body := "L.pem||(L.pem=`-----BEGIN PRIVATE KEY-----\n${L.data.toString(\"base64\")}\n-----END PRIVATE KEY-----`)"
+	for _, h := range scan(body, 12) {
+		if h.Pattern == "Private Key (PEM)" {
+			t.Fatalf("template literal não deveria ser reportado como chave real: %q", h.Value)
+		}
 	}
 }
 

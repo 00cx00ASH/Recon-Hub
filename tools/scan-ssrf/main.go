@@ -172,7 +172,7 @@ func main() {
 					continue
 				}
 				if tg.confirm != nil {
-					if tg.confirm(body) {
+					if tg.confirm(stripReflected(body, tg.URL)) {
 						reportConfirmed(t.base, t.param, tg, u)
 						mu2.Lock()
 						hit++

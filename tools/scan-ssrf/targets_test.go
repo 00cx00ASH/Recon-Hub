@@ -29,6 +29,41 @@ func TestAWSMetadataConfirmRejectsNormalPage(t *testing.T) {
 	}
 }
 
+func TestStripReflectedPreventsPayloadSelfConfirm(t *testing.T) {
+	// aws-metadata-iam-creds e gcp-metadata têm chaves de confirmação que
+	// são, elas mesmas, substrings da URL injetada ("security-credentials",
+	// "computeMetadata") — uma página que só ecoa a query string (canonical
+	// link, __NEXT_DATA__, mensagem de erro citando a URL inválida) não pode
+	// confirmar sozinha.
+	for _, label := range []string{"aws-metadata-iam-creds", "gcp-metadata"} {
+		var tg ssrfTarget
+		for _, c := range ssrfTargets() {
+			if c.Label == label {
+				tg = c
+			}
+		}
+		if tg.confirm == nil {
+			t.Fatalf("%s sem confirm()", label)
+		}
+		reflected := `<link rel="canonical" href="https://app.example.com/img?src=` + tg.URL + `">`
+		if tg.confirm(stripReflected(reflected, tg.URL)) {
+			t.Fatalf("%s: confirmou mesmo após stripReflected — a URL ecoada não deveria bastar", label)
+		}
+	}
+}
+
+func TestStripReflected(t *testing.T) {
+	payload := "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+	body := `<link rel="canonical" href="https://app.example.com/img?src=` + payload + `">`
+	if got := stripReflected(body, payload); got == body {
+		t.Fatal("stripReflected não removeu a ocorrência literal")
+	}
+	body2 := `<link rel="canonical" href="https://app.example.com/img?src=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2Fiam%2Fsecurity-credentials%2F">`
+	if got := stripReflected(body2, payload); got == body2 {
+		t.Fatal("stripReflected não removeu a ocorrência URL-encoded")
+	}
+}
+
 func TestEtcPasswdConfirm(t *testing.T) {
 	var fileTg ssrfTarget
 	for _, tg := range ssrfTargets() {

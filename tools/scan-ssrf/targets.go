@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -28,6 +29,25 @@ var (
 	azureMetaKeys = []string{"\"compute\"", "\"osType\"", "\"vmId\"", "azEnvironment"}
 	etcPasswdRe   = regexp.MustCompile(`root:.*:0:0:`)
 )
+
+// stripReflected removes literal echoes of the injected payload URL from
+// body before confirm() runs. Without this, a page that merely reflects the
+// query string it was given (canonical link, __NEXT_DATA__, an error message
+// quoting the bad URL) can self-confirm: some confirm() key sets share text
+// with the payload itself (e.g. "security-credentials" and "computeMetadata"
+// are both real metadata-response fragments AND substrings of the URL we
+// inject to reach them), so a raw reflection satisfies countHits() without
+// the target ever having fetched the internal resource.
+func stripReflected(body, payload string) string {
+	body = strings.ReplaceAll(body, payload, "")
+	if esc := url.QueryEscape(payload); esc != payload {
+		body = strings.ReplaceAll(body, esc, "")
+	}
+	if esc := url.PathEscape(payload); esc != payload {
+		body = strings.ReplaceAll(body, esc, "")
+	}
+	return body
+}
 
 func countHits(body string, keys []string) int {
 	n := 0

@@ -42,7 +42,12 @@ var patterns = []secretPattern{
 	{"Mapbox Secret Token", "high", regexp.MustCompile(`\b(sk\.eyJ[0-9A-Za-z_\-]{20,}\.[0-9A-Za-z_\-]{20,})`), 1, 0},
 	{"Sentry DSN", "low", regexp.MustCompile(`https://[0-9a-f]{32}@[0-9a-z.\-]+/[0-9]+`), 0, 0},
 	{"JWT", "medium", regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}`), 0, 0},
-	{"Private Key (PEM)", "critical", regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----`), 0, 0},
+	// Requires a real base64 body between the markers (40+ chars of the
+	// base64 alphabet) so a JS template literal like
+	// `-----BEGIN PRIVATE KEY-----\n${key.toString("base64")}\n-----END...`
+	// — common in bundled WebCrypto/PEM-encoding shims — can't match: the
+	// interpolation syntax (`${`, `.`, `(`, `"`) breaks the character class.
+	{"Private Key (PEM)", "critical", regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----\s*([A-Za-z0-9+/=\s]{40,}?)\s*-----END`), 1, 0},
 	{"Firebase Config apiKey", "medium", regexp.MustCompile(`apiKey['"]?\s*[:=]\s*['"](AIza[0-9A-Za-z_\-]{35})['"]`), 1, 0},
 	{"Supabase service_role JWT", "critical", regexp.MustCompile(`eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]*(?:c2VydmljZV9yb2xl|role":"service_role)[A-Za-z0-9_\-]*\.[A-Za-z0-9_\-]+`), 0, 0},
 	{"Postgres URL", "high", regexp.MustCompile(`postgres(?:ql)?://[^\s:@/]+:[^\s:@/]+@[^\s/]+`), 0, 0},

@@ -148,13 +148,24 @@ func main() {
 			os.Exit(2)
 		}
 		seen := map[string]bool{}
+		okPages := 0
 		for _, p := range pages {
-			for _, n := range harvestSite(p) {
+			names, err := harvestSite(p)
+			if err != nil {
+				emit(ev{Type: "log", Level: "warn", Msg: "pulei " + p + ": não baixei a página: " + err.Error()})
+				continue
+			}
+			okPages++
+			for _, n := range names {
 				if !seen[n] {
 					seen[n] = true
 					deps = append(deps, dep{Name: n, Ecosystem: "npm", Section: "site"})
 				}
 			}
+		}
+		if okPages == 0 {
+			emit(ev{Type: "error", Msg: fmt.Sprintf("nenhuma das %d página(s) respondeu", len(pages))})
+			os.Exit(2)
 		}
 		eco = "npm"
 		if len(pages) == 1 {
@@ -330,12 +341,16 @@ func npmScopeEmpty(scope string) bool {
 }
 
 // harvestSite baixa a página + os <script src> e extrai os module specifiers
-// bare (não relativos) importados.
-func harvestSite(pageURL string) []string {
+// bare (não relativos) importados. Erro de fetch é do HOST, não do job — o
+// modo site/site-list roda isto num loop sobre várias páginas (e sempre
+// inclui `target` como a primeira, que em varreduras de programa costuma ser
+// o padrão de escopo tipo "*.example.com", não uma URL de verdade); abortar
+// o processo inteiro no primeiro host que falhar (DNS quebrado, mx/mta sem
+// HTTP, etc.) jogava fora todos os outros hosts da lista sem sequer tentar.
+func harvestSite(pageURL string) ([]string, error) {
 	pageBody, err := fetch(pageURL)
 	if err != nil {
-		emit(ev{Type: "error", Msg: "não baixei a página: " + err.Error()})
-		os.Exit(2)
+		return nil, err
 	}
 	bodies := []string{pageBody}
 	for _, src := range scriptSrcRe.FindAllStringSubmatch(pageBody, -1) {
@@ -363,7 +378,7 @@ func harvestSite(pageURL string) []string {
 		}
 	}
 	sort.Strings(names)
-	return names
+	return names, nil
 }
 
 var (
@@ -481,6 +496,12 @@ func collectURLs(target string, pl payload) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(s string) {
+		// um padrão de escopo tipo "*.example.com" (comum quando `target` vem
+		// de um programa de bug bounty) nunca é uma URL de verdade — pular
+		// aqui evita gastar uma tentativa de fetch fadada a falhar por DNS.
+		if strings.Contains(s, "*") {
+			return
+		}
 		if u := normURL(s); u != "" && !seen[u] {
 			seen[u] = true
 			out = append(out, u)

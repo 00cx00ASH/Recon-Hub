@@ -30,8 +30,22 @@ func TestScanRealLooking(t *testing.T) {
 		}
 	}
 	// gemini value é 'x' repetido -> placeholder (allSame) -> não deve entrar
-	if _, bad := got["Google AI (Gemini)"]; bad {
+	if _, bad := got["Google API Key (AIza, produto não confirmado)"]; bad {
 		t.Error("chave gemini toda 'x' deveria ser filtrada como placeholder")
+	}
+}
+
+func TestScanPineconeRequiresContext(t *testing.T) {
+	uuid := "3d9f7a2c-6b1e-4f80-9c3a-7e2b5d8f1a04"
+	// UUID solto (build id, trace id, session id...) não deve virar "Pinecone"
+	// sem a palavra aparecer perto — é o formato de qualquer UUID.
+	if hs := scan(`const traceId = "`+uuid+`";`, 16); len(hs) != 0 {
+		t.Errorf("UUID sem contexto 'pinecone' não deveria casar: %+v", hs)
+	}
+	body := `const pineconeApiKey = "` + uuid + `";`
+	got := providersOf(scan(body, 16))
+	if v, ok := got["Pinecone"]; !ok || v != uuid {
+		t.Errorf("UUID com 'pinecone' por perto deveria casar, got %v", got)
 	}
 }
 
