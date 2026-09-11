@@ -23,8 +23,12 @@ type ssrfTarget struct {
 // body — chosen to be near-impossible to produce by coincidence from an
 // unrelated page (a normal 404/error page won't contain 3 of these at once).
 var (
-	awsMetaKeys   = []string{"ami-id", "instance-id", "local-hostname", "security-credentials", "placement/", "public-keys"}
-	gcpMetaKeys   = []string{"computeMetadata", "instance/service-accounts", "project/project-id"}
+	awsMetaKeys = []string{"ami-id", "instance-id", "local-hostname", "security-credentials", "placement/", "public-keys"}
+	// "computeMetadata" foi removido de propósito — é substring literal da
+	// própria URL injetada (.../computeMetadata/v1/), então confirmava sozinho
+	// em qualquer página que ecoasse a URL de volta (mesmo bug corrigido em
+	// aws-metadata-iam-creds; ver TestConfirmNeverTriggersOnReflectedURLAlone).
+	gcpMetaKeys   = []string{"instance/service-accounts", "project/project-id"}
 	azureMetaKeys = []string{"\"compute\"", "\"osType\"", "\"vmId\"", "azEnvironment"}
 	etcPasswdRe   = regexp.MustCompile(`root:.*:0:0:`)
 )
@@ -48,10 +52,17 @@ func ssrfTargets() []ssrfTarget {
 			Label: "aws-metadata", URL: "http://169.254.169.254/latest/meta-data/", Sev: "critical",
 			confirm: func(body string) bool { return countHits(body, awsMetaKeys) >= 2 },
 		},
-		{
-			Label: "aws-metadata-iam-creds", URL: "http://169.254.169.254/latest/meta-data/iam/security-credentials/", Sev: "critical",
-			confirm: func(body string) bool { return countHits(body, awsMetaKeys) >= 1 },
-		},
+		// aws-metadata-iam-creds: SEM confirm() de propósito (bug real corrigido
+		// aqui — ver TestConfirmNeverTriggersOnReflectedURLAlone). A resposta
+		// real desse path (sem role name) é só o nome da role em texto puro —
+		// não existe assinatura de conteúdo genérica pra isso, e usar
+		// "security-credentials" (que já estava em awsMetaKeys) confirmava
+		// sozinho em qualquer página que ecoasse a própria URL injetada de
+		// volta (canonical tag, mensagem de erro), sem o servidor nunca ter
+		// buscado o recurso. Vira candidato (diferencial contra baseline),
+		// igual localhost/loopback logo abaixo — confirmação de verdade exige
+		// olhar a resposta manualmente.
+		{Label: "aws-metadata-iam-creds", URL: "http://169.254.169.254/latest/meta-data/iam/security-credentials/", Sev: "medium"},
 		{
 			Label: "file-etc-passwd", URL: "file:///etc/passwd", Sev: "critical",
 			confirm: func(body string) bool { return etcPasswdRe.MatchString(body) },

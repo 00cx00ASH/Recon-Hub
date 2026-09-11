@@ -151,7 +151,12 @@ func main() {
 		}
 		seen := map[string]bool{}
 		for _, p := range pages {
-			for _, n := range harvestSite(p) {
+			names, err := harvestSite(p)
+			if err != nil {
+				emit(ev{Type: "log", Level: "warn", Msg: "pulando " + p + " (não baixei): " + err.Error()})
+				continue
+			}
+			for _, n := range names {
 				if !seen[n] {
 					seen[n] = true
 					deps = append(deps, dep{Name: n, Ecosystem: "npm", Section: "site"})
@@ -332,12 +337,15 @@ func npmScopeEmpty(scope string) bool {
 }
 
 // harvestSite baixa a página + os <script src> e extrai os module specifiers
-// bare (não relativos) importados.
-func harvestSite(pageURL string) []string {
+// bare (não relativos) importados. Devolve erro (em vez de matar o processo)
+// se a página não carregar — bug real corrigido aqui: no modo site-list/urls
+// (várias páginas), uma URL ruim isolada (DNS falhou, wildcard passado
+// literal por engano, timeout) não pode derrubar o job inteiro e perder o
+// resultado das outras páginas já coletadas.
+func harvestSite(pageURL string) ([]string, error) {
 	pageBody, err := fetch(pageURL)
 	if err != nil {
-		emit(ev{Type: "error", Msg: "não baixei a página: " + err.Error()})
-		os.Exit(2)
+		return nil, err
 	}
 	bodies := []string{pageBody}
 	for _, src := range scriptSrcRe.FindAllStringSubmatch(pageBody, -1) {
@@ -365,7 +373,7 @@ func harvestSite(pageURL string) []string {
 		}
 	}
 	sort.Strings(names)
-	return names
+	return names, nil
 }
 
 var (

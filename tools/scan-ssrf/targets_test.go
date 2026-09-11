@@ -57,6 +57,27 @@ func TestLocalhostTargetsHaveNoConfirm(t *testing.T) {
 	}
 }
 
+// TestConfirmNeverTriggersOnReflectedURLAlone é o teste de regressão pro bug
+// real achado em triagem: aws-metadata-iam-creds usava "security-credentials"
+// como assinatura, mas essa string faz parte da PRÓPRIA URL injetada
+// (.../iam/security-credentials/) — qualquer página que ecoe a URL/query
+// nula parte (canonical tag, mensagem de erro "invalid request: <url>")
+// confirmava sozinha, sem o servidor nunca ter buscado o recurso de verdade.
+func TestConfirmNeverTriggersOnReflectedURLAlone(t *testing.T) {
+	for _, tg := range ssrfTargets() {
+		if tg.confirm == nil {
+			continue
+		}
+		reflectedOnly := `<html><head><link rel="canonical" href="` + tg.URL + `"></head>` +
+			`<body>invalid request: ` + tg.URL + `</body></html>`
+		if tg.confirm(reflectedOnly) {
+			t.Errorf("target %q confirma com um corpo que só reflete a URL injetada de volta (%q) — "+
+				"isso é falso positivo garantido em qualquer página que ecoe o parâmetro/query string, "+
+				"sem o servidor jamais ter buscado o recurso interno", tg.Label, tg.URL)
+		}
+	}
+}
+
 func TestBuiltinParamsNoDuplicates(t *testing.T) {
 	seen := map[string]bool{}
 	for _, p := range builtinParams {
