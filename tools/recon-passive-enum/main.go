@@ -93,14 +93,16 @@ func main() {
 	doResolve := *flagResolve || boolParam(pl.Params, "resolve")
 	wantSources := parseSourceList(firstNonEmpty(*flagSources, strParam(pl.Params, "sources"), os.Getenv("RECONHUB_PARAM_SOURCES")))
 
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		MaxIdleConns:    20,
+		IdleConnTimeout: 30 * time.Second,
+		DialContext:     (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-			MaxIdleConns:    20,
-			IdleConnTimeout: 30 * time.Second,
-			DialContext:     (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Timeout:   timeout,
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	srcs := allSources()

@@ -118,14 +118,16 @@ func main() {
 		os.Exit(2)
 	}
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client := &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return nil },
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-			DisableKeepAlives: true,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport:     withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("%d URL(s) — fingerprint passivo + %d entrada(s) na tabela curada", len(bases), len(knownVulns))})

@@ -149,14 +149,16 @@ func main() {
 	}
 	nPayloads := len(buildPayloads(canary, ""))
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client := &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-			DisableKeepAlives: true,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport:     withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	// tarefas: (base, param). Cada uma testa os payloads em ordem e para no 1º hit.

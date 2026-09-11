@@ -98,14 +98,16 @@ func main() {
 	timeout := time.Duration(pick(*flagTOms, intParam(pl.Params, "timeout_ms"), 12000)) * time.Millisecond
 	discover := !*flagNoDisc && !boolParam(pl.Params, "no_discover")
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client = &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: true,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport:     withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	var bases []string

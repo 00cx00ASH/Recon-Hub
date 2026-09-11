@@ -119,14 +119,16 @@ func main() {
 		os.Exit(2)
 	}
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client := &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return nil },
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-			DisableKeepAlives: true,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport:     withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("varrendo %d URL(s), %d padrões", len(urls), len(patterns))})
