@@ -1,6 +1,6 @@
 {
   "name": "full-recon",
-  "description": "Pipeline de recon completo em 3 ondas: (1) enumeração passiva ampla; (2) EM PARALELO sobre os subdomínios — takeover, content discovery, actuator, open redirect, CORS, GraphQL, broken-link, cognito, dep-confusion, gtm, firebase, supabase, secrets, ai-keys, buckets, jwt, js endpoints, web-enum; (3) port scan e, nas portas 27017/27018, MongoDB sem auth.",
+  "description": "Pipeline de recon completo em 3 ondas: (1) enumeração passiva ampla; (2) EM PARALELO sobre os subdomínios — takeover, content discovery, actuator, open redirect, CORS, GraphQL, broken-link, cognito, dep-confusion, gtm, firebase, supabase, secrets, ai-keys, buckets, jwt, js endpoints, web-enum, fingerprint de CVE conhecida, cache poisoning, request smuggling, SSRF, XSS refletido, SQL injection por vazamento de erro; (3) port scan e, nas portas 27017/27018, MongoDB sem auth. Cobre todo scanner do hub cujo alvo é 'uma lista de hosts/URLs' — scan-auth-flow, int-github-audit e os dois de Postman ficam de fora de propósito: pedem um alvo de formato diferente (endpoint OAuth já conhecido, conta do GitHub, collection do Postman), não um host qualquer descoberto no recon.",
   "steps": [
     { "id": "recon", "tool": "recon-passive-enum", "params": { "max": 3000, "resolve": true } },
 
@@ -22,6 +22,12 @@
     { "id": "jwt", "tool": "js-jwt-finder", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
     { "id": "jsendpoints", "tool": "js-hunter", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
     { "id": "webenum", "tool": "recon-web-enum", "params": { "depth": 1, "max_pages": 20 }, "feed": { "param": "target", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cve", "tool": "recon-tech-cve", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cachepoison", "tool": "scan-cache-poisoning", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "smuggling", "tool": "scan-smuggling", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "ssrf", "tool": "scan-ssrf", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "xss", "tool": "scan-xss", "params": { "max_params": 44 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "sqli", "tool": "scan-sqli", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
 
     { "id": "ports", "tool": "recon-infra-enum", "params": { "ports": "top100", "timeout_ms": 1200 }, "feed": { "param": "hosts", "from": "recon", "kind": "subdomain", "as": "lines" } },
     { "id": "mongo", "tool": "scan-mongodb", "params": { "ports": "27017,27018" }, "feed": { "param": "hosts", "from": "ports", "source": "assets", "kind": "port", "as": "lines" } }
