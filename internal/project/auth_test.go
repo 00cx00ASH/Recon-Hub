@@ -57,9 +57,9 @@ func TestSaveLoadAuthProxyRoundTrip(t *testing.T) {
 func TestSaveAuthRejectsInvalidProxy(t *testing.T) {
 	dataDir := t.TempDir()
 	bad := []string{
-		"ftp://127.0.0.1:21",     // esquema não suportado
-		"127.0.0.1:8080",         // sem esquema
-		"http://",                // sem host
+		"ftp://127.0.0.1:21", // esquema não suportado
+		"127.0.0.1:8080",     // sem esquema
+		"http://",            // sem host
 		"nem uma url",
 	}
 	for _, p := range bad {
