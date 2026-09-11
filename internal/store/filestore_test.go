@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -102,6 +103,37 @@ func TestGetFinding(t *testing.T) {
 
 	if _, ok := fs.GetFinding("ghost"); ok {
 		t.Fatal("esperava ok=false para finding inexistente")
+	}
+}
+
+func TestAssetMetaSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	fs, _ := Open(dir)
+	a := &Asset{JobID: "j", Tool: "recon-web-enum", Kind: "url", Value: "https://a.acme.com/admin",
+		Meta: json.RawMessage(`{"http_status":403,"confirmed":false}`), CreatedAt: time.Now().UTC()}
+	if _, err := fs.AddAsset(a); err != nil {
+		t.Fatal(err)
+	}
+	fs.Close()
+
+	fs2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fs2.Close()
+	list, _ := fs2.ListAssets(AssetFilter{})
+	if len(list) != 1 {
+		t.Fatalf("após reabrir: %d assets", len(list))
+	}
+	var meta struct {
+		HTTPStatus int  `json:"http_status"`
+		Confirmed  bool `json:"confirmed"`
+	}
+	if err := json.Unmarshal(list[0].Meta, &meta); err != nil {
+		t.Fatalf("meta não voltou como JSON válido: %v (raw: %s)", err, list[0].Meta)
+	}
+	if meta.HTTPStatus != 403 || meta.Confirmed {
+		t.Errorf("meta do asset não bateu após reabrir: %+v", meta)
 	}
 }
 

@@ -322,19 +322,25 @@ func (b baseline) isSoft(status, size int) bool {
 	return false
 }
 
-// probeVerdict classifies a probed path response.
-func probeVerdict(kind string, status, size int, ctype, body string, base baseline) (bool, string) {
+// probeVerdict classifies a probed path response. confirmed reports whether
+// the hit alone proves something reportable (a real 2xx response with sane
+// content) — a bare 401/403 only proves the path *exists* behind auth, which
+// most bug-bounty programs explicitly exclude as noise ("stack trace/error
+// pages without further proof", "unvalidated scanner reports"). Callers
+// should down-rank an unconfirmed hit instead of reporting it at full
+// severity — see docs/TOOL_CONTRACT.md.
+func probeVerdict(kind string, status, size int, ctype, body string, base baseline) (hit, confirmed bool, note string) {
 	if status == 401 || status == 403 {
 		if kind == "admin" || kind == "debug" {
-			return true, "existe mas exige auth (HTTP " + itoa(status) + ")"
+			return true, false, "existe mas bloqueado por auth (HTTP " + itoa(status) + ") — não é achado reportável por si só na maioria dos programas; não confirma exploração"
 		}
-		return false, ""
+		return false, false, ""
 	}
 	if status < 200 || status >= 400 || status == 429 {
-		return false, ""
+		return false, false, ""
 	}
 	if base.isSoft(status, size) {
-		return false, ""
+		return false, false, ""
 	}
 	bl := strings.ToLower(body)
 	switch kind {
@@ -342,14 +348,14 @@ func probeVerdict(kind string, status, size int, ctype, body string, base baseli
 		// require it to actually look like the file, not an HTML error page
 		if strings.Contains(strings.ToLower(ctype), "html") && !strings.Contains(bl, "ref:") && !strings.Contains(bl, "[core]") {
 			if strings.Contains(bl, "<html") && status == 200 {
-				return false, "" // provavelmente SPA / página custom
+				return false, false, "" // provavelmente SPA / página custom
 			}
 		}
-		return true, "HTTP " + itoa(status) + " — " + itoa(size) + " bytes servidos"
+		return true, true, "HTTP " + itoa(status) + " — " + itoa(size) + " bytes servidos"
 	case "debug":
-		return true, "HTTP " + itoa(status) + " (" + ctype + ")"
+		return true, true, "HTTP " + itoa(status) + " (" + ctype + ")"
 	default:
-		return true, "HTTP " + itoa(status)
+		return true, true, "HTTP " + itoa(status)
 	}
 }
 

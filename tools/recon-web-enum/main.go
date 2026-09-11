@@ -283,14 +283,14 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 				if err != nil {
 					continue
 				}
-				ok, note := probeVerdict(t.kind, status, len(body), hdr.Get("Content-Type"), body, base)
+				ok, confirmed, note := probeVerdict(t.kind, status, len(body), hdr.Get("Content-Type"), body, base)
 				if !ok {
 					continue
 				}
 				mu2.Lock()
 				hitCount++
 				mu2.Unlock()
-				emit(ev{Type: "asset", Kind: "url", Value: u})
+				emit(ev{Type: "asset", Kind: "url", Value: u, Meta: map[string]any{"http_status": status}})
 				sev := t.sev
 				ft := "web-path-found"
 				switch t.kind {
@@ -305,11 +305,19 @@ func enumSite(root string, depth, maxPages, conc int, doProbe bool) (int, int) {
 				case "info":
 					ft = "web-info-file"
 				}
+				title := t.kind + ": " + u
+				if !confirmed {
+					// só prova que o caminho existe e está atrás de auth — não é
+					// achado reportável isoladamente, então não infla a severidade
+					// nem marca como confirmado (ver probeVerdict).
+					sev = "info"
+					title = "[bloqueado] " + title
+				}
 				emit(ev{Type: "finding", Severity: sev, FindingType: ft,
-					Title:    t.kind + ": " + u,
+					Title:    title,
 					Asset:    u,
 					Evidence: note,
-					Meta:     map[string]any{"path": t.path, "kind": t.kind, "status": status}})
+					Meta:     map[string]any{"path": t.path, "kind": t.kind, "http_status": status, "confirmed": confirmed}})
 			}
 		}()
 	}
