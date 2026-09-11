@@ -131,6 +131,8 @@ var knownRisk = map[string]risk{
 	"reflected-xss":                     {0.85, "\"<\" voltou sem escapar de verdade — injeção de tag confirmada por texto puro, sem navegador. Antes de reportar como crítico, confira CSP/httpOnly no cookie de sessão: eles não desfazem o bug, mas mudam o impacto real que você escreve no relatório."},
 	"reflected-xss-attribute":           {0.40, "só a aspa quebrou, sem \"<\" — pode ser atributo explorável (se desprotegido) ou só um valor de texto solto sem risco. Abra a URL de verdade e confira o HTML ao redor do marcador antes de decidir a severidade."},
 	"sqli-error-based":                  {0.90, "erro real de banco vazado, confirmado por diferença contra o baseline sem payload — sinal forte, poucas chances de falso positivo. Ainda não prova quanto dá pra extrair (isso é SQLi cega/booleana, fora do escopo desta ferramenta) — descreva no relatório que a prova é vazamento de erro, não extração de dado."},
+	"idor-horizontal":                   {0.85, "confirmado contra o baseline legítimo do dono real (status+tamanho batendo), não só um 200 genérico — sinal forte. Ainda vale abrir a URL manualmente com a sessão cruzada pra confirmar que o conteúdo é mesmo do outro usuário antes de reportar."},
+	"missing-rate-limiting":             {0.55, "ausência confirmada num número pequeno de tentativas não garante que não haja proteção mais adiante (ex: só depois de 20+ tentativas, ou por IP/dispositivo em vez de por conta) — rode mais tentativas manualmente antes de reportar como crítico, e descreva exatamente quantas tentativas foram feitas sem bloqueio."},
 }
 
 // riskFor looks up knownRisk by exact type, falling back to a neutral prior

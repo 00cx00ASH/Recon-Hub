@@ -242,6 +242,15 @@ ainda falta rodar num programa.
 - Supply chain: `scan-dep-confusion` (nome de pacote ausente no
   registro público).
 - OSINT de tracking: `js-gtm-osint` (GTM, tags customizadas suspeitas).
+- Ausência de rate limiting/lockout: `scan-bruteforce-check` — manda um
+  número pequeno e travado de tentativas de credencial errada (teto
+  rígido de 10, nunca força bruta de verdade) contra uma conta de TESTE
+  descartável do operador num endpoint de login/OTP, e confirma a
+  ausência de proteção só quando NENHUMA tentativa disparar 429,
+  Retry-After, CAPTCHA/mensagem de bloqueio, mudança de status/tamanho
+  ou aumento de latência — qualquer um desses sinais interrompe o scan
+  sem gerar finding, porque a proteção existe. Sugira quando o operador
+  tiver uma conta de teste descartável (nunca peça a conta principal).
 
 **5. Triagem** — `hub_list_findings` + o scorer do hub (score/action/why).
 Confirme severidade real antes de reportar: um 403 puro sem prova é
@@ -291,9 +300,6 @@ sessão autenticada real ou julgamento de lógica de negócio:
 - **Lógica de negócio** (ex: burlar fluxo de checkout, cupom, limite de
   taxa de negócio) — inerentemente manual, nenhum scanner genérico
   resolve isso direito.
-- **Rate limiting do ALVO** (diferente do pacing que o hub usa pra não
-  disparar o rate limit do alvo) — o hub não testa se o alvo tem
-  brute-force/rate-limit fraco em login/OTP.
 - **File upload / LFI-RFI / path traversal clássico** — sem ferramenta
   dedicada.
 - **Mobile/API móvel, cliente desktop** — fora do escopo do hub (web/API

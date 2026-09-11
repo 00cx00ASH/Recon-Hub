@@ -1,6 +1,9 @@
 package report
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // tmpl is the reusable knowledge for one class of finding: what it is, why it
 // matters, how to reproduce it, how to fix it. Keyed by finding type.
@@ -436,6 +439,39 @@ var templates = map[string]tmpl{
 // supabase-key-exposed, …) intentionally have no template — they're skipped
 // unless include_info, and then use the honest generic fallback.
 var extra = map[string]tmpl{
+	"idor-horizontal": {
+		Name: "IDOR horizontal (Insecure Direct Object Reference)", CWE: "CWE-639",
+		Description: "Uma sessão autenticada consegue ler o recurso de OUTRA sessão no mesmo endpoint, trocando só o identificador (ex: `/orders/{id}`) — a aplicação confere autenticação mas não autorização (não valida que o dono do recurso é quem está pedindo). Confirmado comparando a resposta cruzada contra o baseline legítimo do dono real (mesmo status 2xx e tamanho de corpo dentro da tolerância), não só um 200 genérico.",
+		Impact:      "Qualquer usuário autenticado consegue ler (e, se o mesmo padrão valer para escrita, possivelmente alterar) dados de outros usuários trocando um ID sequencial ou previsível — vazamento de dados em massa automatizável, sem precisar de credencial da vítima.",
+		Remediation: "Validar em toda leitura/escrita que o recurso pedido pertence à sessão autenticada (checagem de autorização por objeto, não só autenticação). Preferir identificadores não sequenciais (UUID) como defesa em profundidade — isso não substitui a checagem de autorização.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/639.html", "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Baseline: peça `" + f.Asset + "` autenticado como o DONO real do recurso — anote status e tamanho do corpo."}
+			if s, ok := f.Meta["owner_baseline_status"].(float64); ok {
+				steps = append(steps, fmt.Sprintf("Baseline do dono: status %.0f", s))
+			}
+			steps = append(steps, "Cruzada: peça a MESMA URL autenticado com a OUTRA sessão (dona de um recurso diferente).")
+			steps = append(steps, "Observe: "+f.Evidence, "A resposta cruzada bate estruturalmente com o baseline do dono — não é uma página de erro/shell genérico disfarçado de sucesso.")
+			return steps
+		},
+	},
+	"missing-rate-limiting": {
+		Name: "Ausência de rate limiting / lockout em endpoint de autenticação", CWE: "CWE-307",
+		Description: "Um endpoint de login/OTP aceitou várias tentativas seguidas de credencial errada sem CAPTCHA, `429`, aumento de latência ou mensagem de bloqueio — nenhum sinal de proteção contra força bruta apareceu no número de tentativas testado.",
+		Impact:      "Sem limite de tentativas, um atacante pode testar senhas/códigos em volume (força bruta ou credential stuffing) contra qualquer conta, limitado só pela banda/paciência dele. Combinado com uma wordlist de senhas vazadas, isso pode levar a account takeover em massa.",
+		Remediation: "Implementar rate limiting por conta e por IP/dispositivo (ex: backoff progressivo, CAPTCHA após N tentativas, bloqueio temporário da conta). Para OTP, limitar tentativas por código emitido e invalidar o código após poucas tentativas erradas.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/307.html", "https://cheatsheetseries.owasp.org/cheatsheets/Credential_Stuffing_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint: `" + f.Asset + "`"}
+			if n, ok := f.Meta["attempts"].(float64); ok {
+				steps = append(steps, fmt.Sprintf("Envie %.0f tentativas seguidas de credencial errada pra uma conta de teste descartável.", n))
+			} else {
+				steps = append(steps, "Envie várias tentativas seguidas de credencial errada pra uma conta de teste descartável.")
+			}
+			steps = append(steps, "Observe: "+f.Evidence, "Nenhuma tentativa recebeu CAPTCHA, 429, Retry-After ou mensagem de bloqueio — todas tratadas de forma idêntica.")
+			return steps
+		},
+	},
 	"jwt-no-exp": {
 		Name: "JWT sem expiração", CWE: "CWE-613",
 		Description: "Um JWT usado pela aplicação não tem o claim `exp` — o token nunca expira.",

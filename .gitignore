@@ -32,6 +32,7 @@ tools/recon-tech-cve/recon-tech-cve
 tools/scan-actuator/scan-actuator
 tools/scan-auth-flow/scan-auth-flow
 tools/scan-broken-link-hijack/scan-broken-link-hijack
+tools/scan-bruteforce-check/scan-bruteforce-check
 tools/scan-cache-poisoning/scan-cache-poisoning
 tools/scan-cognito/scan-cognito
 tools/scan-cors/scan-cors
