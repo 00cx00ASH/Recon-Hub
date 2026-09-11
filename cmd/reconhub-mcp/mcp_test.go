@@ -29,6 +29,12 @@ func fakeHub(t *testing.T) (*hubClient, *httptest.Server) {
 		}
 		w.Write([]byte(`{"findings":[]}`))
 	})
+	mux.HandleFunc("GET /api/intel/findings", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("program") != "acme" {
+			t.Errorf("intel/findings: query program ausente: %s", r.URL.RawQuery)
+		}
+		w.Write([]byte(`{"findings":[],"groups":[],"chains":[{"id":"open-redirect-oauth","title":"x","severity":"high","explanation":"y","assets":["https://login.acme.com/go","https://login.acme.com/authorize"]}]}`))
+	})
 	mux.HandleFunc("POST /api/findings/{id}/triage", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
@@ -117,8 +123,8 @@ func TestInitializeAndList(t *testing.T) {
 
 	resp, _ = handle(&rpcRequest{ID: json.RawMessage(`2`), Method: "tools/list"}, reg)
 	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
-	if len(tools) != 21 {
-		t.Fatalf("esperava 21 tools MCP, veio %d", len(tools))
+	if len(tools) != 22 {
+		t.Fatalf("esperava 22 tools MCP, veio %d", len(tools))
 	}
 	if tools[0]["name"] != "hub_list_tools" {
 		t.Fatalf("ordem inesperada: %v", tools[0]["name"])
@@ -147,6 +153,23 @@ func TestCallForwardsToHub(t *testing.T) {
 
 	// query params encaminhados
 	callTool(t, reg, "hub_list_findings", map[string]any{"severity": "high"})
+}
+
+func TestListChainCandidates(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_list_chain_candidates", map[string]any{"program": "acme"})
+	if out["isError"] == true {
+		t.Fatalf("list_chain_candidates deu erro: %v", out)
+	}
+	txt := out["content"].([]map[string]any)[0]["text"].(string)
+	if !contains(txt, "open-redirect-oauth") {
+		t.Fatalf("resposta sem o chain candidate esperado: %s", txt)
+	}
+	if contains(txt, `"findings"`) || contains(txt, `"groups"`) {
+		t.Fatalf("resposta deveria conter só \"chains\", veio o payload inteiro de /api/intel/findings: %s", txt)
+	}
 }
 
 func TestTriageFinding(t *testing.T) {

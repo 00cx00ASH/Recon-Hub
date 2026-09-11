@@ -210,6 +210,29 @@ func buildTools(h *hubClient) map[string]mcpTool {
 			return h.call("GET", "/api/findings"+query(a, "program", "severity", "type", "tool", "job", "limit"), nil)
 		})
 
+	add("hub_list_chain_candidates",
+		"Lista combinações de findings CONFIRMADOS que, juntas, mudam de categoria (ex: open redirect + fluxo OAuth no mesmo host = desvio de redirect_uri, não só um redirect; SSRF confirmado no endpoint de metadata cloud = roubo de credencial IAM, não só SSRF). Cross-referencia dados que o hub já coletou — nunca escaneia nada novo, nunca confirma sozinho: cada candidato é uma pista pra você abrir os findings envolvidos e confirmar manualmente antes de reportar como a categoria mais grave. Ver .claude/agents/bugbounty.md, seção \"Playbook de encadeamento\", pro mesmo raciocínio em prosa.",
+		obj(map[string]any{
+			"program": str("filtra por programa — recomendado; sem isso mistura achados de todos os programas na mesma resposta (nunca combina achados DE programas diferentes entre si, mas lista os dois grupos juntos)"),
+		}),
+		func(a map[string]any) (json.RawMessage, error) {
+			raw, err := h.call("GET", "/api/intel/findings"+query(a, "program"), nil)
+			if err != nil {
+				return nil, err
+			}
+			var decoded struct {
+				Chains json.RawMessage `json:"chains"`
+			}
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				return nil, fmt.Errorf("resposta inesperada de /api/intel/findings: %w", err)
+			}
+			chains := decoded.Chains
+			if chains == nil {
+				chains = json.RawMessage("[]")
+			}
+			return json.Marshal(map[string]any{"chains": chains})
+		})
+
 	add("hub_list_assets",
 		"Lista assets descobertos (subdomínios, URLs, buckets…).",
 		obj(map[string]any{

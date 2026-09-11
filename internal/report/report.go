@@ -50,15 +50,32 @@ type Section struct {
 	Templated   bool     `json:"templated"`
 }
 
+// ChainCandidate is a combination of two or more findings in this report
+// that's worth more read together than either is alone — see
+// internal/intel.DetectChains, which computes these; report only knows how
+// to render what it's handed (kept dependency-free from intel, same as the
+// rest of this package). Assets names the affected hosts/URLs so a reader
+// can find the matching sections above without needing raw finding IDs,
+// which don't survive into the rendered report (sections get sequential
+// F-01/F-02 IDs instead).
+type ChainCandidate struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Severity    string   `json:"severity"`
+	Explanation string   `json:"explanation"`
+	Assets      []string `json:"assets,omitempty"`
+}
+
 // Report is the assembled document.
 type Report struct {
-	Program   string         `json:"program,omitempty"`
-	Target    string         `json:"target,omitempty"`
-	Generated string         `json:"generated_at"`
-	Counts    map[string]int `json:"counts_by_severity"`
-	Total     int            `json:"total"`
-	Sections  []Section      `json:"sections"`
-	skipped   int            // findings with no reportable value (info + no template)
+	Program         string           `json:"program,omitempty"`
+	Target          string           `json:"target,omitempty"`
+	Generated       string           `json:"generated_at"`
+	Counts          map[string]int   `json:"counts_by_severity"`
+	Total           int              `json:"total"`
+	Sections        []Section        `json:"sections"`
+	ChainCandidates []ChainCandidate `json:"chain_candidates,omitempty"`
+	skipped         int              // findings with no reportable value (info + no template)
 }
 
 var sevRank = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
@@ -175,6 +192,18 @@ func (r Report) Markdown() string {
 	b.WriteString(".\n\n")
 	if r.skipped > 0 {
 		fmt.Fprintf(&b, "_(%d finding(s) informativo(s) sem impacto direto foram omitidos.)_\n\n", r.skipped)
+	}
+
+	if len(r.ChainCandidates) > 0 {
+		fmt.Fprintf(&b, "## Possíveis encadeamentos\n\n")
+		b.WriteString("_Achado isolado às vezes é descartável, mas combinado com outro pode mudar de categoria — " +
+			"confirme manualmente antes de reportar, isto aqui é um candidato, não uma confirmação de impacto._\n\n")
+		for _, c := range r.ChainCandidates {
+			fmt.Fprintf(&b, "**%s** (%s) — %s\n\n", c.Title, badge(c.Severity), c.Explanation)
+			if len(c.Assets) > 0 {
+				fmt.Fprintf(&b, "Assets envolvidos: %s\n\n", strings.Join(c.Assets, ", "))
+			}
+		}
 	}
 
 	if r.Total > 0 {
@@ -313,6 +342,21 @@ ol{padding-left:1.3rem}ol li{margin:.35rem 0}
 	b.WriteString(".</p>")
 	if r.skipped > 0 {
 		fmt.Fprintf(&b, `<p class="muted">%d finding(s) informativo(s) omitido(s).</p>`, r.skipped)
+	}
+
+	if len(r.ChainCandidates) > 0 {
+		b.WriteString("<h2>Possíveis encadeamentos</h2>")
+		b.WriteString(`<p class="muted">Achado isolado às vezes é descartável, mas combinado com outro pode mudar de categoria — confirme manualmente antes de reportar, isto aqui é um candidato, não uma confirmação de impacto.</p>`)
+		for _, c := range r.ChainCandidates {
+			b.WriteString(`<div class="card">`)
+			fmt.Fprintf(&b, `<p><b>%s</b> <span class="sev %s">%s</span></p>`,
+				html.EscapeString(c.Title), c.Severity, strings.ToUpper(c.Severity))
+			fmt.Fprintf(&b, "<p>%s</p>", html.EscapeString(c.Explanation))
+			if len(c.Assets) > 0 {
+				fmt.Fprintf(&b, "<p class=\"muted\">Assets envolvidos: %s</p>", html.EscapeString(strings.Join(c.Assets, ", ")))
+			}
+			b.WriteString("</div>")
+		}
 	}
 
 	if r.Total > 0 {

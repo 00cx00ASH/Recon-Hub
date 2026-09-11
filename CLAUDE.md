@@ -235,3 +235,21 @@ sobre caçar bugs em programas de terceiros.
   da aba Mapa em `web/index.html`, e a fração de adoção de proxy em
   README + `docs/TOOL_CONTRACT.md` (denominador = total; numerador =
   total menos as que documentadamente não usam `http.Client`).
+- **O `FileStore` (backend padrão, JSON-lines) carrega tudo em memória no
+  `store.Open()` e nunca relê o arquivo do disco depois — só o próprio
+  processo que abriu o store vê o que ele mesmo escreve.** Popular dados
+  de teste escrevendo direto num `data/*.jsonl` (ou via um script Go
+  separado chamando `store.Open()` no mesmo diretório) enquanto o hub já
+  está rodando não aparece em nenhuma resposta da API até reiniciar o
+  processo do hub — não é um bug, é como um backend de arquivo simples
+  costuma funcionar, mas é fácil gastar um tempo achando que a
+  ferramenta/endpoint está com bug quando na verdade é só o processo
+  antigo com o snapshot velho em memória. Pra popular findings de teste
+  (ex: validar `internal/intel.DetectChains` fim-a-fim contra a API/UI
+  de verdade, não só os testes unitários): (1) suba o servidor DEPOIS de
+  escrever os dados, ou (2) se precisar escrever com o servidor já no
+  ar, reinicie-o depois — nunca assuma que uma escrita externa aparece
+  sozinha. Um script Go de seed que importa `internal/store` só compila
+  se estiver dentro da árvore do módulo (`internal/` não é importável de
+  fora) — crie um pacote `cmd/` temporário pra isso e apague antes de
+  commitar, nunca deixe esse tipo de scratch pacote no diff.

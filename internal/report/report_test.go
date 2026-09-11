@@ -115,6 +115,47 @@ func TestHTML(t *testing.T) {
 	}
 }
 
+func TestMarkdownChainCandidates(t *testing.T) {
+	rep := Build("acme", "", sampleItems(), false)
+	rep.ChainCandidates = []ChainCandidate{
+		{ID: "open-redirect-oauth", Title: "Open redirect em host com OAuth", Severity: "high",
+			Explanation: "confirme manualmente", Assets: []string{"https://login.acme.com/go"}},
+	}
+	md := rep.Markdown()
+	for _, want := range []string{
+		"## Possíveis encadeamentos",
+		"Open redirect em host com OAuth",
+		"confirme manualmente",
+		"https://login.acme.com/go",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("markdown sem %q", want)
+		}
+	}
+}
+
+func TestMarkdownNoChainCandidatesSectionWhenEmpty(t *testing.T) {
+	md := Build("acme", "", sampleItems(), false).Markdown()
+	if strings.Contains(md, "Possíveis encadeamentos") {
+		t.Error("não deveria renderizar a seção de encadeamentos sem nenhum candidato")
+	}
+}
+
+func TestHTMLChainCandidatesEscaped(t *testing.T) {
+	rep := Build("acme", "", sampleItems(), false)
+	rep.ChainCandidates = []ChainCandidate{
+		{ID: "x", Title: "<script>alert(1)</script>", Severity: "critical",
+			Explanation: "<img src=x onerror=alert(2)>", Assets: []string{"https://a.acme.com"}},
+	}
+	h := rep.HTML()
+	if !strings.Contains(h, "Possíveis encadeamentos") {
+		t.Fatal("HTML sem seção de encadeamentos")
+	}
+	if strings.Contains(h, "<script>alert(1)</script>") || strings.Contains(h, "<img src=x onerror=alert(2)>") {
+		t.Error("HTML não escapou título/explicação do chain candidate")
+	}
+}
+
 func TestLookup(t *testing.T) {
 	// todos os tipos cors reais têm template exato
 	for _, ty := range []string{"cors-reflect-credentials", "cors-reflect-origin", "cors-null-origin", "cors-wildcard", "cors-wildcard-credentials"} {

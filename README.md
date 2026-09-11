@@ -1020,13 +1020,14 @@ hub). Ferramentas MCP expostas:
 | `hub_run_pipeline` / `hub_get_pipeline_run` / `hub_list_pipeline_runs` | pipelines |
 | `hub_compare_pipeline_runs` | diff de findings/ativos entre duas pipeline-runs (mesma pipeline+alvo+programa) — novo/resolvido/persiste |
 | `hub_list_findings` / `hub_list_assets` | resultados (com filtros)          |
+| `hub_list_chain_candidates` | combinações de findings confirmados que mudam de categoria juntas (open redirect + OAuth no mesmo host, SSRF no endpoint de metadata cloud…) — cross-referencia dados já coletados, nunca escaneia de novo |
 | `hub_triage_finding`     | registra veredito (confirmed/false_positive/…) + motivo — alimenta o intel |
 | `hub_create_program`     | cria um programa (escopo) só com o `in_scope` que o operador deu |
 | `hub_list_scope_templates` / `hub_create_scope_template` | templates de out_of_scope/platform reaproveitáveis, aplicados no create_program |
 | `hub_get_lessons` / `hub_add_lesson` | base de conhecimento cross-programa (`data/lessons.md`) — aditiva, nunca sobrescreve |
 | `hub_draft_finding` / `hub_program_report` | relatório .md pronto (1 achado, ou o programa inteiro) |
 
-21 tools ao todo (`hub_list_tools` inclusive).
+22 tools ao todo (`hub_list_tools` inclusive).
 
 ### Passo a passo
 

@@ -195,6 +195,10 @@
   .mapchip.tab{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
   .mapdown{display:flex;justify-content:center;color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:16px;padding:.3rem 0;line-height:1}
   @media (max-width:820px){ .mapshortcut{flex-direction:column;align-items:flex-start} }
+  .chaincard{border:1px solid color-mix(in srgb,var(--crit) 45%,var(--border));border-radius:var(--radius);background:color-mix(in srgb,var(--crit) 6%,var(--surface));padding:.8rem 1rem;margin-bottom:.6rem}
+  .chaincard .chtitle{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px}
+  .chaincard p{margin:.4rem 0 0;font-size:12.5px;color:var(--dim)}
+  .chaincard .chassets{margin-top:.4rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);word-break:break-all}
 
   .md{max-width:78ch;font-size:13.5px;line-height:1.65}
   .md h1,.md h2,.md h3,.md h4{font-family:"IBM Plex Mono",monospace;line-height:1.25;margin:1.8em 0 .6em;color:var(--text);text-transform:none;letter-spacing:0}
@@ -550,6 +554,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <a id="repMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
         <a id="repHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
       </div>
+      <div id="chainsBox" style="margin-bottom:.9rem"></div>
       <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
         <thead><tr><th><input type="checkbox" id="findSelAll" title="selecionar todos (pra usar em pipeline)"></th><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>http</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
@@ -1663,6 +1668,32 @@ function matchesFindFilter(f){
   return true;
 }
 
+function renderChains(chains){
+  const box = $('#chainsBox');
+  box.innerHTML = '';
+  if (!chains || !chains.length) return;
+  const det = el('details', { open: true });
+  det.append(el('summary', {
+    style: "cursor:pointer;font-size:12px;color:var(--crit);font-family:'IBM Plex Mono',monospace;font-weight:600",
+    textContent: `⚠ possíveis encadeamentos (${chains.length}) — achado isolado pode mudar de categoria combinado com outro`,
+  }));
+  const wrap = el('div', { style:'margin-top:.5rem' });
+  for (const c of chains) {
+    const card = el('div', { className:'chaincard' });
+    card.append(el('div', { className:'chtitle' }, [
+      el('span', { className:'sev ' + c.severity, textContent: c.severity }),
+      el('span', { textContent: c.title }),
+    ]));
+    card.append(el('p', { textContent: c.explanation }));
+    if (c.assets && c.assets.length) {
+      card.append(el('div', { className:'chassets', textContent: 'assets: ' + c.assets.join(', ') }));
+    }
+    wrap.append(card);
+  }
+  det.append(wrap);
+  box.append(det);
+}
+
 function renderGroups(groups){
   const box = $('#groupsBox');
   box.innerHTML = '';
@@ -1763,12 +1794,14 @@ async function loadFindings(){
   FINDINGS_FILTER = null;
   try {
     const prog = $('#findProgram').value;
-    const { findings, groups } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
+    const { findings, groups, chains } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
     FINDINGS_ALL = findings || [];
+    renderChains(chains);
     renderGroups(groups);
     renderFindingsTable();
   } catch {
     FINDINGS_ALL = [];
+    renderChains(null);
     renderFindingsTable();
   }
 }

@@ -27,7 +27,7 @@ ferramenta) e o [`README.md`](../README.md) (instalação, auth, catálogo compl
 └───────────────────────────┬───────────────────────────────┘
                             │  stdin JSON + env  →  NDJSON stdout
 ┌─ FERRAMENTAS (tools/<nome>/) ─────────────────────────────┐
-│  34 processos externos, cada um módulo Go isolado.         │
+│  37 processos externos, cada um módulo Go isolado.         │
 │  O hub NÃO depende delas; elas não incham o hub.           │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -203,7 +203,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
   `RECONHUB_CHROME_URL`, sem configuração por programa (é infra
   compartilhada, não segredo por programa). Não suporta proxy/Tor por job
   nesse modo. Ver README > Docker > Chrome headless.
-- **MCP** — `cmd/reconhub-mcp`, 21 tools, deixa o Claude dirigir o hub.
+- **MCP** — `cmd/reconhub-mcp`, 22 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +
   job sqlite.
@@ -313,7 +313,7 @@ dep-confusion, secrets — coisas que mudam sozinhas.
 
 ### g) Com o Claude (MCP)
 
-`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 21 tools
+`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 22 tools
 (`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_triage_finding`,
 `hub_draft_finding`, `hub_program_report`, `hub_create_program`…). Aí você
 conversa: "roda `full-recon` no acme.com no programa acme e me resume os
@@ -324,7 +324,7 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 
 É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
-repo, e só age através das 21 tools MCP acima (sem Bash, sem internet
+repo, e só age através das 22 tools MCP acima (sem Bash, sem internet
 solta — o `tools:` do frontmatter do agente nem lista essas duas). Isso
 importa: **todo job/pipeline que ele dispara passa pelo mesmo
 enforcement de escopo do servidor** que qualquer outro caminho (UI,

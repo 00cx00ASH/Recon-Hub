@@ -623,3 +623,50 @@ func TestSearch(t *testing.T) {
 		t.Fatalf("sem match deveria devolver vazio: %d %s", w.Code, w.Body.String())
 	}
 }
+
+func TestIntelFindingsIncludesChainCandidates(t *testing.T) {
+	srv := newScopeAwareServer(t, auth.Token{Source: "disabled"})
+	h := srv.Handler()
+
+	_, _ = srv.Store.AddFinding(&store.Finding{
+		ID: "f1", JobID: "j1", Tool: "scan-open-redirect", Program: "acme", Target: "acme.com",
+		Type: "open-redirect", Title: "redirect", Asset: "https://login.acme.com/go?next=x", Severity: "high",
+	})
+	_, _ = srv.Store.AddFinding(&store.Finding{
+		ID: "f2", JobID: "j2", Tool: "scan-auth-flow", Program: "acme", Target: "acme.com",
+		Type: "oauth-redirect-uri-bypass", Title: "bypass", Asset: "https://login.acme.com/authorize", Severity: "critical",
+	})
+
+	w := do(h, "GET", "/api/intel/findings?program=acme", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, corpo %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"chains"`) || !strings.Contains(body, "open-redirect-oauth") {
+		t.Fatalf("resposta sem chain candidate esperada: %s", body)
+	}
+}
+
+// buildReport also needs a *http.Request, exercised indirectly via the
+// report endpoints — confirm the rendered report surfaces the same chain.
+func TestReportMarkdownIncludesChainCandidates(t *testing.T) {
+	srv := newScopeAwareServer(t, auth.Token{Source: "disabled"})
+	h := srv.Handler()
+
+	_, _ = srv.Store.AddFinding(&store.Finding{
+		ID: "f1", JobID: "j1", Tool: "scan-open-redirect", Program: "acme", Target: "acme.com",
+		Type: "open-redirect", Title: "redirect", Asset: "https://login.acme.com/go?next=x", Severity: "high",
+	})
+	_, _ = srv.Store.AddFinding(&store.Finding{
+		ID: "f2", JobID: "j2", Tool: "scan-auth-flow", Program: "acme", Target: "acme.com",
+		Type: "oauth-redirect-uri-bypass", Title: "bypass", Asset: "https://login.acme.com/authorize", Severity: "critical",
+	})
+
+	w := do(h, "GET", "/api/programs/acme/report.md", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, corpo %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Possíveis encadeamentos") {
+		t.Fatalf("relatório sem seção de encadeamentos: %s", w.Body.String())
+	}
+}

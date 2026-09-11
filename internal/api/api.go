@@ -623,7 +623,7 @@ func (s *Server) intelFindings(w http.ResponseWriter, r *http.Request) {
 			Advice: a.Advice, Confidence: a.Confidence, SampleSize: a.SampleSize,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"findings": rows, "groups": intel.GroupSimilar(fs)})
+	writeJSON(w, http.StatusOK, map[string]any{"findings": rows, "groups": intel.GroupSimilar(fs), "chains": chainCandidatesWithAssets(fs)})
 }
 
 // buildReport gathers findings per the request filters and assembles a report.
@@ -653,7 +653,40 @@ func (s *Server) buildReport(r *http.Request) report.Report {
 		})
 	}
 	includeInfo := q.Get("include_info") == "1" || q.Get("include_info") == "true"
-	return report.Build(prog, target, items, includeInfo)
+	rep := report.Build(prog, target, items, includeInfo)
+	rep.ChainCandidates = chainCandidatesWithAssets(fs)
+	return rep
+}
+
+// chainCandidatesWithAssets converts intel.DetectChains's output (keyed by
+// store finding ID) into report.ChainCandidate (keyed by the affected assets
+// instead) — used both by the generated report (where finding IDs don't
+// survive into the rendered sections, which get sequential F-01/F-02 IDs
+// instead) and by /api/intel/findings (where asset names are simply more
+// useful to a client than opaque IDs it would have to cross-reference).
+func chainCandidatesWithAssets(fs []*store.Finding) []report.ChainCandidate {
+	assetByID := make(map[string]string, len(fs))
+	for _, f := range fs {
+		assetByID[f.ID] = f.Asset
+	}
+	chains := intel.DetectChains(fs)
+	out := make([]report.ChainCandidate, 0, len(chains))
+	for _, c := range chains {
+		seen := map[string]bool{}
+		var assets []string
+		for _, id := range c.FindingIDs {
+			a := assetByID[id]
+			if a == "" || seen[a] {
+				continue
+			}
+			seen[a] = true
+			assets = append(assets, a)
+		}
+		out = append(out, report.ChainCandidate{
+			ID: c.ID, Title: c.Title, Severity: c.Severity, Explanation: c.Explanation, Assets: assets,
+		})
+	}
+	return out
 }
 
 func (s *Server) reportJSON(w http.ResponseWriter, r *http.Request) {
