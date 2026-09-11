@@ -22,24 +22,26 @@ import (
 	"reconhub/internal/registry"
 	"reconhub/internal/report"
 	"reconhub/internal/scope"
+	"reconhub/internal/scopetemplate"
 	"reconhub/internal/store"
 	"reconhub/internal/wordlist"
 )
 
 // Server holds the dependencies every handler needs.
 type Server struct {
-	Store     store.Store
-	Reg       *registry.Registry
-	Pipelines *pipeline.Registry
-	Programs  *scope.Registry
-	Wordlists *wordlist.Registry
-	Watches   *monitor.Registry
-	Monitor   *monitor.Monitor
-	Engine    *engine.Engine
-	Token     auth.Token
-	WebDir    string
-	DocsFile  string
-	DataDir   string // root of ./data — projects/<program>/ lives under here
+	Store          store.Store
+	Reg            *registry.Registry
+	Pipelines      *pipeline.Registry
+	Programs       *scope.Registry
+	ScopeTemplates *scopetemplate.Registry
+	Wordlists      *wordlist.Registry
+	Watches        *monitor.Registry
+	Monitor        *monitor.Monitor
+	Engine         *engine.Engine
+	Token          auth.Token
+	WebDir         string
+	DocsFile       string
+	DataDir        string // root of ./data — projects/<program>/ lives under here
 }
 
 // resolveProgram looks up a program by name. An empty name is fine (nil, nil).
@@ -137,6 +139,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/programs/{name}", s.auth(s.updateProgram))
 	mux.HandleFunc("DELETE /api/programs/{name}", s.auth(s.deleteProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
+
+	mux.HandleFunc("GET /api/scope-templates", s.auth(s.listScopeTemplates))
+	mux.HandleFunc("POST /api/scope-templates", s.auth(s.createScopeTemplate))
+	mux.HandleFunc("GET /api/scope-templates/{name}", s.auth(s.getScopeTemplate))
+	mux.HandleFunc("PUT /api/scope-templates/{name}", s.auth(s.updateScopeTemplate))
+	mux.HandleFunc("DELETE /api/scope-templates/{name}", s.auth(s.deleteScopeTemplate))
 
 	// projeto: pasta física em data/projects/<name>/ — notas + snapshot sincronizado
 	mux.HandleFunc("GET /api/programs/{name}/summary", s.auth(s.projectSummary))
@@ -736,15 +744,42 @@ func (s *Server) runWatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "watch": r.PathValue("name")})
 }
 
+// createProgramReq embeds scope.Program so every normal program field
+// decodes as usual, plus an optional Template name: when set, the
+// template's out_of_scope patterns are merged in (deduped by Save's own
+// normalize) and its platform fills in only if the request left Platform
+// empty. in_scope is NEVER touched by a template — that's always specific
+// to the program being onboarded.
+type createProgramReq struct {
+	scope.Program
+	Template string `json:"template,omitempty"`
+}
+
 func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 	if s.Programs == nil {
 		writeErr(w, http.StatusServiceUnavailable, "registro de programas indisponível")
 		return
 	}
-	var p scope.Program
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	var req createProgramReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
 		return
+	}
+	p := req.Program
+	if tplName := strings.TrimSpace(req.Template); tplName != "" {
+		if s.ScopeTemplates == nil {
+			writeErr(w, http.StatusBadRequest, "nenhum registro de templates de escopo configurado")
+			return
+		}
+		tpl, ok := s.ScopeTemplates.Get(tplName)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "template de escopo desconhecido: "+tplName)
+			return
+		}
+		p.OutOfScope = append(p.OutOfScope, tpl.OutOfScope...)
+		if strings.TrimSpace(p.Platform) == "" {
+			p.Platform = tpl.Platform
+		}
 	}
 	if err := s.Programs.Save(p); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -753,6 +788,76 @@ func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 	saved, _ := s.Programs.Get(strings.ToLower(strings.TrimSpace(p.Name)))
 	_ = project.Init(s.DataDir, saved.Name) // pasta do projeto — best-effort, um sync futuro a recria de qualquer jeito
 	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (s *Server) listScopeTemplates(w http.ResponseWriter, r *http.Request) {
+	var list []scopetemplate.Template
+	if s.ScopeTemplates != nil {
+		list = s.ScopeTemplates.List()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"templates": list})
+}
+
+func (s *Server) getScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusNotFound, "template não encontrado")
+		return
+	}
+	t, ok := s.ScopeTemplates.Get(r.PathValue("name"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "template não encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (s *Server) createScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de templates de escopo indisponível")
+		return
+	}
+	var t scopetemplate.Template
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := s.ScopeTemplates.Save(t); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, _ := s.ScopeTemplates.Get(strings.ToLower(strings.TrimSpace(t.Name)))
+	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (s *Server) updateScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de templates de escopo indisponível")
+		return
+	}
+	name := r.PathValue("name")
+	var t scopetemplate.Template
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := s.ScopeTemplates.Update(name, t); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, _ := s.ScopeTemplates.Get(strings.ToLower(strings.TrimSpace(name)))
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) deleteScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de templates de escopo indisponível")
+		return
+	}
+	if err := s.ScopeTemplates.Delete(r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // updateProgram edits an existing program's scope (in_scope/out_of_scope,

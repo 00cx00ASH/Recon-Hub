@@ -17,6 +17,7 @@ import (
 	"reconhub/internal/project"
 	"reconhub/internal/registry"
 	"reconhub/internal/scope"
+	"reconhub/internal/scopetemplate"
 	"reconhub/internal/store"
 )
 
@@ -41,9 +42,13 @@ func newTestServer(t *testing.T, tok auth.Token) http.Handler {
 		t.Fatalf("scope: %v", err)
 	}
 	pipes, _ := pipeline.Load(t.TempDir())
+	tpls, err := scopetemplate.Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("scopetemplate: %v", err)
+	}
 
 	eng := engine.New(st, reg, bus.New(), 2)
-	return (&Server{Store: st, Reg: reg, Engine: eng, Pipelines: pipes, Programs: progs, Token: tok}).Handler()
+	return (&Server{Store: st, Reg: reg, Engine: eng, Pipelines: pipes, Programs: progs, ScopeTemplates: tpls, Token: tok, DataDir: t.TempDir()}).Handler()
 }
 
 func do(h http.Handler, method, url string, hdr map[string]string) *httptest.ResponseRecorder {
@@ -313,6 +318,68 @@ func TestUpdateAndDeleteProgram(t *testing.T) {
 	// delete de novo -> 404
 	if w := do(h, "DELETE", "/api/programs/acme", nil); w.Code != http.StatusNotFound {
 		t.Fatalf("2º delete: got %d, want 404", w.Code)
+	}
+}
+
+func TestScopeTemplateCRUDAndApply(t *testing.T) {
+	h := newTestServer(t, auth.Token{Source: "disabled"}) // "acme" já existe via newTestServer
+
+	// cria template
+	w := doBody(h, "POST", "/api/scope-templates", `{"name":"saas-noise","description":"ruído comum","platform":"hackerone","out_of_scope":["status.example.com","status.example.com","*.internal.example.com"]}`, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create template: got %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"*.internal.example.com"`) || strings.Count(w.Body.String(), "status.example.com") != 1 {
+		t.Fatalf("dedupe não aconteceu: %s", w.Body.String())
+	}
+
+	// lista
+	w = do(h, "GET", "/api/scope-templates", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "saas-noise") {
+		t.Fatalf("list: got %d %s", w.Code, w.Body.String())
+	}
+
+	// get
+	w = do(h, "GET", "/api/scope-templates/saas-noise", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get: got %d %s", w.Code, w.Body.String())
+	}
+	// get inexistente
+	if w := do(h, "GET", "/api/scope-templates/ghost", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("get inexistente: got %d, want 404", w.Code)
+	}
+
+	// update (PUT substitui por completo, igual a programas — reenvia platform)
+	w = doBody(h, "PUT", "/api/scope-templates/saas-noise", `{"platform":"hackerone","out_of_scope":["status.example.com","new-exclusion.example.com"]}`, nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "new-exclusion.example.com") {
+		t.Fatalf("update: got %d %s", w.Code, w.Body.String())
+	}
+
+	// aplica o template na criação de um programa novo
+	w = doBody(h, "POST", "/api/programs", `{"name":"beta","in_scope":["*.beta.com"],"template":"saas-noise"}`, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create program com template: got %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{`"status.example.com"`, `"new-exclusion.example.com"`, `"hackerone"`, `"*.beta.com"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("programa criado sem %q do template: %s", want, body)
+		}
+	}
+
+	// template desconhecido -> 400
+	w = doBody(h, "POST", "/api/programs", `{"name":"gamma","in_scope":["*.gamma.com"],"template":"nope"}`, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("template desconhecido: got %d, want 400", w.Code)
+	}
+
+	// delete
+	w = do(h, "DELETE", "/api/scope-templates/saas-noise", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete: got %d %s", w.Code, w.Body.String())
+	}
+	if w := do(h, "GET", "/api/scope-templates/saas-noise", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("template deveria ter sumido: got %d", w.Code)
 	}
 }
 

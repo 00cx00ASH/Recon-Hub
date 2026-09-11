@@ -61,6 +61,18 @@ func fakeHub(t *testing.T) (*hubClient, *httptest.Server) {
 		}
 		w.Write([]byte(`{"new_findings":[],"resolved_findings":[],"persisted_findings_count":0,"new_assets":[]}`))
 	})
+	mux.HandleFunc("GET /api/scope-templates", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"templates":[{"name":"saas-noise","out_of_scope":["status.acme.com"]}]}`))
+	})
+	mux.HandleFunc("POST /api/scope-templates", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["name"] != "saas-noise" {
+			t.Errorf("create_scope_template: corpo inesperado: %v", body)
+		}
+		w.WriteHeader(201)
+		w.Write([]byte(`{"name":"saas-noise","out_of_scope":["status.acme.com"]}`))
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &hubClient{base: srv.URL, http: &http.Client{Timeout: 5 * time.Second}}, srv
@@ -93,8 +105,8 @@ func TestInitializeAndList(t *testing.T) {
 
 	resp, _ = handle(&rpcRequest{ID: json.RawMessage(`2`), Method: "tools/list"}, reg)
 	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
-	if len(tools) != 17 {
-		t.Fatalf("esperava 17 tools MCP, veio %d", len(tools))
+	if len(tools) != 19 {
+		t.Fatalf("esperava 19 tools MCP, veio %d", len(tools))
 	}
 	if tools[0]["name"] != "hub_list_tools" {
 		t.Fatalf("ordem inesperada: %v", tools[0]["name"])
@@ -217,6 +229,31 @@ func TestComparePipelineRuns(t *testing.T) {
 	out = callTool(t, reg, "hub_compare_pipeline_runs", map[string]any{"a": "runA"}) // falta b
 	if out["isError"] != true {
 		t.Fatalf("faltando b deveria dar erro: %v", out)
+	}
+}
+
+func TestScopeTemplates(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_list_scope_templates", map[string]any{})
+	if out["isError"] == true {
+		t.Fatalf("list_scope_templates deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "saas-noise") {
+		t.Fatalf("list_scope_templates sem o template: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_create_scope_template", map[string]any{
+		"name": "saas-noise", "out_of_scope": []any{"status.acme.com"},
+	})
+	if out["isError"] == true {
+		t.Fatalf("create_scope_template deu erro: %v", out)
+	}
+
+	out = callTool(t, reg, "hub_create_scope_template", map[string]any{"name": "no-oos"}) // falta out_of_scope
+	if out["isError"] != true {
+		t.Fatalf("out_of_scope vazio deveria dar erro: %v", out)
 	}
 }
 

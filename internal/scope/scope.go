@@ -238,6 +238,11 @@ func (r *Registry) Delete(name string) error {
 	return r.Reload()
 }
 
+// CleanList normalizes a list of scope patterns: lowercase, trim, strip
+// scheme/path/port, dedup, drop empties. Exported so internal/scopetemplate
+// can normalize out_of_scope lists the same way a Program does.
+func CleanList(in []string) []string { return cleanList(in) }
+
 func cleanList(in []string) []string {
 	seen := map[string]bool{}
 	var out []string

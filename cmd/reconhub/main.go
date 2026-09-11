@@ -30,6 +30,7 @@ import (
 	"reconhub/internal/project"
 	"reconhub/internal/registry"
 	"reconhub/internal/scope"
+	"reconhub/internal/scopetemplate"
 	"reconhub/internal/store"
 	"reconhub/internal/wordlist"
 )
@@ -139,6 +140,12 @@ func main() {
 		}
 	}
 
+	scopeTemplates, err := scopetemplate.Load(cfg.ScopeTemplatesDir)
+	if err != nil {
+		log.Fatalf("scope-templates: %v", err)
+	}
+	log.Printf("scope-templates: %d de %s", len(scopeTemplates.List()), cfg.ScopeTemplatesDir)
+
 	wls, _ := wordlist.Load(cfg.WordlistsDir, cfg.SeclistsDir)
 	log.Printf("wordlists: %d indexadas (%s%s)", len(wls.List()), cfg.WordlistsDir,
 		map[bool]string{true: " + SecLists", false: ""}[cfg.SeclistsDir != ""])
@@ -186,18 +193,19 @@ func main() {
 	log.Printf("monitor: %d watch(es) de %s", len(watches.List()), cfg.WatchesDir)
 
 	srv := &api.Server{
-		Store:     st,
-		Reg:       reg,
-		Pipelines: pipes,
-		Programs:  programs,
-		Wordlists: wls,
-		Watches:   watches,
-		Monitor:   mon,
-		Engine:    eng,
-		Token:     token,
-		WebDir:    cfg.WebDir,
-		DocsFile:  cfg.DocsFile,
-		DataDir:   cfg.DataDir,
+		Store:          st,
+		Reg:            reg,
+		Pipelines:      pipes,
+		Programs:       programs,
+		ScopeTemplates: scopeTemplates,
+		Wordlists:      wls,
+		Watches:        watches,
+		Monitor:        mon,
+		Engine:         eng,
+		Token:          token,
+		WebDir:         cfg.WebDir,
+		DocsFile:       cfg.DocsFile,
+		DataDir:        cfg.DataDir,
 	}
 
 	httpSrv := &http.Server{

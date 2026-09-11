@@ -254,6 +254,7 @@ func buildTools(h *hubClient) map[string]mcpTool {
 			"out_of_scope": strArray("padrões fora de escopo (tem precedência sobre in_scope)"),
 			"platform":     str("opcional: hackerone | intigriti | bugcrowd | …"),
 			"url":          str("opcional: URL da página do programa na plataforma"),
+			"template":     str("opcional: nome de um template salvo (ver hub_list_scope_templates) — mescla o out_of_scope dele e preenche platform se não informado. NUNCA mexe em in_scope."),
 		}, "name", "in_scope"),
 		func(a map[string]any) (json.RawMessage, error) {
 			name, err := mustStr(a, "name")
@@ -274,7 +275,44 @@ func buildTools(h *hubClient) map[string]mcpTool {
 			if u := argStr(a, "url"); u != "" {
 				body["url"] = u
 			}
+			if tpl := argStr(a, "template"); tpl != "" {
+				body["template"] = tpl
+			}
 			return h.call("POST", "/api/programs", body)
+		})
+
+	add("hub_list_scope_templates",
+		"Lista templates de escopo salvos (presets de out_of_scope + platform reaproveitáveis ao criar um programa — ver hub_create_program).",
+		obj(map[string]any{}),
+		func(a map[string]any) (json.RawMessage, error) {
+			return h.call("GET", "/api/scope-templates", nil)
+		})
+
+	add("hub_create_scope_template",
+		"Salva um template de escopo reaproveitável: um preset de out_of_scope (+ platform opcional) que hub_create_program pode aplicar depois, em vez de repetir as mesmas exclusões toda vez que um programa novo é criado. NUNCA guarda in_scope — isso é sempre específico do programa.",
+		obj(map[string]any{
+			"name":         str("nome do template (a-z, 0-9, . _ -, até 63 chars)"),
+			"out_of_scope": strArray("padrões fora de escopo — obrigatório, pelo menos 1 (é o motivo do template existir)"),
+			"platform":     str("opcional: preenchido em hub_create_program se o programa não informar platform"),
+			"description":  str("opcional: pra que serve esse template"),
+		}, "name", "out_of_scope"),
+		func(a map[string]any) (json.RawMessage, error) {
+			name, err := mustStr(a, "name")
+			if err != nil {
+				return nil, err
+			}
+			out := argStrSlice(a, "out_of_scope")
+			if len(out) == 0 {
+				return nil, fmt.Errorf("out_of_scope precisa de pelo menos 1 padrão")
+			}
+			body := map[string]any{"name": name, "out_of_scope": out}
+			if p := argStr(a, "platform"); p != "" {
+				body["platform"] = p
+			}
+			if d := argStr(a, "description"); d != "" {
+				body["description"] = d
+			}
+			return h.call("POST", "/api/scope-templates", body)
 		})
 
 	add("hub_draft_finding",
