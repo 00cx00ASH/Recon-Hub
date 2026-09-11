@@ -12,6 +12,13 @@ reconhub.db-wal
 /watches/*.json
 /.claude/scheduled_tasks.lock
 
+# agent-runner/ é um módulo Python isolado (Claude Agent SDK) — venv e
+# .env (que carrega ANTHROPIC_API_KEY/RECONHUB_TOKEN) nunca são versionados.
+/agent-runner/.venv/
+/agent-runner/.env
+/agent-runner/__pycache__/
+/agent-runner/logs/
+
 # cada tools/<nome>/ é um módulo Go próprio — `go build ./...` sem -o ali
 # gera um binário com o nome da pasta; nunca deve ser versionado.
 tools/example-echo/example-echo
