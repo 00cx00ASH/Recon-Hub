@@ -20,7 +20,8 @@
     { "name": "extensions", "type": "string", "required": false, "help": "extensões extra, ex: .php,.bak,.old,~" },
     { "name": "match_codes", "type": "string", "required": false, "default": "200,204,301,302,307,401,403", "help": "status HTTP que contam como hit" },
     { "name": "filter_size", "type": "int", "required": false, "help": "esconder respostas com exatamente esse tamanho (bytes)" },
-    { "name": "concurrency", "type": "int", "required": false, "default": 30, "help": "requisições simultâneas" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 10, "help": "requisições simultâneas — padrão já conservador pra não acionar WAF/rate-limit; suba com cautela" },
+    { "name": "delay_ms", "type": "int", "required": false, "default": 25, "help": "pausa entre requisições de cada worker — espaça o tráfego. 0 só se o programa expressamente permitir tráfego automatizado pesado" },
     { "name": "timeout_ms", "type": "int", "required": false, "default": 7000, "help": "timeout por requisição" }
   ]
 }

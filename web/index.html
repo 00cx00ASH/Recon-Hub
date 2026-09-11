@@ -479,6 +479,7 @@ docker compose exec reconhub cat /app/data/token</pre>
           <option value="blocked">bloqueados (401/403 — candidato a bypass)</option>
           <option value="serverErr">erro de servidor (5xx)</option>
         </select>
+        <label style="display:flex;align-items:center;gap:.3rem" title="alguns programas de bug bounty excluem achados vindos de fonte pública (GitHub/gist/Trello/Wayback) — marcados automaticamente por ferramentas tipo int-github-audit"><input type="checkbox" id="findHidePublic"> ocultar fonte pública</label>
         <a id="findExport" hidden style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ exportar projeto</a>
         <span id="findFilterChip" hidden title="clique pra limpar o filtro"></span>
         <span style="flex:1"></span>
@@ -638,6 +639,17 @@ function httpBucketOf(row){
   if ((hm.status === 401 || hm.status === 403) && !hm.confirmed) return 'blocked';
   if (hm.status >= 200 && hm.status < 400 && hm.confirmed) return 'exploitable';
   return 'other';
+}
+// título com marcador quando o achado veio de fonte pública (GitHub/gist/…)
+// — visível mesmo sem usar o filtro "ocultar fonte pública"
+function titleCell(f){
+  const td = el('td', { textContent: f.title || '' });
+  if (isPublicSource(f)) {
+    td.prepend(el('span', {
+      textContent: '🌐 ', title: 'achado de fonte pública — alguns programas de bug bounty não aceitam isso',
+    }));
+  }
+  return td;
 }
 // asset/valor como link clicável quando é uma URL de verdade
 function assetCell(value){
@@ -976,7 +988,7 @@ async function refreshJobFindings(id){
       tr.append(
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', { className:'mono', textContent: f.type || '—' }),
-        el('td', { textContent: f.title || '' }),
+        titleCell(f),
         assetCell(f.asset),
         el('td', {}, httpStatusBadge(f)),
       );
@@ -1453,10 +1465,13 @@ function hostOf(asset){
 let FINDINGS_ALL = [];
 let FINDINGS_FILTER = null; // { tool, type, host } | null
 
+function isPublicSource(row){ return !!(row && row.meta && row.meta.source === 'public'); }
+
 function matchesFindFilter(f){
   if (FINDINGS_FILTER && !(f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host)) return false;
   const bucket = $('#findHttpBucket').value;
   if (bucket && httpBucketOf(f) !== bucket) return false;
+  if ($('#findHidePublic').checked && isPublicSource(f)) return false;
   return true;
 }
 
@@ -1538,7 +1553,7 @@ function renderFindingsTable(){
         el('td', {}, el('span', { className: 'sev ' + f.severity, textContent: f.severity })),
         el('td', {}, prioCell),
         el('td', { className:'mono', textContent: f.type || '—' }),
-        el('td', { textContent: f.title || '' }),
+        titleCell(f),
         assetCell(f.asset),
         el('td', {}, httpStatusBadge(f)),
         el('td', { className:'mono', textContent: (f.count && f.count > 1) ? '×' + f.count : '' }),
@@ -1569,6 +1584,7 @@ async function loadFindings(){
 }
 $('#findProgram').addEventListener('change', () => { syncExport('#findProgram', '#findExport'); loadFindings(); });
 $('#findHttpBucket').addEventListener('change', renderFindingsTable);
+$('#findHidePublic').addEventListener('change', renderFindingsTable);
 
 /* ---------- docs tab ---------- */
 function renderMarkdown(src){
@@ -2020,6 +2036,24 @@ async function loadPanel(){
     return;
   }
   const sevColor = { critical:'var(--crit)', high:'var(--crit)', medium:'var(--warn)', low:'var(--info)', info:'var(--faint)' };
+
+  // categorias por status HTTP, cruzando os findings já carregados acima —
+  // sem chamada extra à API. Mesma classificação usada no filtro da aba
+  // Findings (httpBucketOf), então clicar aqui abre já filtrado lá.
+  const httpByProgram = {};
+  for (const f of findings || []) {
+    const b = httpBucketOf(f);
+    if (!b) continue;
+    const key = f.program || '';
+    const slot = (httpByProgram[key] ||= { exploitable: 0, blocked: 0, serverErr: 0 });
+    slot[b] = (slot[b] || 0) + 1;
+  }
+  const httpChipDefs = [
+    { bucket: 'exploitable', cls: 'ok', label: n => `✓ ${n} acessível` },
+    { bucket: 'blocked', cls: 'blocked', label: n => `🔒 ${n} bloqueado` },
+    { bucket: 'serverErr', cls: 'serverErr', label: n => `⚠ ${n} erro 5xx` },
+  ];
+
   const summaries = await Promise.all(programs.map(async p => {
     try { return [p.name, await api('/programs/' + encodeURIComponent(p.name) + '/summary')]; }
     catch { return [p.name, null]; }
@@ -2037,6 +2071,26 @@ async function loadPanel(){
       }
       card.append(bar);
       card.append(el('div', { className:'pcounts', textContent: `${sum.jobs ?? 0} job(s) · ${sum.findings ?? 0} finding(s) · ${sum.assets ?? 0} asset(s)` }));
+
+      const httpCounts = httpByProgram[name];
+      if (httpCounts) {
+        const chipRow = el('div', { className:'pcounts', style:'gap:.35rem' });
+        for (const def of httpChipDefs) {
+          const n = httpCounts[def.bucket] || 0;
+          if (!n) continue;
+          const chip = el('span', { className: 'httpstat ' + def.cls, textContent: def.label(n), style: 'cursor:pointer' });
+          chip.title = 'ver esses findings filtrados na aba Findings';
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            propagateProject(name, { reload: false });
+            $('#findHttpBucket').value = def.bucket;
+            selectTab('findings');
+          });
+          chipRow.append(chip);
+        }
+        if (chipRow.children.length) card.append(chipRow);
+      }
+
       card.append(el('div', { className:'pmeta', textContent: sum.last_activity ? 'última atividade ' + fmtTime(sum.last_activity) : 'sem atividade ainda' }));
     } else {
       card.append(el('div', { className:'pmeta', textContent:'erro ao carregar resumo' }));

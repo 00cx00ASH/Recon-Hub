@@ -47,6 +47,15 @@ var (
 func emit(e ev) {
 	if e.Type == "finding" {
 		finds++
+		// tudo que esta ferramenta reporta vem de dados públicos do GitHub
+		// (repos/gists/workflows públicos) — a maioria dos programas de bug
+		// bounty exclui explicitamente "credenciais/informações vazadas em
+		// fontes públicas (Trello, GitHub, Wayback...)". Marca pra a UI poder
+		// filtrar/excluir por programa em vez de você ter que triar na mão.
+		if e.Meta == nil {
+			e.Meta = map[string]any{}
+		}
+		e.Meta["source"] = "public"
 	}
 	if pretty {
 		switch e.Type {
