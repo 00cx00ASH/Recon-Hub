@@ -246,12 +246,14 @@ ainda falta rodar num programa.
   Cloudflare/DigitalOcean/Oracle/...) via PTR — é uma dica pra priorizar
   o que investigar (ex: AWS confirmado → `scan-ssrf` tem mais chance de
   achar metadata endpoint real), nunca prova de nada sozinho.
-- `recon-web-enum` — crawl raso, fingerprint de stack/WAF/CDN, ~46
+- `recon-web-enum` — crawl raso, fingerprint de stack/WAF/CDN, ~67
   caminhos administrativos com calibração de soft-404. Inclui
   `try_bypass` (opt-in): pra cada 401/403 já confirmado em caminho
-  admin/debug, tenta 5 bypasses clássicos (barra dupla, barra final,
-  X-Original-URL, X-Rewrite-URL, X-Forwarded-For) com controle
-  diferencial — é a sua ferramenta de "tenta contornar esse bloqueio".
+  admin/debug, tenta 9 bypasses clássicos (barra dupla, barra final,
+  ponto final, case alternada, X-Original-URL, X-Rewrite-URL,
+  X-Forwarded-For, X-Forwarded-Host, X-Custom-IP-Authorization) com
+  controle diferencial — é a sua ferramenta de "tenta contornar esse
+  bloqueio".
 - `scan-fuzz` — content discovery por wordlist quando o crawl não acha
   o suficiente. `recursive_depth` (opt-in, default 0) refuza sozinho
   dentro de todo diretório achado (hit sem extensão, 2xx/3xx) até a

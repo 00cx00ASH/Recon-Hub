@@ -6,7 +6,7 @@ caminhos administrativos/sensíveis. Sem dependências externas, sem Nuclei.
 ## O que preencher
 
 - **Alvo:** a **URL raiz** do site — `https://exemplo.com`.
-- **Sem wordlist** — a lista de ~46 caminhos é fixa e curada.
+- **Sem wordlist** — a lista de ~67 caminhos é fixa e curada.
 
 ## O que ele faz
 
