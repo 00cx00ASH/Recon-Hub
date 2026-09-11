@@ -115,6 +115,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `recon-crtsh`        | subdomínios via Certificate Transparency (crt.sh + certspotter, com merge) |
 | `recon-web-enum`     | crawl same-site raso, fingerprint de stack (Server/X-Powered-By/cookies) |
 | `recon-infra-enum`   | port scan TCP + banner + fingerprint. Aceita host/IP/CIDR, presets `top100`/… |
+| `recon-tech-cve`     | fingerprint passivo de stack × tabela curada de CVEs — sinaliza "versão velha", nunca confirma exploração |
 
 **scan — testar vulnerabilidade**
 
@@ -135,6 +136,11 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-postman-audit`      | auditoria profunda de uma collection que **você aponta** (segredo, PII c/ Luhn, auth hardcoded) |
 | `scan-idor`               | IDOR horizontal com DUAS sessões de teste — compara a resposta cruzada contra o baseline legítimo do dono, só status+tamanho (nunca guarda o corpo) |
 | `scan-bruteforce-check`   | confirma ausência de rate limiting/lockout num login/OTP — tentativas erradas travadas (teto 10), para no 1º sinal de proteção |
+| `scan-auth-flow`          | SSO/OAuth: descobre o `authorization_endpoint`, testa bypass de `redirect_uri` (confirma pelo destino real), inventaria metadata SAML |
+| `scan-xss`                | XSS refletido — marcador único em params clássicos, confirma só quando volta sem escapar (nunca dispara execução) |
+| `scan-sqli`               | SQL injection por vazamento de erro real de banco, ausente no baseline sem payload — nunca time-based/booleana |
+| `scan-ssrf`               | injeta URLs internas/metadata cloud em params buscados pelo servidor, só confirma pelo CONTEÚDO da resposta |
+| `scan-smuggling`          | request smuggling (CL.TE/TE.CL) por timing oracle — nunca encadeia 2ª requisição real pra confirmar |
 
 **js — JavaScript, cloud, segredos** (todas baixam página + `<script src>` + source maps)
 
