@@ -365,7 +365,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem">
           <input id="npName" placeholder="nome (ex: acme, ou 'Meu Programa Acme')" spellcheck="false" autocomplete="off">
           <span class="help" id="npSlugPreview" style="color:var(--faint)"></span>
-          <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io&#10;10.10.0.0/24 (CIDR, pra lab/rede interna)" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <textarea id="npOut" rows="2" placeholder="out of scope (opcional):&#10;blog.acme.com" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <button id="npSave" class="run" style="padding:.45rem">Criar projeto</button>
           <span class="help" id="npMsg"></span>
@@ -611,7 +611,7 @@ docker compose exec reconhub cat /app/data/token</pre>
           <p class="help" style="margin:0 0 .6rem">Alvos que as ferramentas podem testar sob esse projeto — um por linha. Editar aqui atualiza o que já existe, não cria outro projeto.</p>
           <div class="field">
             <label for="projIn">in scope</label>
-            <textarea id="projIn" rows="3" spellcheck="false" placeholder="*.acme.com&#10;acme.io" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+            <textarea id="projIn" rows="3" spellcheck="false" placeholder="*.acme.com&#10;acme.io&#10;10.10.0.0/24 (CIDR)" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           </div>
           <div class="field">
             <label for="projOut">out of scope</label>

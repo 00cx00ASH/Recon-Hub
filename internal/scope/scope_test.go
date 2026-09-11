@@ -28,6 +28,63 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestContainsCIDR(t *testing.T) {
+	p := Program{InScope: []string{"10.10.0.0/24", "192.168.1.1/32"}}
+	in := []string{"10.10.0.46", "10.10.0.1", "10.10.0.255",
+		"https://10.10.0.46:8080/manager/html", "192.168.1.1"}
+	out := []string{"10.10.1.1", "10.11.0.46", "192.168.1.2", "example.com", ""}
+
+	for _, h := range in {
+		if !p.Contains(h) {
+			t.Errorf("%q deveria estar in-scope (dentro do CIDR)", h)
+		}
+	}
+	for _, h := range out {
+		if p.Contains(h) {
+			t.Errorf("%q NÃO deveria estar in-scope (fora do CIDR)", h)
+		}
+	}
+}
+
+func TestContainsCIDRExcludedByOutOfScope(t *testing.T) {
+	p := Program{InScope: []string{"10.10.0.0/16"}, OutOfScope: []string{"10.10.5.0/24"}}
+	if !p.Contains("10.10.1.1") {
+		t.Error("10.10.1.1 deveria estar in-scope (dentro do /16, fora do /24 excluído)")
+	}
+	if p.Contains("10.10.5.42") {
+		t.Error("10.10.5.42 NÃO deveria estar in-scope (dentro do /24 excluído)")
+	}
+}
+
+// TestCIDRPrefixSurvivesCleanPattern é o teste de regressão pro bug real: a
+// mesma lógica que corta ":443"/"/api" de uma URL colada como escopo estava
+// cortando o "/24" de um CIDR também, transformando silenciosamente
+// "10.10.0.0/24" (uma sub-rede inteira) em "10.10.0.0" (um único IP) — o
+// programa "aceitava" a sub-rede na hora de salvar, mas nenhum IP real dela
+// nunca batia depois.
+func TestCIDRPrefixSurvivesCleanPattern(t *testing.T) {
+	got := cleanPattern("10.10.0.0/24")
+	if got != "10.10.0.0/24" {
+		t.Fatalf("cleanPattern(%q) = %q, o prefixo /24 não pode sumir", "10.10.0.0/24", got)
+	}
+}
+
+func TestCIDRWithHostBitsNormalizedToNetwork(t *testing.T) {
+	// 10.10.0.46/24 tem bits de host setados — cleanPattern normaliza pro
+	// endereço de rede (10.10.0.0/24), igual net.ParseCIDR já faz.
+	got := cleanPattern("10.10.0.46/24")
+	if got != "10.10.0.0/24" {
+		t.Fatalf("cleanPattern(%q) = %q, quer %q", "10.10.0.46/24", got, "10.10.0.0/24")
+	}
+}
+
+func TestMalformedCIDRMatchesNothing(t *testing.T) {
+	p := Program{InScope: []string{"10.10.0.0/99"}} // prefixo inválido pra IPv4
+	if p.Contains("10.10.0.46") {
+		t.Error("CIDR malformado deveria falhar fechado (não casar nada), não virar substring match")
+	}
+}
+
 func TestHost(t *testing.T) {
 	for in, want := range map[string]string{
 		"https://Sub.Example.com/x?y=1": "sub.example.com",

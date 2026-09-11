@@ -253,3 +253,28 @@ sobre caçar bugs em programas de terceiros.
   se estiver dentro da árvore do módulo (`internal/` não é importável de
   fora) — crie um pacote `cmd/` temporário pra isso e apague antes de
   commitar, nunca deixe esse tipo de scratch pacote no diff.
+- **Escopo de programa em notação CIDR (`10.10.0.0/24`) estava
+  documentado como suportado (comentário do campo `InScope` em
+  `internal/scope/scope.go` sempre citou `"10.0.0.0/8"` como exemplo
+  válido) mas nunca funcionou de verdade — quebrado em dois lugares ao
+  mesmo tempo.** `cleanPattern()` trata qualquer `/` como início de path
+  de URL pra cortar fora (pensado pra `https://acme.com/api` →
+  `acme.com`), então `10.10.0.0/24` virava silenciosamente `10.10.0.0`
+  ao salvar — o programa "aceitava" a sub-rede sem erro nenhum, só que o
+  que ficava gravado era um único IP. E mesmo se o prefixo sobrevivesse,
+  `matchPattern()` nunca teve lógica de CIDR — só match exato de string
+  ou sufixo de subdomínio, então nunca ia bater num IP individual dentro
+  do range de qualquer jeito. Resultado: todo alvo real da sub-rede
+  vinha "fora de escopo" (403), sem nenhuma mensagem apontando pro
+  motivo real (parecia bug de digitação do operador, não bug do hub).
+  Corrigido: `cleanPattern()` tenta `net.ParseCIDR()` ANTES da lógica de
+  cortar path/porta (preserva e normaliza o prefixo), e `matchPattern()`
+  ganhou um caso dedicado que usa `net.ParseCIDR`+`ipNet.Contains()` de
+  verdade quando o pattern (limpo) contém `/`. Teste de regressão:
+  `TestCIDRPrefixSurvivesCleanPattern`/`TestContainsCIDR` em
+  `internal/scope/scope_test.go`. Lição maior: **um comentário de doc no
+  código que promete um formato de input sem teste nenhum cobrindo esse
+  formato é exatamente onde esse tipo de bug sutil sobrevive anos sem
+  ninguém notar** — se o comentário cita um exemplo (`"10.0.0.0/8"`), tem
+  que existir um teste pra esse exemplo específico, não só pros formatos
+  óbvios (host puro, `*.host`).
