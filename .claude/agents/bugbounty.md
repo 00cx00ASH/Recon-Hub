@@ -418,6 +418,89 @@ gastar rodada, não depois:
   prioriza esse sobre um nome genérico mesmo que os dois deem
   "unclaimed" no scanner.
 
+### Sinks perigosos por stack (o que procurar quando `int-github-audit` ou
+`js-hunter` dão código de verdade pra ler, não só metadado)
+Reconhecer o sink certo é o que separa "achei uma função esquisita" de
+"sei exatamente que classe de vuln procurar a seguir":
+- **Node/Express**: `eval`/`new Function`, `child_process.exec`/`execSync`
+  com string concatenada (vs `execFile` com array de args, que é seguro),
+  `vm.runInContext` sobre entrada do usuário, `res.send()`/template
+  literal montando HTML na mão fora de um engine que escapa por padrão
+  (XSS refletido/armazenado), `path.join`/`path.resolve` com segmento de
+  path vindo direto do usuário sem `path.normalize`+checagem de prefixo
+  (path traversal).
+- **Python**: `eval`/`exec`, `subprocess.*(..., shell=True)` com string
+  formatada em vez de lista de args, `pickle.loads`/`yaml.load` (sem
+  `SafeLoader`) sobre dado não confiável (deserialização insegura),
+  `Jinja2 render_template_string`/`Template(request...)` com entrada do
+  usuário direto no template (SSTI — diferente de `render_template` com
+  contexto separado, que é seguro).
+- **Java/Spring**: `ObjectInputStream.readObject` sobre stream não
+  confiável, avaliação de SpEL (`SpelExpressionParser`) com entrada do
+  usuário, JDBC com `Statement`/concatenação de string em vez de
+  `PreparedStatement`, `@RequestMapping` sem `@PreAuthorize` correspondente
+  num controller que deveria exigir role específica.
+- **PHP**: `unserialize()` sobre entrada do usuário (objetos PHP
+  arbitrários), `include`/`require` com path parcialmente controlado pelo
+  usuário (LFI, e RFI se `allow_url_include` estiver ligado),
+  `eval`/`system`/`exec`/`shell_exec`/backticks com concatenação.
+- **Go**: `fmt.Sprintf` montando comando pra `exec.Command` (usar
+  `exec.Command(bin, args...)` com slice é o seguro), `text/template`
+  usado onde deveria ser `html/template` (perde o autoescape = XSS),
+  `filepath.Join` sem `filepath.Clean`+checagem de prefixo contra dir
+  base (traversal), `database/sql` com `fmt.Sprintf` montando query em
+  vez de placeholder (`$1`/`?`).
+
+Achou um desses sinks recebendo dado que vem de request HTTP (query,
+body, header, path) sem sanitização entre o ponto de entrada e o sink?
+Isso é candidato forte a testar manualmente ou com o scanner
+correspondente (`scan-sqli`/`scan-xss`/`scan-ssrf` conforme o sink) —
+muda de "acho que pode ter algo aqui" pra "sei o payload que devo tentar
+e por quê".
+
+### Playbook de encadeamento (achado isolado "meh" → alto impacto combinado)
+Um achado sozinho às vezes é descartável, mas dois achados do hub juntos
+mudam de categoria — sempre pergunte "o que isso alcança SE combinado com
+outro achado que já tenho nesse programa?":
+- Open redirect (`scan-open-redirect`) num parâmetro usado pelo fluxo
+  OAuth/SSO do programa (`scan-auth-flow`) → vira desvio de
+  `redirect_uri` pra account takeover, não fica "só" um redirect.
+- SSRF confirmado (`scan-ssrf`) + o alvo roda em nuvem com metadata
+  endpoint acessível → vira roubo de credencial de IAM/service account, o
+  candidato `aws-metadata-iam-creds`/`gcp-metadata` do próprio scanner já
+  aponta pra isso.
+- IDOR horizontal (`scan-idor`) num endpoint que devolve token/API
+  key/segredo do outro usuário (não só dado pessoal comum) → é takeover
+  de conta, não vazamento de dado — muda a severidade de medium pra
+  critical na hora de triar (`hub_triage_finding`), não é a mesma
+  categoria só porque a técnica é a mesma.
+- CORS mal configurado refletindo origem + credentials (`scan-cors`) num
+  endpoint autenticado que devolve dado sensível em GET → vira
+  exfiltração via site malicioso de terceiro, não é "só um header
+  errado" — o PoC de reprodução tem que mostrar isso explicitamente.
+- Subdomain takeover (`scan-subdomain-takeover`) num subdomínio citado no
+  CSP/allowlist de CORS do domínio principal → sequestra a confiança do
+  domínio principal inteiro (bypass de CSP, origem válida pra CORS), não
+  só o subdomínio órfão isolado.
+
+### Como o achado é lido do outro lado (savvy de plataforma de bug bounty)
+Isso muda COMO você escreve o relatório (`hub_draft_finding`), não o que
+você testa:
+- Triagers costumam fechar sem discussão: self-XSS (exige a vítima
+  colar/executar algo na própria console), e qualquer coisa que só
+  funciona com config claramente não-padrão do alvo. Sempre monte o PoC
+  reproduzível DO ZERO, sem assumir estado prévio que o triager não vai
+  ter.
+- Bugcrowd usa VRT (Vulnerability Rating Taxonomy) próprio — quando
+  souber a categoria VRT mais próxima do achado, cite no relatório; cola
+  menos e acelera a triagem.
+- Relatório que justifica CVSS/severidade por componente (quem controla
+  o disparo, que privilégio precisa, o que ganha que não deveria — ver
+  seção de severidade por eixo em "5. Triagem" acima) é triado mais
+  rápido em qualquer plataforma do que um rótulo solto tipo "é grave".
+  Reforça aqui porque é o tipo de coisa que vale a pena repetir no texto
+  final, não só na hora de decidir a severidade internamente.
+
 ## O que falta (gaps reais — diga isso quando perguntarem "cobre tudo?")
 
 O hub é forte em recon, exposição de segredo/storage, e um punhado de
