@@ -144,27 +144,43 @@ func detectOpenRedirectOAuth(byHost map[string][]*store.Finding) []ChainCandidat
 
 // detectSSRFCloudMetadata: an ssrf-confirmed finding whose injected target is
 // literally a cloud metadata endpoint (meta.target from scan-ssrf's own
-// target list — aws-metadata*, gcp-metadata, azure-metadata) is worth
-// escalating past its own reported severity: reading the metadata endpoint
-// is one hop away from stealing the instance/service-account's IAM
-// credentials, not just an SSRF PoC.
+// target list — aws-metadata*, gcp-metadata, azure-metadata, alibaba-metadata,
+// oci-metadata) is worth escalating past its own reported severity: reading
+// the metadata endpoint is one hop away from stealing the instance/
+// service-account's IAM credentials, not just an SSRF PoC. k8s-api-server is
+// a related but distinct case — same "SSRF reached infra control plane"
+// shape, different payoff (cluster access, not cloud IAM creds), so it gets
+// its own chain id/explanation rather than being folded into the same one.
 func detectSSRFCloudMetadata(fs []*store.Finding) []ChainCandidate {
 	var out []ChainCandidate
 	for _, f := range byType(fs, "ssrf-confirmed") {
 		label := strings.ToLower(metaStr(f, "target"))
-		if !strings.Contains(label, "metadata") {
-			continue
+		switch {
+		case strings.Contains(label, "metadata"):
+			out = append(out, ChainCandidate{
+				ID:       "ssrf-cloud-metadata",
+				Title:    "SSRF confirmado no endpoint de metadata cloud — " + chainHost(f),
+				Severity: "critical",
+				Explanation: "O SSRF confirmado apontou pro endpoint de metadata do provedor cloud (169.254.169.254 " +
+					"na maioria dos provedores, 100.100.100.200 na Alibaba Cloud), não só um recurso interno " +
+					"qualquer. Confirme se dá pra ler credencial de IAM/service account a partir daqui (ex: " +
+					"/latest/meta-data/iam/security-credentials/ na AWS) — isso é roubo de credencial cloud, não " +
+					"só leitura de recurso interno.",
+				FindingIDs: ids(f),
+			})
+		case strings.Contains(label, "k8s-api-server"):
+			out = append(out, ChainCandidate{
+				ID:       "ssrf-k8s-control-plane",
+				Title:    "SSRF confirmado no API server do Kubernetes — " + chainHost(f),
+				Severity: "critical",
+				Explanation: "O SSRF confirmado alcançou o control plane do cluster Kubernetes (kubernetes.default.svc), " +
+					"provando que o servidor alvo roda DENTRO de um pod. Mesmo sem token, o API server costuma " +
+					"revelar a versão do cluster e, dependendo do RBAC configurado pro service account do pod, " +
+					"o SSRF pode virar leitura de secrets/configmaps do namespace — confirme o que o token padrão " +
+					"do pod (se acessível via outro caminho, ex: file:///var/run/secrets/...) autoriza.",
+				FindingIDs: ids(f),
+			})
 		}
-		out = append(out, ChainCandidate{
-			ID:       "ssrf-cloud-metadata",
-			Title:    "SSRF confirmado no endpoint de metadata cloud — " + chainHost(f),
-			Severity: "critical",
-			Explanation: "O SSRF confirmado apontou pro endpoint de metadata do provedor cloud (169.254.169.254), " +
-				"não só um recurso interno qualquer. Confirme se dá pra ler credencial de IAM/service account a " +
-				"partir daqui (ex: /latest/meta-data/iam/security-credentials/ na AWS) — isso é roubo de credencial " +
-				"cloud, não só leitura de recurso interno.",
-			FindingIDs: ids(f),
-		})
 	}
 	return out
 }

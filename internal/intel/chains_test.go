@@ -48,6 +48,31 @@ func TestDetectChainsSSRFCloudMetadata(t *testing.T) {
 	}
 }
 
+func TestDetectChainsSSRFAlibabaMetadata(t *testing.T) {
+	fs := []*store.Finding{
+		{ID: "1", Program: "acme", Tool: "scan-ssrf", Type: "ssrf-confirmed", Asset: "https://api.acme.com/fetch?url=x",
+			Meta: []byte(`{"target":"alibaba-metadata"}`)},
+	}
+	chains := DetectChains(fs)
+	if !hasChain(chains, "ssrf-cloud-metadata") {
+		t.Fatalf("esperava chain ssrf-cloud-metadata pro alvo da Alibaba, veio %+v", chains)
+	}
+}
+
+func TestDetectChainsSSRFKubernetesControlPlane(t *testing.T) {
+	fs := []*store.Finding{
+		{ID: "1", Program: "acme", Tool: "scan-ssrf", Type: "ssrf-confirmed", Asset: "https://api.acme.com/fetch?url=x",
+			Meta: []byte(`{"target":"k8s-api-server"}`)},
+	}
+	chains := DetectChains(fs)
+	if !hasChain(chains, "ssrf-k8s-control-plane") {
+		t.Fatalf("esperava chain ssrf-k8s-control-plane, veio %+v", chains)
+	}
+	if hasChain(chains, "ssrf-cloud-metadata") {
+		t.Fatal("k8s-api-server não deveria disparar a chain de metadata cloud — categorias diferentes")
+	}
+}
+
 func TestDetectChainsSSRFNonMetadataNoChain(t *testing.T) {
 	fs := []*store.Finding{
 		{ID: "1", Program: "acme", Tool: "scan-ssrf", Type: "ssrf-confirmed", Asset: "https://api.acme.com/fetch?url=x",

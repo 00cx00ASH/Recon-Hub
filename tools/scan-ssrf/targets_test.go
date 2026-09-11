@@ -48,12 +48,83 @@ func TestEtcPasswdConfirm(t *testing.T) {
 }
 
 func TestLocalhostTargetsHaveNoConfirm(t *testing.T) {
+	loopbackLabels := map[string]bool{
+		"localhost": true, "localhost-name": true, "ipv6-loopback": true,
+		"localhost-decimal": true, "localhost-hex": true,
+	}
 	for _, tg := range ssrfTargets() {
-		if tg.Label == "localhost" || tg.Label == "localhost-name" || tg.Label == "ipv6-loopback" {
-			if tg.confirm != nil {
-				t.Fatalf("%s não deveria ter assinatura de conteúdo — vira candidato, não finding confirmado sozinho", tg.Label)
+		if loopbackLabels[tg.Label] && tg.confirm != nil {
+			t.Fatalf("%s não deveria ter assinatura de conteúdo — vira candidato, não finding confirmado sozinho", tg.Label)
+		}
+	}
+}
+
+func TestNewCloudMetadataTargetsHaveConfirm(t *testing.T) {
+	want := map[string]bool{"alibaba-metadata": true, "oci-metadata": true, "k8s-api-server": true}
+	found := map[string]bool{}
+	for _, tg := range ssrfTargets() {
+		if want[tg.Label] {
+			found[tg.Label] = true
+			if tg.confirm == nil {
+				t.Errorf("%s deveria ter confirm() — tem assinatura de conteúdo conhecida", tg.Label)
+			}
+			if tg.Sev != "critical" {
+				t.Errorf("%s deveria ser critical (metadata/API de cluster), veio %s", tg.Label, tg.Sev)
 			}
 		}
+	}
+	for label := range want {
+		if !found[label] {
+			t.Errorf("faltou o alvo %q", label)
+		}
+	}
+}
+
+func TestAlibabaMetadataConfirm(t *testing.T) {
+	var tg ssrfTarget
+	for _, t2 := range ssrfTargets() {
+		if t2.Label == "alibaba-metadata" {
+			tg = t2
+		}
+	}
+	body := "dsn-id\nhostname\nimage-id\ninstance-id\nowner-account-id\nregion-id\nserial-number\n"
+	if !tg.confirm(body) {
+		t.Fatal("deveria confirmar com o corpo típico do metadata da Alibaba Cloud")
+	}
+	if tg.confirm("<html><body>404 not found</body></html>") {
+		t.Fatal("não deveria confirmar numa página comum")
+	}
+}
+
+func TestOCIMetadataConfirm(t *testing.T) {
+	var tg ssrfTarget
+	for _, t2 := range ssrfTargets() {
+		if t2.Label == "oci-metadata" {
+			tg = t2
+		}
+	}
+	body := `{"availabilityDomain":"AD-1","compartmentId":"ocid1.compartment.oc1..x","displayName":"instance1"}`
+	if !tg.confirm(body) {
+		t.Fatal("deveria confirmar com o corpo típico do metadata da OCI")
+	}
+	if tg.confirm("<html><body>404 not found</body></html>") {
+		t.Fatal("não deveria confirmar numa página comum")
+	}
+}
+
+func TestK8sAPIServerConfirm(t *testing.T) {
+	var tg ssrfTarget
+	for _, t2 := range ssrfTargets() {
+		if t2.Label == "k8s-api-server" {
+			tg = t2
+		}
+	}
+	body := `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"forbidden: User \"system:anonymous\" cannot get path \"/version\""}`
+	if !tg.confirm(body) {
+		t.Fatal("deveria confirmar com o JSON de erro típico do API server sem token")
+	}
+	if tg.confirm("<html><body>404 not found</body></html>") {
+		t.Fatal("não deveria confirmar numa página comum")
 	}
 }
 
