@@ -251,3 +251,16 @@ func TestBlockRotatorRespectsCooldown(t *testing.T) {
 		t.Fatalf("cooldown longo deveria limitar a 1 rotação, veio %d", got)
 	}
 }
+
+func TestBlockRotatorNeverRotatesWithoutTor(t *testing.T) {
+	// controlAddr vazio: mesmo levando muitos bloqueios, não tenta rotacionar
+	// (nada de torNewCircuit("") / "missing address"). onRotate não é chamado.
+	var msgs []string
+	b := &blockRotator{threshold: 3, controlAddr: "", onRotate: func(m string) { msgs = append(msgs, m) }}
+	for i := 0; i < 10; i++ {
+		b.observe(403)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("sem Tor não deveria tentar rotação nenhuma; veio %v", msgs)
+	}
+}

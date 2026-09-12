@@ -319,7 +319,10 @@ func (b *blockRotator) observe(status int) {
 	} else {
 		b.streak = 0
 	}
-	rotate := blocked && b.streak >= b.threshold && time.Since(b.lastRotate) > b.cooldown
+	// controlAddr vazio = sem Tor: respeitamos o rate limit (backoff no
+	// RoundTrip) mas não há circuito pra rotacionar — não tente, senão
+	// torNewCircuit("") loga "missing address" à toa a cada streak.
+	rotate := b.controlAddr != "" && blocked && b.streak >= b.threshold && time.Since(b.lastRotate) > b.cooldown
 	if rotate {
 		b.streak = 0
 		b.lastRotate = time.Now()
