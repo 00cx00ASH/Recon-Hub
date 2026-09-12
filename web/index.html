@@ -130,12 +130,13 @@
   .sev.low,.sev.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
   .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
 
-  .httpstat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:.12rem .45rem;border-radius:var(--radius-sm);border:1px solid var(--border-strong);color:var(--faint);white-space:nowrap}
-  .httpstat.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
-  .httpstat.redirect{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
-  .httpstat.blocked{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent);opacity:.75}
-  .httpstat.clientErr{color:var(--faint)}
-  .httpstat.serverErr{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .httpstat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:.2rem .5rem;border-radius:var(--radius-sm);border:1px solid transparent;color:var(--text);white-space:nowrap;background:var(--surface-2);transition:background .15s,box-shadow .15s;cursor:pointer}
+  .httpstat:hover{box-shadow:0 2px 6px rgba(0,0,0,.2)}
+  .httpstat.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent);background:color-mix(in srgb,var(--ok) 12%,var(--surface-2))}
+  .httpstat.redirect{color:var(--info);border-color:color-mix(in srgb,var(--info) 35%,transparent);background:color-mix(in srgb,var(--info) 12%,var(--surface-2))}
+  .httpstat.blocked{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent);background:color-mix(in srgb,var(--warn) 12%,var(--surface-2))}
+  .httpstat.clientErr{color:var(--faint);background:var(--surface-2)}
+  .httpstat.serverErr{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 35%,transparent);background:color-mix(in srgb,var(--crit) 12%,var(--surface-2))}
 
   .urow{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.4rem;cursor:pointer;background:var(--surface);transition:border-color .15s,box-shadow .15s}
   .urow:hover{border-color:var(--border-strong);box-shadow:var(--shadow-card)}
@@ -147,7 +148,13 @@
   .proggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
   .progcard{border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1rem;background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:.5rem;transition:border-color .15s,box-shadow .15s,transform .15s}
   .progcard:hover{border-color:var(--border-strong);box-shadow:var(--shadow-hover);transform:translateY(-2px)}
-  .progcard .pname{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13.5px}
+  .progcard .pname{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:.5rem;justify-content:space-between}
+  .progcard .pbadges{display:flex;gap:.25rem;flex-wrap:wrap;align-items:center}
+  .progcard .pbadge{font-family:"IBM Plex Mono",monospace;font-size:9px;font-weight:600;padding:.15rem .35rem;border-radius:3px;text-transform:uppercase;letter-spacing:.04em}
+  .progcard .pbadge.critical{background:color-mix(in srgb,var(--crit) 25%,var(--surface));color:var(--crit)}
+  .progcard .pbadge.high{background:color-mix(in srgb,var(--crit) 20%,var(--surface));color:var(--crit)}
+  .progcard .pbadge.medium{background:color-mix(in srgb,var(--warn) 20%,var(--surface));color:var(--warn)}
+  .progcard .pbadge.low{background:color-mix(in srgb,var(--info) 20%,var(--surface));color:var(--info)}
   .progcard .pbar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface-2)}
   .progcard .pbar i{display:block;height:100%}
   .progcard .pcounts{display:flex;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint)}
@@ -252,21 +259,32 @@
 
   /* ---------- toasts + modal de confirmação (substituem alert()/confirm() nativos) ---------- */
   #toasts{position:fixed;bottom:1.1rem;right:1.1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem;max-width:min(380px,calc(100vw - 2.2rem))}
-  .toast{background:var(--surface);border:1px solid var(--border-strong);border-left:3px solid var(--info);border-radius:6px;padding:.65rem .8rem;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;gap:.5rem;align-items:flex-start;animation:toastin .18s ease-out}
+  .toast{background:var(--surface);border:1px solid var(--border-strong);border-left:3px solid var(--info);border-radius:6px;padding:.65rem .8rem;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:.4rem;animation:toastin .18s ease-out;position:relative;overflow:hidden}
+  .toast::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--info);animation:toastbar 6s linear forwards}
   .toast.error{border-left-color:var(--crit)}
+  .toast.error::before{background:var(--crit)}
   .toast.ok{border-left-color:var(--ok)}
+  .toast.ok::before{background:var(--ok)}
+  .toast-content{display:flex;gap:.4rem;align-items:flex-start}
+  .toast .ticon{flex:none;font-size:14px;width:18px}
   .toast .tmsg{flex:1;word-break:break-word}
   .toast .tx{background:none;border:0;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:0}
+  .tx:hover{color:var(--text)}
   @keyframes toastin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes toastbar{from{width:100%}to{width:0}}
 
   /* ---------- barra de seleção — assets/findings escolhidos pra alimentar uma pipeline ---------- */
-  #selBar{position:fixed;left:1.1rem;bottom:1.1rem;z-index:190;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:.65rem .85rem;box-shadow:var(--shadow-hover);font-size:12px;max-width:min(680px,calc(100vw - 2.2rem))}
-  #selBar b{color:var(--accent)}
-  #selBar select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:.4rem .55rem}
-  #selBar button{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:var(--radius-sm);padding:.4rem .7rem;cursor:pointer}
-  #selRun{background:var(--accent);color:#1a1400;border:0;font-weight:600}
+  #selBar{position:fixed;left:1.1rem;bottom:1.1rem;z-index:190;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:2px solid var(--accent);border-radius:var(--radius);padding:.65rem .85rem;box-shadow:0 0 12px color-mix(in srgb,var(--accent) 30%,transparent),var(--shadow-hover);font-size:12px;max-width:min(680px,calc(100vw - 2.2rem));animation:selbar-pulse .3s ease-out}
+  @keyframes selbar-pulse{from{box-shadow:0 0 24px color-mix(in srgb,var(--accent) 50%,transparent),var(--shadow-hover)}to{box-shadow:0 0 12px color-mix(in srgb,var(--accent) 30%,transparent),var(--shadow-hover)}}
+  #selBar b{color:var(--accent);font-weight:700}
+  #selBar select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:.4rem .55rem;transition:border-color .15s}
+  #selBar select:focus{outline:none;border-color:var(--accent)}
+  #selBar button{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:var(--radius-sm);padding:.4rem .7rem;cursor:pointer;transition:transform .12s,box-shadow .12s,filter .12s}
+  #selRun{background:var(--accent);color:#1a1400;border:0;font-weight:600;box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 35%,transparent)}
+  #selRun:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
   #selRun:disabled{opacity:.5;cursor:not-allowed}
-  #selClear{background:none;border:1px solid var(--border-strong);color:var(--dim)}
+  #selClear{background:none;border:1px solid var(--border-strong);color:var(--dim);transition:color .15s,border-color .15s}
+  #selClear:hover{color:var(--text);border-color:var(--border-strong)}
   td input[type="checkbox"]{cursor:pointer}
 
   #confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:210;display:flex;align-items:center;justify-content:center;padding:1rem}
@@ -768,9 +786,15 @@ const PIPELINE_SELECTION = new Set();
 
 function updateSelBar(){
   const n = PIPELINE_SELECTION.size;
-  $('#selBar').hidden = n === 0;
+  const bar = $('#selBar');
+  bar.hidden = n === 0;
   $('#selCount').textContent = n + (n === 1 ? ' selecionado' : ' selecionados');
   $('#selRun').disabled = n === 0 || !$('#selPipeline').value;
+  // retrigger animation pra dar visual feedback
+  if (!bar.hidden) {
+    bar.style.animation = 'none';
+    setTimeout(() => { bar.style.animation = 'selbar-pulse .3s ease-out'; }, 10);
+  }
 }
 function toggleSelection(value, checked){
   if (!value) return;
@@ -811,6 +835,8 @@ $('#selClear').addEventListener('click', () => {
 });
 $('#selRun').addEventListener('click', async () => {
   const pipeline = $('#selPipeline').value, program = $('#selProgram').value;
+  const pipelineSelect = $('#selPipeline');
+  const pipelineLabel = pipelineSelect.options[pipelineSelect.selectedIndex]?.text || pipeline;
   const targets = [...PIPELINE_SELECTION];
   if (!pipeline || !targets.length) return;
   $('#selRun').disabled = true;
@@ -819,8 +845,9 @@ $('#selRun').addEventListener('click', async () => {
     try { lastID = (await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) })).id; ok++; }
     catch { fail++; }
   }
-  if (ok) toastOk(`${ok} pipeline(s) iniciada(s)` + (fail ? `, ${fail} falharam` : ''));
-  else toastError(`nenhuma pipeline iniciada — ${fail} falha(s)`);
+  const msg = `${ok}/${targets.length} ${pipelineLabel} em ${targets.length} alvo(s)` + (fail ? ` (${fail} erro)` : ' ✓');
+  if (ok) toastOk(msg);
+  else toastError(`falha ao iniciar pipelines — ${fail}/${targets.length}`);
   PIPELINE_SELECTION.clear();
   updateSelBar();
   renderFindingsTable();
@@ -832,11 +859,26 @@ $('#selRun').addEventListener('click', async () => {
 function toast(msg, type){
   const box = $('#toasts');
   const t = el('div', { className: 'toast' + (type ? ' ' + type : '') });
-  t.append(el('span', { className:'tmsg', textContent: msg }));
+  const content = el('div', { className: 'toast-content' });
+
+  const icon = el('span', { className: 'ticon' });
+  if (type === 'error') {
+    icon.textContent = '✕';
+  } else if (type === 'ok') {
+    icon.textContent = '✓';
+  } else {
+    icon.textContent = 'ℹ';
+  }
+
+  content.append(icon);
+  content.append(el('span', { className:'tmsg', textContent: msg }));
+
   const x = el('button', { className:'tx', textContent:'✕', title:'fechar' });
   const timer = setTimeout(() => t.remove(), 6000);
   x.addEventListener('click', () => { clearTimeout(timer); t.remove(); });
-  t.append(x);
+  content.append(x);
+
+  t.append(content);
   box.append(t);
   return t;
 }
@@ -2561,7 +2603,22 @@ async function loadPanel(){
   }));
   for (const [name, sum] of summaries) {
     const card = el('div', { className:'progcard' });
-    card.append(el('div', { className:'pname', textContent: name }));
+    const pnameBox = el('div', { className:'pname' });
+    pnameBox.append(el('span', { textContent: name }));
+
+    if (sum) {
+      const bySev = sum.findings_by_severity || {};
+      const badges = el('div', { className:'pbadges' });
+      for (const sev of ['critical', 'high', 'medium']) {
+        const n = bySev[sev] || 0;
+        if (n > 0) {
+          badges.append(el('span', { className: 'pbadge ' + sev, textContent: `${n} ${sev}` }));
+        }
+      }
+      if (badges.children.length) pnameBox.append(badges);
+    }
+
+    card.append(pnameBox);
     if (sum) {
       const bySev = sum.findings_by_severity || {};
       const total = Object.values(bySev).reduce((a, b) => a + b, 0) || 1;
