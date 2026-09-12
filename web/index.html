@@ -317,6 +317,15 @@
   .queueitem-status.error{background:color-mix(in srgb,var(--crit) 20%,var(--bg));color:var(--crit)}
   .queueitem-detail{font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace}
 
+  /* anel de foco só pra navegação por teclado (Tab) — não aparece no clique
+     de mouse (heurística :focus-visible). Muitos botões/abas/chips não tinham
+     NENHUM indicador de foco visível. A borda de foco dos inputs/selects
+     (outline:none + border-color accent) é mais específica e continua valendo,
+     então eles mantêm o indicador atual sem ganhar anel duplo. O outline
+     acompanha o border-radius do elemento automaticamente nos navegadores
+     atuais, então chips arredondados ganham um anel arredondado. */
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -325,7 +334,7 @@
   <span class="dot" id="health" title="status da API"></span>
   <span class="brand"><b>recon</b>-hub</span>
   <div class="searchbox">
-    <input id="globalSearch" type="text" placeholder="🔍 buscar em findings, assets e notas… (⌘K)" autocomplete="off" spellcheck="false">
+    <input id="globalSearch" type="text" placeholder="🔍 buscar em findings, assets e notas… (⌘K)" aria-label="Buscar em findings, assets e notas" autocomplete="off" spellcheck="false">
     <div class="searchdrop" id="searchDrop" hidden></div>
   </div>
   <span class="spacer"></span>
@@ -333,17 +342,17 @@
     <label for="activeProject">projeto ativo</label>
     <select id="activeProject"><option value="">— nenhum —</option></select>
   </div>
-  <input id="token" type="password" placeholder="cole o bearer token aqui" autocomplete="off" spellcheck="false">
+  <input id="token" type="password" placeholder="cole o bearer token aqui" aria-label="Bearer token de acesso" autocomplete="off" spellcheck="false">
 </header>
-<div id="authBanner" hidden>
+<div id="authBanner" role="alert" hidden>
   <b>Precisa do token.</b>
   <span>Abra a URL que o servidor imprime no log (<code>http://127.0.0.1:7878/#token=…</code>), ou copie <code>data/token</code> e cole no campo acima →</span>
-  <button class="x" id="authBannerX" title="fechar">✕</button>
+  <button class="x" id="authBannerX" title="fechar" aria-label="fechar aviso">✕</button>
 </div>
 
-<div id="toasts"></div>
+<div id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
 <div id="selBar" hidden title="assets/findings marcados aqui viram alvo de uma pipeline — inclusive uma diferente da que os descobriu">
-  <span><b id="selCount">0 selecionados</b></span>
+  <span aria-live="polite"><b id="selCount">0 selecionados</b></span>
   <select id="selPipeline"></select>
   <select id="selProgram"><option value="">— sem programa —</option></select>
   <button id="selRun" disabled>▶ rodar pipeline nos selecionados</button>
@@ -998,7 +1007,7 @@ function toast(msg, type){
   content.append(icon);
   content.append(el('span', { className:'tmsg', textContent: msg }));
 
-  const x = el('button', { className:'tx', textContent:'✕', title:'fechar' });
+  const x = el('button', { className:'tx', textContent:'✕', title:'fechar', ariaLabel:'fechar aviso' });
   const timer = setTimeout(() => t.remove(), 6000);
   x.addEventListener('click', () => { clearTimeout(timer); t.remove(); });
   content.append(x);
