@@ -281,6 +281,19 @@ sobre caçar bugs em programas de terceiros.
   vir vazio. Antes de registrar várias de uma vez, valide cada uma local
   (`gofmt -l . && go vet ./... && go build ./... && go test ./...`) pra não
   empurrar um CI vermelho por uma tool que o CI nunca tinha olhado.
+  **Pegadinha junto:** o `setup-go` do CI estava fixado em `1.22`, ABAIXO
+  da base do Docker (`golang:1.23-alpine`, `GOTOOLCHAIN=local`). Uma tool
+  que legitimamente precisa de 1.23 (`scan-xss-dom` depende de `chromedp`,
+  que exige 1.23; `scan-waf-fingerprint` também declarava 1.23) COMPILAVA no
+  `docker build` mas, ao ser registrada no matrix, o job por-tool quebrava
+  logo no `go vet` com `go.mod requires go >= 1.23 (running go 1.22;
+  GOTOOLCHAIN=local)`. Baixar o `go` do go.mod da tool NÃO resolve quando é
+  uma DEPENDÊNCIA que exige 1.23 (o toolchain 1.22 recusa a dependência de
+  qualquer jeito) — o certo é alinhar o `go-version` do `setup-go` (os dois
+  steps: job `go` e job `sqlite`) à base do Docker, nunca deixar o CI mais
+  velho que a imagem que produção usa. Regra: `go-version` do CI == base do
+  `Dockerfile`; a maior versão de `go` em qualquer `tools/*/go.mod` não pode
+  passar disso.
 - **O `FileStore` (backend padrão, JSON-lines) carrega tudo em memória no
   `store.Open()` e nunca relê o arquivo do disco depois — só o próprio
   processo que abriu o store vê o que ele mesmo escreve.** Popular dados
