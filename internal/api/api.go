@@ -226,6 +226,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/programs/{name}/auth", s.auth(s.getAuth))
 	mux.HandleFunc("PUT /api/programs/{name}/auth", s.auth(s.putAuth))
 
+	// Fase 7: Analytics
+	mux.HandleFunc("GET /api/programs/{name}/analytics", s.auth(s.getAnalytics))
+	// Fase 8: Search
+	mux.HandleFunc("GET /api/findings/search", s.auth(s.searchFindings))
+	// Fase 9: Auto Triage
+	mux.HandleFunc("GET /api/findings/{id}/triage-suggestion", s.auth(s.getTriageSuggestion))
+
 	mux.HandleFunc("GET /api/watches", s.auth(s.listWatches))
 	mux.HandleFunc("POST /api/watches", s.auth(s.createWatch))
 	mux.HandleFunc("GET /api/watches/{name}", s.auth(s.getWatch))
@@ -1581,4 +1588,100 @@ func (s *Server) pipelineRunEvents(w http.ResponseWriter, r *http.Request) {
 			send(ev)
 		}
 	}
+}
+
+// Fase 7: getAnalytics retorna métricas e tendências de um programa
+func (s *Server) getAnalytics(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	_, err := s.resolveProgram(name)
+	if err != nil {
+		http.Error(w, "program not found", 400)
+		return
+	}
+
+	// Carregar dados do programa
+	jobs, _ := s.Store.ListJobs(store.JobFilter{Program: name, Limit: 10000})
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: name, Limit: 1000000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: name, Limit: 100000})
+
+	// Retornar estrutura básica
+	result := map[string]interface{}{
+		"program": name,
+		"metrics": map[string]interface{}{
+			"total_findings":    len(findings),
+			"jobs_run":          len(jobs),
+			"assets_discovered": len(assets),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// Fase 8: searchFindings busca findings com query avançada
+func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	progName := r.URL.Query().Get("program")
+
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: progName, Limit: 1000000})
+
+	// Se houver query, filtrar
+	if q != "" {
+		filtered := []*store.Finding{}
+		q = strings.ToLower(q)
+		for _, f := range findings {
+			if strings.Contains(strings.ToLower(f.Evidence), q) ||
+				strings.Contains(strings.ToLower(f.Asset), q) ||
+				strings.Contains(strings.ToLower(f.Target), q) ||
+				strings.Contains(strings.ToLower(f.Type), q) {
+				filtered = append(filtered, f)
+			}
+		}
+		findings = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"findings": findings})
+}
+
+// Fase 9: getTriageSuggestion retorna sugestão de triage automático
+func (s *Server) getTriageSuggestion(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	finding, ok := s.Store.GetFinding(id)
+	if !ok {
+		http.Error(w, "finding not found", 404)
+		return
+	}
+
+	// Carregar todos os findings do programa pra fazer análise comparativa
+	allFindings, _ := s.Store.ListFindings(store.FindingFilter{Program: finding.Program, Limit: 1000000})
+
+	// Gerar sugestão
+	suggestion := map[string]interface{}{
+		"finding_id":  finding.ID,
+		"action":      "investigate",
+		"confidence":  50,
+		"reason":      "Análise de triage automático",
+	}
+
+	// Heurística simples: se já tem muitos do mesmo tipo, sugerir confirmar
+	sameTypeCount := 0
+	confirmedCount := 0
+	for _, f := range allFindings {
+		if f.Type == finding.Type {
+			sameTypeCount++
+			if f.Triage == "confirmed" {
+				confirmedCount++
+			}
+		}
+	}
+	if sameTypeCount >= 3 && confirmedCount >= 2 {
+		suggestion["action"] = "confirm"
+		suggestion["confidence"] = 80
+		suggestion["reason"] = "Este tipo de finding foi confirmado " + fmt.Sprintf("%d", confirmedCount) + " vezes antes"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(suggestion)
 }
