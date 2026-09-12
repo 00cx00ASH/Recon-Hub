@@ -183,6 +183,23 @@ func argStr(m map[string]any, k string) string {
 	return ""
 }
 
+// argStrSlice reads a JSON array-of-strings argument. MCP clients send it as
+// []any (each element decoded from JSON), so this tolerates non-string
+// elements by skipping them rather than erroring the whole call.
+func argStrSlice(m map[string]any, k string) []string {
+	raw, ok := m[k].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func mustStr(m map[string]any, k string) (string, error) {
 	s := argStr(m, k)
 	if s == "" {

@@ -86,6 +86,7 @@ func main() {
 		flagConc    = flag.Int("concurrency", 0, "conexões simultâneas (0 = param/300)")
 		flagTOms    = flag.Int("timeout-ms", 0, "timeout por conexão (0 = param/1500)")
 		flagBanner  = flag.Bool("no-banner", false, "não fazer banner grab")
+		flagNoCloud = flag.Bool("no-cloud-detect", false, "não tentar identificar o provedor cloud/CDN")
 		flagMaxCIDR = flag.Int("max-hosts", 0, "teto de hosts por CIDR (0 = param/1024)")
 		flagPretty  = flag.Bool("pretty", false, "saída legível")
 	)
@@ -98,6 +99,7 @@ func main() {
 	conc := pick(*flagConc, intParam(pl.Params, "concurrency"), 300)
 	maxCIDR := pick(*flagMaxCIDR, intParam(pl.Params, "max_hosts"), 1024)
 	doBanner := !*flagBanner && !boolParam(pl.Params, "no_banner")
+	doCloud := !*flagNoCloud && !boolParam(pl.Params, "no_cloud_detect")
 	ports := portSet(firstNonEmpty(*flagPorts, strParam(pl.Params, "ports"), os.Getenv("RECONHUB_PARAM_PORTS")))
 	if len(ports) == 0 {
 		emit(ev{Type: "error", Msg: "nenhuma porta válida no spec"})
@@ -135,6 +137,43 @@ func main() {
 	}
 	emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("%d host(s) × %d porta(s) = %d conexões (timeout %s)",
 		len(hosts), len(ports), len(hosts)*len(ports), timeout)})
+
+	// fingerprint de provedor cloud/CDN por host — UMA vez por host (não por
+	// porta), em paralelo mas com teto próprio (é resolução DNS/PTR, bem mais
+	// barata que o port scan, mas sem motivo pra usar toda a concorrência do
+	// scan de portas nisso).
+	cloudByHost := map[string]cloudInfo{}
+	if doCloud {
+		cloudConc := conc
+		if cloudConc > 50 {
+			cloudConc = 50
+		}
+		var wgc sync.WaitGroup
+		var muc sync.Mutex
+		chc := make(chan string, cloudConc)
+		for i := 0; i < cloudConc; i++ {
+			wgc.Add(1)
+			go func() {
+				defer wgc.Done()
+				for h := range chc {
+					info := detectCloud(h, timeout)
+					muc.Lock()
+					cloudByHost[h] = info
+					muc.Unlock()
+				}
+			}()
+		}
+		for _, h := range hosts {
+			chc <- h
+		}
+		close(chc)
+		wgc.Wait()
+		for _, h := range hosts {
+			if info := cloudByHost[h]; info.Provider != "" {
+				emit(ev{Type: "log", Level: "info", Msg: fmt.Sprintf("%s → %s%s", h, info.Provider, ptrNote(info.PTR))})
+			}
+		}
+	}
 
 	type job struct {
 		host string
@@ -183,6 +222,9 @@ func main() {
 				if banner != "" {
 					meta["banner"] = banner
 				}
+				if info := cloudByHost[j.host]; info.Provider != "" {
+					meta["cloud_provider"] = info.Provider
+				}
 				emit(ev{Type: "finding", Severity: "info", FindingType: "open-port",
 					Title:    fmt.Sprintf("%s: %s", j.host, portLabel(j.port, service, product)),
 					Asset:    "tcp://" + addr,
@@ -212,6 +254,13 @@ func main() {
 	wg.Wait()
 
 	emit(ev{Type: "done", OK: true, Msg: fmt.Sprintf("%d host(s), %d porta(s) aberta(s), %d finding(s)", len(hosts), openCount, finds)})
+}
+
+func ptrNote(ptr string) string {
+	if ptr == "" {
+		return ""
+	}
+	return " (PTR " + ptr + ")"
 }
 
 func bannerEvidence(b string) string {

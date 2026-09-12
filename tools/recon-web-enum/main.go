@@ -144,7 +144,7 @@ func main() {
 			}
 			return nil
 		},
-		Transport: transport,
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	if len(roots) > 1 {

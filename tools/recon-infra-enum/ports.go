@@ -31,8 +31,9 @@ var svc = map[int]string{
 	7474: "neo4j", 7687: "bolt", 8000: "http-alt", 8009: "ajp", 8020: "hdfs",
 	8080: "http-proxy", 8081: "http-alt", 8086: "influxdb", 8088: "yarn",
 	8161: "activemq", 8443: "https-alt", 8500: "consul", 8529: "arangodb",
-	8686: "jmx", 8888: "http-alt", 9000: "http-alt", 9042: "cassandra-cql",
-	9092: "kafka", 9160: "cassandra-thrift", 9200: "elasticsearch", 9300: "elasticsearch-tcp",
+	8686: "jmx", 8888: "http-alt", 8983: "solr", 9000: "http-alt", 9042: "cassandra-cql",
+	9090: "prometheus", 9092: "kafka", 9093: "alertmanager", 9160: "cassandra-thrift",
+	9200: "elasticsearch", 9300: "elasticsearch-tcp",
 	9418: "git", 9990: "wildfly-mgmt", 10000: "webmin", 10250: "kubelet",
 	11211: "memcached", 15672: "rabbitmq-mgmt", 16379: "redis-cluster",
 	27017: "mongodb", 27018: "mongodb-shard", 27019: "mongodb-config",
@@ -167,10 +168,27 @@ func clean(b []byte) string {
 }
 
 var (
-	reSSH    = regexp.MustCompile(`(?i)SSH-([0-9.]+)-(\S+)`)
-	reHTTP   = regexp.MustCompile(`(?i)^HTTP/[0-9.]+ (\d{3})`)
-	reServer = regexp.MustCompile(`(?i)\r?\nServer:\s*([^\r\n]+)`)
+	reSSH  = regexp.MustCompile(`(?i)SSH-([0-9.]+)-(\S+)`)
+	reHTTP = regexp.MustCompile(`(?i)^HTTP/[0-9.]+ (\d{3})`)
+	// reServer casa "Server: <valor>" terminando no próximo header (uma
+	// palavra seguida de ":") OU no fim da string — NUNCA em "\r\n" literal.
+	// Bug real corrigido aqui: o banner que chega em identify() já passou
+	// por clean() (grab() sempre devolve clean(buf[:n])), que troca \r\n
+	// por espaço — uma regex ancorada em \r?\n nunca bate contra isso, só
+	// contra uma string crua sintética. Esse bug deixava `product` sempre
+	// vazio pra toda porta HTTP em produção (só "passava" no teste antigo
+	// porque o teste chamava identify() direto com string crua, sem passar
+	// por clean() como a chamada real em main.go faz).
+	reServer  = regexp.MustCompile(`(?i)Server:\s*(.+?)(?:\s+[A-Za-z][\w-]*:|$)`)
+	reJenkins = regexp.MustCompile(`(?i)x-jenkins:\s*([^\s]+)`)
 )
+
+func jenkinsVersion(b string) string {
+	if m := reJenkins.FindStringSubmatch(b); m != nil {
+		return m[1]
+	}
+	return ""
+}
 
 // identify refines the service name and returns (service, product, extra note).
 func identify(port int, banner string) (service, product string) {
@@ -191,6 +209,14 @@ func identify(port int, banner string) (service, product string) {
 			svcName = "https"
 		} else if s := svc[port]; s != "" {
 			svcName = s
+		}
+		// Jenkins manda o header X-Jenkins em QUALQUER resposta (inclusive
+		// HEAD) — sinal confiável independente da porta, já que Jenkins
+		// normalmente roda em portas genéricas (8080/http-proxy) que o mapa
+		// svc[] não consegue distinguir sozinho. Checado antes do Server:
+		// genérico pra não perder o sinal mais específico.
+		if strings.Contains(strings.ToLower(b), "x-jenkins:") {
+			return "jenkins", jenkinsVersion(b)
 		}
 		if m := reServer.FindStringSubmatch(b); m != nil {
 			return svcName, strings.TrimSpace(m[1])
@@ -239,7 +265,6 @@ func notable(service string, port int) (bool, string, string) {
 		"kafka":          "Kafka broker",
 		"zookeeper":      "ZooKeeper — expõe config do cluster",
 		"rabbitmq-mgmt":  "RabbitMQ mgmt (guest/guest?)",
-		"jenkins":        "Jenkins",
 		"weblogic":       "WebLogic — CVEs de deserialização",
 		"jmx":            "JMX — RCE via MLet",
 		"java-rmi":       "Java RMI — deserialização",
@@ -252,6 +277,22 @@ func notable(service string, port int) (bool, string, string) {
 		"influxdb":       "InfluxDB",
 		"kibana":         "Kibana — pode dar acesso ao Elastic",
 		"consul":         "Consul — service mesh / KV",
+		"jenkins":        "Jenkins — se sem auth, script console costuma dar RCE direto",
+		"solr":           "Apache Solr — console admin sem auth costuma permitir RCE via config API",
+		"prometheus":     "Prometheus — métricas sem auth podem vazar nome interno de serviço/infra",
+		"alertmanager":   "Prometheus Alertmanager — sem auth, silencia/dispara alerta de qualquer um",
+		"activemq":       "ActiveMQ — console web sem auth costuma dar RCE (CVE conhecida)",
+		"yarn":           "Hadoop YARN ResourceManager — API de submissão de app sem auth é RCE direto",
+		"hdfs":           "HDFS NameNode — leitura sem auth do filesystem distribuído",
+		"hdfs-namenode":  "HDFS NameNode — leitura sem auth do filesystem distribuído",
+		"spark":          "Spark Master — API REST de submissão sem auth costuma dar RCE",
+		"webmin":         "Webmin — painel de administração do servidor",
+		"arangodb":       "ArangoDB — checar auth",
+		"neo4j":          "Neo4j — checar auth (bolt/HTTP)",
+		"neo4j-https":    "Neo4j — checar auth (bolt/HTTPS)",
+		"sap":            "SAP — checar versão/CVEs conhecidas do componente exposto",
+		"rethinkdb":      "RethinkDB — checar auth",
+		"git":            "git daemon — se sem auth, clona repositório privado inteiro",
 	}
 	if note, ok := sensitive[service]; ok {
 		return true, "medium", note

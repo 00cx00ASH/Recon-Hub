@@ -1,0 +1,6 @@
+# Testado contra 0.2.152 (baixado e inspecionado direto do source pra
+# escrever run.py — ver agent-runner/README.md). Trave o teto de minor
+# version até validar uma atualização manualmente: é a SDK que dá acesso
+# de rede/MCP a um processo autônomo sem supervisão, não vale a pena levar
+# breaking change silencioso.
+claude-agent-sdk>=0.2.152,<0.3

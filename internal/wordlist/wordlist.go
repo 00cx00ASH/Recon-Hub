@@ -23,17 +23,34 @@ type List struct {
 
 // Registry is a concurrency-safe index of wordlists.
 type Registry struct {
-	mu     sync.RWMutex
-	byPath map[string]List
+	mu          sync.RWMutex
+	byPath      map[string]List
+	builtinDir  string
+	seclistsDir string
 }
 
 // Load indexes builtinDir (wordlists/*.txt) and, when seclistsDir exists, a
 // curated slice of SecLists (Discovery/**, Fuzzing/**, Usernames/**).
 func Load(builtinDir, seclistsDir string) (*Registry, error) {
-	r := &Registry{byPath: map[string]List{}}
+	r := &Registry{byPath: map[string]List{}, builtinDir: builtinDir, seclistsDir: seclistsDir}
 	r.indexBuiltin(builtinDir)
 	r.indexSecLists(seclistsDir)
 	return r, nil
+}
+
+// Reload re-indexa as wordlists do disco, substituindo o índice em memória —
+// usado pelo POST /api/reload pra que uma wordlist nova (ex: a que veio com uma
+// ferramenta recém-adicionada) fique disponível sem reiniciar o hub. Constrói
+// num índice temporário e só então troca sob lock (o add() tranca por conta
+// própria, então indexar direto com o lock tomado causaria deadlock).
+func (r *Registry) Reload() error {
+	tmp := &Registry{byPath: map[string]List{}}
+	tmp.indexBuiltin(r.builtinDir)
+	tmp.indexSecLists(r.seclistsDir)
+	r.mu.Lock()
+	r.byPath = tmp.byPath
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *Registry) indexBuiltin(dir string) {

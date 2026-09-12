@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS findings (
   id TEXT PRIMARY KEY, dedup_key TEXT UNIQUE, job_id TEXT, tool TEXT, program TEXT,
   target TEXT, type TEXT, severity TEXT, title TEXT, asset TEXT, evidence TEXT,
   meta TEXT, count INTEGER, created_at TEXT, last_seen TEXT,
-  triage TEXT, triaged_at TEXT
+  triage TEXT, triaged_at TEXT, triage_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_findings_job ON findings(job_id);
 CREATE INDEX IF NOT EXISTS idx_findings_program ON findings(program);
@@ -101,6 +101,7 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 	// erro de coluna duplicada (não há um framework de migração aqui ainda).
 	_, _ = db.Exec(`ALTER TABLE findings ADD COLUMN triage TEXT`)
 	_, _ = db.Exec(`ALTER TABLE findings ADD COLUMN triaged_at TEXT`)
+	_, _ = db.Exec(`ALTER TABLE findings ADD COLUMN triage_reason TEXT`)
 	_, _ = db.Exec(`ALTER TABLE assets ADD COLUMN meta TEXT`)
 	return &SQLiteStore{db: db}, nil
 }
@@ -292,15 +293,15 @@ func (s *SQLiteStore) AddFinding(f *Finding) (bool, error) {
 		f.Count = 1
 	}
 	_, ierr := s.db.Exec(`INSERT INTO findings
-	 (id,dedup_key,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at)
-	 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	 (id,dedup_key,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at,triage_reason)
+	 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		f.ID, key, f.JobID, f.Tool, f.Program, f.Target, f.Type, f.Severity, f.Title, f.Asset,
-		f.Evidence, string(f.Meta), f.Count, tstr(f.CreatedAt), tstr(f.LastSeen), f.Triage, tptr(f.TriagedAt))
+		f.Evidence, string(f.Meta), f.Count, tstr(f.CreatedAt), tstr(f.LastSeen), f.Triage, tptr(f.TriagedAt), f.TriageReason)
 	return true, ierr
 }
 
 func (s *SQLiteStore) ListFindings(f FindingFilter) ([]*Finding, error) {
-	q := `SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at FROM findings`
+	q := `SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at,triage_reason FROM findings`
 	where, args := whereClause(map[string]string{
 		"job_id": f.JobID, "tool": f.Tool, "program": f.Program, "target": f.Target,
 		"severity": f.Severity, "type": f.Type,
@@ -315,10 +316,9 @@ func (s *SQLiteStore) ListFindings(f FindingFilter) ([]*Finding, error) {
 	for rows.Next() {
 		var fd Finding
 		var meta, created, last string
-		var triage sql.NullString
-		var triagedAt sql.NullString
+		var triage, triagedAt, triageReason sql.NullString
 		if err := rows.Scan(&fd.ID, &fd.JobID, &fd.Tool, &fd.Program, &fd.Target, &fd.Type, &fd.Severity,
-			&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt); err != nil {
+			&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt, &triageReason); err != nil {
 			return nil, err
 		}
 		if meta != "" {
@@ -328,6 +328,7 @@ func (s *SQLiteStore) ListFindings(f FindingFilter) ([]*Finding, error) {
 		fd.LastSeen = rtime(last)
 		fd.Triage = triage.String
 		fd.TriagedAt = ptime(triagedAt)
+		fd.TriageReason = triageReason.String
 		out = append(out, &fd)
 	}
 	return out, rows.Err()
@@ -335,12 +336,12 @@ func (s *SQLiteStore) ListFindings(f FindingFilter) ([]*Finding, error) {
 
 // GetFinding looks up one finding by id.
 func (s *SQLiteStore) GetFinding(id string) (*Finding, bool) {
-	row := s.db.QueryRow(`SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at FROM findings WHERE id=?`, id)
+	row := s.db.QueryRow(`SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at,triage_reason FROM findings WHERE id=?`, id)
 	var fd Finding
 	var meta, created, last string
-	var triage, triagedAt sql.NullString
+	var triage, triagedAt, triageReason sql.NullString
 	if err := row.Scan(&fd.ID, &fd.JobID, &fd.Tool, &fd.Program, &fd.Target, &fd.Type, &fd.Severity,
-		&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt); err != nil {
+		&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt, &triageReason); err != nil {
 		return nil, false
 	}
 	if meta != "" {
@@ -350,27 +351,28 @@ func (s *SQLiteStore) GetFinding(id string) (*Finding, bool) {
 	fd.LastSeen = rtime(last)
 	fd.Triage = triage.String
 	fd.TriagedAt = ptime(triagedAt)
+	fd.TriageReason = triageReason.String
 	return &fd, true
 }
 
 // SetFindingTriage records operator feedback on a finding by ID.
-func (s *SQLiteStore) SetFindingTriage(id, verdict string) (*Finding, error) {
+func (s *SQLiteStore) SetFindingTriage(id, verdict, reason string) (*Finding, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
-	res, err := s.db.Exec(`UPDATE findings SET triage=?, triaged_at=? WHERE id=?`, verdict, tstr(now), id)
+	res, err := s.db.Exec(`UPDATE findings SET triage=?, triaged_at=?, triage_reason=? WHERE id=?`, verdict, tstr(now), reason, id)
 	if err != nil {
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil, fmt.Errorf("finding não encontrado")
 	}
-	row := s.db.QueryRow(`SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at FROM findings WHERE id=?`, id)
+	row := s.db.QueryRow(`SELECT id,job_id,tool,program,target,type,severity,title,asset,evidence,meta,count,created_at,last_seen,triage,triaged_at,triage_reason FROM findings WHERE id=?`, id)
 	var fd Finding
 	var meta, created, last string
-	var triage, triagedAt sql.NullString
+	var triage, triagedAt, triageReason sql.NullString
 	if err := row.Scan(&fd.ID, &fd.JobID, &fd.Tool, &fd.Program, &fd.Target, &fd.Type, &fd.Severity,
-		&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt); err != nil {
+		&fd.Title, &fd.Asset, &fd.Evidence, &meta, &fd.Count, &created, &last, &triage, &triagedAt, &triageReason); err != nil {
 		return nil, err
 	}
 	if meta != "" {
@@ -380,6 +382,7 @@ func (s *SQLiteStore) SetFindingTriage(id, verdict string) (*Finding, error) {
 	fd.LastSeen = rtime(last)
 	fd.Triage = triage.String
 	fd.TriagedAt = ptime(triagedAt)
+	fd.TriageReason = triageReason.String
 	return &fd, nil
 }
 

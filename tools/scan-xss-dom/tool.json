@@ -1,0 +1,30 @@
+{
+  "name": "scan-xss-dom",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "XSS DOM-based via navegador headless de verdade (Chrome DevTools Protocol, não http.Client) — o único jeito de confirmar dois casos que scan-xss (requisição HTTP crua) é estruturalmente incapaz de ver: (1) vetor hash — location.hash nunca chega no servidor, só existe no navegador; (2) vetor query — a resposta HTTP pode escapar certinho, mas JS do CLIENTE relê location.search/URLSearchParams e insere sem sanitizar depois que a página já carregou. Confirma por EXECUÇÃO real (window.__rhxss_<token> só vira true se o navegador tratar o valor como código via onerror de <img>), nunca por heurística de texto na resposta. Não é XSS armazenado: os dois vetores testados voltam na MESMA navegação, nunca em outra página/sessão depois de um valor persistir no servidor.",
+  "guide": "Alvo = uma URL http/https de app que roda JS no cliente (SPA, dashboard, busca com re-render via JS). O scanner testa o vetor hash (anexa #payload) e o vetor query (testa cada nome de parâmetro da wordlist/lista extra) em cada URL base. Sem um navegador real disponível (chrome_url/RECONHUB_CHROME_URL ou chrome_path/Chrome local no PATH) a ferramenta falha — não tem fallback HTTP puro, isso é o scan-xss. No docker-compose o sidecar de Chrome (docker/chrome) já fica sempre no ar e é usado automaticamente, sem configuração.",
+  "validation": "Exemplo confirmado: https://app.com/painel#'\"><img src=x onerror=window.__rhxss_a1b2c3d4=true> — depois de navegar e esperar o settle, window.__rhxss_a1b2c3d4 é true na página carregada. Isso só acontece se o navegador executou o atributo onerror como código JS de verdade (o handler do <img> quebrado disparou), não se o texto do payload só apareceu em algum lugar do HTML — prova execução, igual ao scan-ssti confirmar por resultado calculado em vez de reflexão de texto.",
+  "exec": ["go", "run", "."],
+  "timeout": "20m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "uma URL http/https de app com JS no cliente", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "wordlist", "type": "wordlist", "required": false, "default": "builtin/xss-params", "help": "lista de NOMES de parâmetro a testar no vetor query" },
+    { "name": "params", "type": "string", "required": false, "help": "nomes de parâmetro extra, separados por vírgula (vetor query, testados primeiro)" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor, uma URL por linha" },
+    { "name": "max_params", "type": "int", "required": false, "default": 25, "help": "teto de parâmetros testados por URL (cada um abre uma aba de navegador — bem mais caro que uma requisição HTTP)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 3, "help": "abas de navegador simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 15000, "help": "timeout de navegação por candidato" },
+    { "name": "settle_ms", "type": "int", "required": false, "default": 900, "help": "espera após a navegação antes de checar execução, pro JS assíncrono da página rodar" },
+    { "name": "skip_hash", "type": "bool", "required": false, "default": false, "help": "não testar o vetor hash (location.hash)" },
+    { "name": "skip_query", "type": "bool", "required": false, "default": false, "help": "não testar o vetor query (location.search)" },
+    { "name": "chrome_url", "type": "string", "required": false, "help": "endpoint CDP remoto (ws://host:porta ou http://host:porta) — default: RECONHUB_CHROME_URL (sidecar docker/chrome) ou navegador local" },
+    { "name": "chrome_path", "type": "string", "required": false, "help": "caminho do binário Chrome/Chromium local (só usado sem chrome_url — processo novo por job, suporta proxy/Tor)" }
+  ]
+}

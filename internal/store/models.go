@@ -90,6 +90,12 @@ type Finding struct {
 	// tool+type) to weigh how much to trust new findings of the same kind.
 	Triage    string     `json:"triage,omitempty"`
 	TriagedAt *time.Time `json:"triaged_at,omitempty"`
+	// TriageReason is optional free text explaining the verdict above — "por
+	// que" além do "o quê". Não alimenta o score (isso continua sendo pura
+	// contagem confirmed/false_positive por tool+type em internal/intel), mas
+	// fica junto do finding pra quem (humano ou agent) reler depois e entender
+	// o raciocínio, não só o resultado.
+	TriageReason string `json:"triage_reason,omitempty"`
 }
 
 // Key is the dedup identity of a finding.

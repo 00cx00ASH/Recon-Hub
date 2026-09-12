@@ -27,7 +27,7 @@ ferramenta) e o [`README.md`](../README.md) (instalação, auth, catálogo compl
 └───────────────────────────┬───────────────────────────────┘
                             │  stdin JSON + env  →  NDJSON stdout
 ┌─ FERRAMENTAS (tools/<nome>/) ─────────────────────────────┐
-│  27 processos externos, cada um módulo Go isolado.         │
+│  41 processos externos, cada um módulo Go isolado.         │
 │  O hub NÃO depende delas; elas não incham o hub.           │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -105,7 +105,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ## 4. O que temos hoje
 
-### 27 ferramentas, por grupo
+### 41 ferramentas, por grupo
 
 **recon — achar superfície**
 
@@ -113,17 +113,19 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 |---------------------|----------------------------------------------------------------------|
 | `recon-passive-enum` | subdomínios de **7 fontes** grátis em paralelo (CT, DNS datasets…) + resolve |
 | `recon-crtsh`        | subdomínios via Certificate Transparency (crt.sh + certspotter, com merge) |
+| `recon-subdomain-brute` | subdomínio ATIVO — wordlist + resolução DNS de verdade, detecta e filtra wildcard sozinho |
 | `recon-web-enum`     | crawl same-site raso, fingerprint de stack (Server/X-Powered-By/cookies) |
-| `recon-infra-enum`   | port scan TCP + banner + fingerprint. Aceita host/IP/CIDR, presets `top100`/… |
+| `recon-infra-enum`   | port scan TCP + banner + fingerprint + identifica provedor cloud/CDN via PTR. Aceita host/IP/CIDR, presets `top100`/… |
+| `recon-tech-cve`     | fingerprint passivo de stack × tabela curada de CVEs — sinaliza "versão velha", nunca confirma exploração |
 
 **scan — testar vulnerabilidade**
 
 | ferramenta                | o que faz                                                        |
 |---------------------------|---------------------------------------------------------------|
 | `scan-subdomain-takeover` | CNAME dangling, ~58 fingerprints, confirmação HTTP             |
-| `scan-fuzz`               | content discovery por wordlist, calibra soft-404               |
+| `scan-fuzz`               | content discovery por wordlist, calibra soft-404; `recursive_depth` opt-in refuza dentro de diretório achado |
 | `scan-actuator`           | Spring Boot Actuator exposto (`/env`, `/heapdump`, Jolokia…)   |
-| `scan-open-redirect`      | 17 payloads de bypass em params comuns, confirma pelo destino real |
+| `scan-open-redirect`      | 22 payloads de bypass em params comuns, confirma pelo destino real |
 | `scan-cors`               | reflexão de origem, `null`, wildcard + credentials             |
 | `scan-graphql`            | acha o endpoint, testa introspection, sinaliza mutations perigosas |
 | `scan-cache-poisoning`    | headers não-chaveados (X-Forwarded-Host…), confirma com 2ª req limpa |
@@ -133,6 +135,19 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-mongodb`            | MongoDB sem auth — fala OP_MSG direto, lista bancos/coleções (só nomes) |
 | `scan-postman-net`        | busca na rede **pública** do Postman por um termo, varre collections por segredo |
 | `scan-postman-audit`      | auditoria profunda de uma collection que **você aponta** (segredo, PII c/ Luhn, auth hardcoded) |
+| `scan-idor`               | IDOR horizontal com DUAS sessões de teste — compara a resposta cruzada contra o baseline legítimo do dono, só status+tamanho (nunca guarda o corpo) |
+| `scan-bruteforce-check`   | confirma ausência de rate limiting/lockout num login/OTP — tentativas erradas travadas (teto 10), para no 1º sinal de proteção |
+| `scan-auth-flow`          | SSO/OAuth: descobre o `authorization_endpoint`, testa bypass de `redirect_uri` (confirma pelo destino real), inventaria metadata SAML |
+| `scan-xss`                | XSS refletido — marcador único em params clássicos, confirma só quando volta sem escapar (nunca dispara execução) |
+| `scan-xss-dom`            | XSS DOM-based — navegador headless real (CDP), vetor hash + query, confirma por EXECUÇÃO (não por texto na resposta); não é XSS armazenado |
+| `scan-sqli`               | SQL injection por vazamento de erro real de banco, ausente no baseline sem payload — nunca time-based/booleana |
+| `scan-ssti`               | Server-Side Template Injection — resultado calculado aparece e o payload cru NÃO, prova avaliação real (7 sintaxes de engine) |
+| `scan-ssrf`               | injeta URLs internas/metadata cloud em params buscados pelo servidor, só confirma pelo CONTEÚDO da resposta |
+| `scan-smuggling`          | request smuggling (CL.TE/TE.CL) por timing oracle — nunca encadeia 2ª requisição real pra confirmar |
+| `scan-privesc`            | access control VERTICAL (BFLA) — função só-admin + baseline admin + conta de menor privilégio; confirma escalada quando a baixa/anônima recebe a MESMA resposta que a admin. Par do scan-idor |
+| `scan-path-traversal`     | path traversal / LFI — `../../etc/passwd` com 11 variantes de bypass, confirma só quando a assinatura do arquivo de sistema aparece e some no baseline |
+| `scan-waf-fingerprint`    | identifica WAF/CDN por assinatura de vendor (14) ou bloqueio comportamental — contexto de metodologia (info), nunca vulnerabilidade |
+| `scan-mass-assignment`    | mass assignment / over-posting (API3:2023) — campos privilegiados extras no corpo JSON com valor sentinela; confirma bind só quando o sentinela volta ligado à chave e um campo de controle bogus NÃO volta (descarta eco). Par de escrita do scan-privesc |
 
 **js — JavaScript, cloud, segredos** (todas baixam página + `<script src>` + source maps)
 
@@ -158,7 +173,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ### Subsistemas prontos
 
-- **29 pipelines** — encadeiam ferramentas, passando `asset` de um step como
+- **31 pipelines** — encadeiam ferramentas, passando `asset` de um step como
   `param` do próximo.
 - **Pipeline DAG / fan-out** — steps ganham `id`, `feed.from`, `needs`; steps sem
   dependência pendente rodam **em paralelo** (ondas). Step falho marca dependentes
@@ -181,7 +196,18 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Wordlists** — embutidas + um checkout do SecLists (`seclists_dir` no config),
   selecionáveis no param `wordlist`.
 - **Auth** — bearer token único, hub nasce fechado, gera no 1º start.
-- **MCP** — `cmd/reconhub-mcp`, 12 tools, deixa o Claude dirigir o hub.
+- **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
+  mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
+  só roteia tráfego se o operador configurar explicitamente pra aquele
+  programa (opt-in — alguns programas proíbem IP anonimizado). 36 das 41
+  ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
+  (429/403 repetido). Ver README > Docker > Proxy/Tor.
+- **Chrome headless** — sidecar próprio (`docker/chrome/`), também sempre
+  no ar, mas SEM opt-in: `scan-xss-dom` usa automaticamente via
+  `RECONHUB_CHROME_URL`, sem configuração por programa (é infra
+  compartilhada, não segredo por programa). Não suporta proxy/Tor por job
+  nesse modo. Ver README > Docker > Chrome headless.
+- **MCP** — `cmd/reconhub-mcp`, 22 tools, deixa o Claude dirigir o hub.
 - **SQLite opcional** — `-tags sqlite`, `-store sqlite`, `-migrate-store`.
 - **Docker + CI** — imagem única, CI com matriz Go + shellcheck + docker smoke +
   job sqlite.
@@ -291,9 +317,10 @@ dep-confusion, secrets — coisas que mudam sozinhas.
 
 ### g) Com o Claude (MCP)
 
-`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 12 tools
-(`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_get_report`…). Aí
-você conversa: "roda `full-recon` no acme.com no programa acme e me resume os
+`.mcp.json` já está no repo. Sobe o hub, e o Claude Code pega as 22 tools
+(`hub_run_job`, `hub_run_pipeline`, `hub_list_findings`, `hub_triage_finding`,
+`hub_draft_finding`, `hub_program_report`, `hub_create_program`…). Aí você
+conversa: "roda `full-recon` no acme.com no programa acme e me resume os
 findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 `RECONHUB_TOKEN`).
 
@@ -301,17 +328,55 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 
 É um subagente do Claude Code (`.claude/agents/bugbounty.md`), não uma
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
-repo, e só age através das 12 tools MCP acima (sem Bash, sem internet
-solta). Isso importa: **todo job/pipeline que ele dispara passa pelo
-mesmo enforcement de escopo do servidor** que qualquer outro caminho
-(UI, API, CLI) — testado na prática: pedir um alvo fora do
+repo, e só age através das 22 tools MCP acima (sem Bash, sem internet
+solta — o `tools:` do frontmatter do agente nem lista essas duas). Isso
+importa: **todo job/pipeline que ele dispara passa pelo mesmo
+enforcement de escopo do servidor** que qualquer outro caminho (UI,
+API, CLI) — testado na prática: pedir um alvo fora do
 `in_scope`/`out_of_scope` do programa devolve erro do próprio servidor,
 não é o agent "se comportando bem", é o hub recusando de verdade.
 
-**Passo 1 — pré-requisito.** Suba o hub (seção "a"), tenha pelo menos um
-programa criado (seção "c") com `in_scope` preenchido. Sem programa, o
-agent não tem contra o que validar escopo — ele vai pedir um antes de
-rodar qualquer coisa.
+> **⚠️ Isso só vale garantido se for de fato O AGENTE quem está agindo —
+> não a sessão raiz do Claude Code.** A sessão raiz TEM Bash/WebFetch
+> normalmente, e nada garante que ela delega automaticamente pro
+> subagente só porque seu pedido "parece" bug bounty — principalmente
+> em mensagens de continuação soltas ("cava mais fundo nesse finding")
+> no meio de uma conversa já em andamento, ou com `auto mode` ligado
+> (aprova tool calls sem perguntar — isso NÃO tem relação com decidir
+> delegar pro subagente, só facilita a sessão raiz agir sozinha sem
+> você perceber). Já aconteceu na prática: a sessão raiz baixou um
+> arquivo JS inteiro com `curl` direto pra investigar um segredo
+> exposto, contornando toda a redação/enforcement que o hub existe pra
+> garantir. Pra evitar isso:
+> - Use **`@bugbounty`** explícito no pedido (`@bugbounty cava mais
+>   fundo nesse finding`) — garante que É aquele subagente quem trata,
+>   não a sessão raiz decidindo sozinha. Repita `@bugbounty` em CADA
+>   mensagem de investigação, inclusive follow-ups — não há garantia
+>   documentada de que o contexto "continua" dentro do subagente entre
+>   turnos sem isso.
+> - Pra uma sessão inteira dedicada a testar um programa de verdade,
+>   `claude --agent bugbounty` no terminal já sobe a sessão inteira
+>   como o agente, do primeiro ao último turno.
+> - Não existe hoje um indicador visual confirmado no terminal pra
+>   diferenciar "isso rodou no subagente" de "isso rodou na sessão
+>   raiz" — na dúvida, prefira sempre `@bugbounty` explícito a confiar
+>   na delegação automática.
+> - Se quiser bloqueio de verdade (não só convenção), a sessão raiz
+>   pode ter Bash desabilitado via `permissions.deny` num
+>   `settings.json` — mas isso é uma escolha pra uma sessão dedicada a
+>   engajamento, não pro repo inteiro (o próprio desenvolvimento do hub
+>   usa Bash o tempo todo pra `gofmt`/`go build`/`go test`).
+
+**Passo 1 — pré-requisito.** Suba o hub (seção "a"). Um programa com
+`in_scope` preenchido (seção "c") — sem isso, nada é autorizado. Você
+pode criar antes pela UI, ou deixar o agent criar sozinho ("cria o
+programa acme com in_scope *.acme.com") — ele usa `hub_create_program`,
+mas só com o `in_scope` que você deu, nunca inventando domínio. Se
+você sempre exclui os mesmos hosts de ruído (`status.*`, ambientes
+internos…), salve um template uma vez com `hub_create_scope_template`
+e reaproveite em todo programa novo (`template: "nome"` no
+`hub_create_program`) — só mexe em `out_of_scope`/`platform`, nunca em
+`in_scope`.
 
 **Passo 2 — chame o agent.** Três jeitos de pedir, cada um muda o
 comportamento:

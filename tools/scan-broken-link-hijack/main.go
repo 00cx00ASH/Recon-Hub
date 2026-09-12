@@ -94,6 +94,12 @@ func main() {
 	conc := pick(*flagConc, intParam(pl.Params, "concurrency"), 12)
 	inclSub := *flagIncludeSub || boolParam(pl.Params, "include_subresources")
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client = &http.Client{
 		Timeout: timeout,
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -102,11 +108,7 @@ func main() {
 			}
 			return nil
 		},
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: true,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	var pages []string

@@ -100,6 +100,12 @@ func main() {
 	doFS := !*flagNoFS && !boolParam(pl.Params, "no_firestore")
 	doST := !*flagNoST && !boolParam(pl.Params, "no_storage")
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+		DisableKeepAlives: false,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client = &http.Client{
 		Timeout: timeout,
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -108,11 +114,7 @@ func main() {
 			}
 			return nil
 		},
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: false,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	// origem: config colado, ou uma/mais páginas

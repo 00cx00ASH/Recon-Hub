@@ -29,7 +29,7 @@ type bypassTechnique struct {
 }
 
 // bypassTechniques builds the short, fixed list of variants to try against a
-// path already confirmed blocked (401/403). Deliberately small (5 requests)
+// path already confirmed blocked (401/403). Deliberately small (9 requests)
 // and read-only GETs — this is not a fuzzer, it only fires once per already-
 // discovered blocked admin/debug path, so the added volume stays tiny even
 // with delay_ms pacing applied to each request (see tryBypass).
@@ -42,10 +42,34 @@ func bypassTechniques(root, path string) []bypassTechnique {
 	return []bypassTechnique{
 		{name: "barra dupla", url: root + "//" + trimmed},
 		{name: "barra final alternada", url: root + altSlash},
+		{name: "ponto final", url: root + path + "."},
+		{name: "case alternada", url: root + "/" + upperFirstSegment(trimmed)},
 		{name: "X-Original-URL", url: root + "/", headers: map[string]string{"X-Original-URL": path}, headerBased: true},
 		{name: "X-Rewrite-URL", url: root + "/", headers: map[string]string{"X-Rewrite-URL": path}, headerBased: true},
 		{name: "X-Forwarded-For localhost", url: root + path, headers: map[string]string{"X-Forwarded-For": "127.0.0.1"}, headerBased: true},
+		{name: "X-Forwarded-Host localhost", url: root + path, headers: map[string]string{"X-Forwarded-Host": "127.0.0.1"}, headerBased: true},
+		{name: "X-Custom-IP-Authorization localhost", url: root + path, headers: map[string]string{"X-Custom-IP-Authorization": "127.0.0.1"}, headerBased: true},
 	}
+}
+
+// upperFirstSegment uppercases the first letter of the last path segment
+// ("admin/config" -> "admin/Config" would be wrong; only the LAST segment,
+// since that's the one an app's own route matcher — not a front-door proxy
+// rule — is more likely to be case-sensitive about) so a case-insensitive
+// proxy rule guarding "/admin" doesn't also catch "/Admin" while the
+// backend app route still resolves it as the same page.
+func upperFirstSegment(trimmed string) string {
+	suffix := ""
+	body := trimmed
+	if strings.HasSuffix(body, "/") {
+		suffix, body = "/", body[:len(body)-1]
+	}
+	i := strings.LastIndexByte(body, '/')
+	prefix, last := body[:i+1], body[i+1:]
+	if last == "" {
+		return trimmed
+	}
+	return prefix + strings.ToUpper(last[:1]) + last[1:] + suffix
 }
 
 // sameShape reports whether two responses look like "the same page" — used

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"reconhub/internal/auth"
 	"reconhub/internal/copilot"
 	"reconhub/internal/engine"
+	"reconhub/internal/guidance"
 	"reconhub/internal/intel"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
@@ -21,24 +23,26 @@ import (
 	"reconhub/internal/registry"
 	"reconhub/internal/report"
 	"reconhub/internal/scope"
+	"reconhub/internal/scopetemplate"
 	"reconhub/internal/store"
 	"reconhub/internal/wordlist"
 )
 
 // Server holds the dependencies every handler needs.
 type Server struct {
-	Store     store.Store
-	Reg       *registry.Registry
-	Pipelines *pipeline.Registry
-	Programs  *scope.Registry
-	Wordlists *wordlist.Registry
-	Watches   *monitor.Registry
-	Monitor   *monitor.Monitor
-	Engine    *engine.Engine
-	Token     auth.Token
-	WebDir    string
-	DocsFile  string
-	DataDir   string // root of ./data — projects/<program>/ lives under here
+	Store          store.Store
+	Reg            *registry.Registry
+	Pipelines      *pipeline.Registry
+	Programs       *scope.Registry
+	ScopeTemplates *scopetemplate.Registry
+	Wordlists      *wordlist.Registry
+	Watches        *monitor.Registry
+	Monitor        *monitor.Monitor
+	Engine         *engine.Engine
+	Token          auth.Token
+	WebDir         string
+	DocsFile       string
+	DataDir        string // root of ./data — projects/<program>/ lives under here
 }
 
 // resolveProgram looks up a program by name. An empty name is fine (nil, nil).
@@ -82,6 +86,71 @@ func inScope(tool string, prog *scope.Program, target string) bool {
 	return prog.Contains(target)
 }
 
+// scopeListParams are params whose value is a delimited list of EXTRA
+// hosts/URLs a job actually reaches — the "lista colada" mode that most scan
+// tools have (urls/hosts/subdomains) alongside their single-target mode.
+// Without checking these too, scope enforcement is a no-op for any tool with
+// a list mode: Target can be a single in-scope decoy while the real targets
+// ride along in one of these params, completely unchecked.
+var scopeListParams = map[string]bool{"urls": true, "hosts": true, "subdomains": true}
+
+// scopeFileParams mirror scopeListParams but point at a file on the server
+// (one host/URL per line) instead of carrying values inline — same bypass,
+// checked by reading the file server-side before the job is accepted.
+var scopeFileParams = map[string]bool{"urls_file": true, "hosts_file": true, "subdomains_file": true}
+
+// scopeSingleParams carry exactly one extra URL a tool fetches, distinct
+// from Target: scan-idor's comparison endpoint, scan-auth-flow's known
+// authorization endpoint, js-supabase-probe's project URL.
+var scopeSingleParams = map[string]bool{"url_b": true, "authorize_url": true, "supabase_url": true}
+
+func splitScopeList(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == ' ' || r == '\t'
+	})
+}
+
+// paramsOutOfScope checks every param that names extra hosts/URLs (list
+// mode's urls/hosts/subdomains, their _file companions, and single
+// extra-URL params like url_b) against prog, and returns the first
+// out-of-scope value found, or "" if everything checks out. inScope alone
+// only ever sees the request's single Target field — list/file modes exist
+// specifically to carry many more targets, so they need the same check.
+func paramsOutOfScope(tool string, prog *scope.Program, params map[string]any) string {
+	if prog == nil || scopeExempt[tool] {
+		return ""
+	}
+	for name, raw := range params {
+		s, ok := raw.(string)
+		if !ok || strings.TrimSpace(s) == "" {
+			continue
+		}
+		switch {
+		case scopeListParams[name]:
+			for _, item := range splitScopeList(s) {
+				if !inScope(tool, prog, item) {
+					return item
+				}
+			}
+		case scopeSingleParams[name]:
+			if !inScope(tool, prog, s) {
+				return s
+			}
+		case scopeFileParams[name]:
+			b, err := os.ReadFile(s)
+			if err != nil {
+				continue // arquivo inválido/inacessível é erro do próprio job, não de escopo
+			}
+			for _, item := range splitScopeList(string(b)) {
+				if !inScope(tool, prog, item) {
+					return item
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // outOfScopeMsg builds a 403 message that shows the target and the program's
 // actual in-scope patterns, so a user who set an empty or mismatched scope can
 // see immediately why everything is being rejected.
@@ -107,12 +176,14 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("POST /api/reload", s.auth(s.reloadRegistries))
 	mux.HandleFunc("GET /api/tools", s.auth(s.listTools))
 	mux.HandleFunc("GET /api/tools/{name}", s.auth(s.getTool))
 	mux.HandleFunc("GET /api/tools/{name}/readme", s.auth(s.getToolReadme))
 	mux.HandleFunc("POST /api/jobs", s.auth(s.createJob))
 	mux.HandleFunc("GET /api/jobs", s.auth(s.listJobs))
 	mux.HandleFunc("GET /api/jobs/{id}", s.auth(s.getJob))
+	mux.HandleFunc("GET /api/jobs/{id}/next-steps", s.auth(s.getJobNextSteps))
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", s.auth(s.cancelJob))
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.authSSE(s.jobEvents))
 	mux.HandleFunc("GET /api/findings", s.auth(s.listFindings))
@@ -125,8 +196,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/report", s.auth(s.reportJSON))
 	mux.HandleFunc("GET /api/report.md", s.authSSE(s.reportMD))     // authSSE: baixável por link
 	mux.HandleFunc("GET /api/report.html", s.authSSE(s.reportHTML)) // idem
-	mux.HandleFunc("GET /api/programs/{name}/report.md", s.authSSE(s.reportMD))
-	mux.HandleFunc("GET /api/programs/{name}/report.html", s.authSSE(s.reportHTML))
 
 	mux.HandleFunc("GET /api/wordlists", s.auth(s.listWordlists))
 
@@ -137,6 +206,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/programs/{name}", s.auth(s.deleteProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
 
+	mux.HandleFunc("GET /api/lessons", s.auth(s.getLessons))
+	mux.HandleFunc("POST /api/lessons", s.auth(s.appendLesson))
+	mux.HandleFunc("PUT /api/lessons", s.auth(s.putLessons))
+
+	mux.HandleFunc("GET /api/scope-templates", s.auth(s.listScopeTemplates))
+	mux.HandleFunc("POST /api/scope-templates", s.auth(s.createScopeTemplate))
+	mux.HandleFunc("GET /api/scope-templates/{name}", s.auth(s.getScopeTemplate))
+	mux.HandleFunc("PUT /api/scope-templates/{name}", s.auth(s.updateScopeTemplate))
+	mux.HandleFunc("DELETE /api/scope-templates/{name}", s.auth(s.deleteScopeTemplate))
+
 	// projeto: pasta física em data/projects/<name>/ — notas + snapshot sincronizado
 	mux.HandleFunc("GET /api/programs/{name}/summary", s.auth(s.projectSummary))
 	mux.HandleFunc("POST /api/programs/{name}/sync", s.auth(s.syncProject))
@@ -145,6 +224,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/programs/{name}/coverage", s.auth(s.programCoverage))
 	mux.HandleFunc("GET /api/programs/{name}/auth", s.auth(s.getAuth))
 	mux.HandleFunc("PUT /api/programs/{name}/auth", s.auth(s.putAuth))
+
+	// Fase 7: Analytics
+	mux.HandleFunc("GET /api/programs/{name}/analytics", s.auth(s.getAnalytics))
+	// Fase 8: Search
+	mux.HandleFunc("GET /api/findings/search", s.auth(s.searchFindings))
+	// Fase 9: Auto Triage
+	mux.HandleFunc("GET /api/findings/{id}/triage-suggestion", s.auth(s.getTriageSuggestion))
+	// Relatório por programa: reaproveita o builder rico (report.Build +
+	// chain candidates + templates por tipo). buildReport já lê {name} do path.
+	mux.HandleFunc("GET /api/programs/{name}/report.json", s.auth(s.reportJSON))
+	mux.HandleFunc("GET /api/programs/{name}/report.md", s.authSSE(s.reportMD))
+	// Fase 12: Asset History
+	mux.HandleFunc("GET /api/assets/{value}/history", s.auth(s.getAssetHistory))
 
 	mux.HandleFunc("GET /api/watches", s.auth(s.listWatches))
 	mux.HandleFunc("POST /api/watches", s.auth(s.createWatch))
@@ -155,6 +247,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/pipeline-runs", s.auth(s.createPipelineRun))
 	mux.HandleFunc("GET /api/pipeline-runs", s.auth(s.listPipelineRuns))
 	mux.HandleFunc("GET /api/pipeline-runs/{id}", s.auth(s.getPipelineRun))
+	mux.HandleFunc("GET /api/pipeline-runs/compare", s.auth(s.comparePipelineRuns))
 	mux.HandleFunc("POST /api/pipeline-runs/{id}/cancel", s.auth(s.cancelPipelineRun))
 	mux.HandleFunc("GET /api/pipeline-runs/{id}/events", s.authSSE(s.pipelineRunEvents))
 
@@ -202,6 +295,41 @@ func (s *Server) docs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
+}
+
+// reloadRegistries re-lê tools/pipelines/wordlists do disco SEM reiniciar o
+// processo — é o que garante que adicionar ou editar uma ferramenta/pipeline
+// não exige derrubar o hub (zero downtime). Cada Reload() monta o índice novo
+// fora do lock e só troca sob write lock, então jobs em andamento e leituras
+// concorrentes (List/Get) não são interrompidos. Se algum manifesto novo
+// estiver quebrado, o Reload daquele registro falha e o índice ANTIGO é
+// mantido (não deixa o hub num estado meio-carregado).
+func (s *Server) reloadRegistries(w http.ResponseWriter, r *http.Request) {
+	var errs []string
+	if err := s.Reg.Reload(); err != nil {
+		errs = append(errs, "tools: "+err.Error())
+	}
+	if err := s.Pipelines.Reload(); err != nil {
+		errs = append(errs, "pipelines: "+err.Error())
+	}
+	if err := s.Wordlists.Reload(); err != nil {
+		errs = append(errs, "wordlists: "+err.Error())
+	}
+	if len(errs) > 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"errors": errs,
+			"note":   "índice(s) com erro mantiveram a versão anterior — o hub segue no ar com o que já tinha",
+			"tools":  len(s.Reg.List()), "pipelines": len(s.Pipelines.List()),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"tools":     len(s.Reg.List()),
+		"pipelines": len(s.Pipelines.List()),
+		"message":   "registries recarregados sem reiniciar o hub",
+	})
 }
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
@@ -265,6 +393,10 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusForbidden, outOfScopeMsg(req.Target, prog))
 			return
 		}
+		if bad := paramsOutOfScope(req.Tool, prog, req.Params); bad != "" {
+			writeErr(w, http.StatusForbidden, outOfScopeMsg(bad, prog))
+			return
+		}
 	}
 	job, err := s.Engine.Submit(req.Tool, req.Target, name, req.Params)
 	if err != nil {
@@ -298,6 +430,28 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 	}
 	events, _ := s.Store.ListEvents(job.ID, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"job": job, "events": events})
+}
+
+func (s *Server) getJobNextSteps(w http.ResponseWriter, r *http.Request) {
+	job, ok := s.Store.GetJob(r.PathValue("id"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "job não encontrado")
+		return
+	}
+
+	// Só sugere se job terminou (succeeded ou failed)
+	if job.Status != "succeeded" && job.Status != "failed" {
+		writeJSON(w, http.StatusOK, map[string]any{"next_steps": []any{}})
+		return
+	}
+
+	// Puxa findings e assets deste job
+	findings, _ := s.Store.ListFindings(store.FindingFilter{JobID: job.ID, Limit: 1000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{JobID: job.ID, Limit: 1000})
+
+	// Gera sugestões
+	steps := guidance.SuggestNextSteps(job, findings, assets)
+	writeJSON(w, http.StatusOK, map[string]any{"next_steps": steps})
 }
 
 func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
@@ -467,6 +621,10 @@ func (s *Server) findingDraft(w http.ResponseWriter, r *http.Request) {
 func (s *Server) triageFinding(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Verdict string `json:"verdict"`
+		// Reason é opcional: por que esse veredito, não só qual — não entra
+		// no score (isso continua sendo pura contagem confirmed/false_positive
+		// por tool+type), mas fica junto do finding pra reler depois.
+		Reason string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
@@ -476,7 +634,7 @@ func (s *Server) triageFinding(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "verdict inválido — use confirmed, false_positive ou ignored")
 		return
 	}
-	f, err := s.Store.SetFindingTriage(r.PathValue("id"), body.Verdict)
+	f, err := s.Store.SetFindingTriage(r.PathValue("id"), body.Verdict, strings.TrimSpace(body.Reason))
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
@@ -536,7 +694,7 @@ func (s *Server) intelFindings(w http.ResponseWriter, r *http.Request) {
 			Advice: a.Advice, Confidence: a.Confidence, SampleSize: a.SampleSize,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"findings": rows, "groups": intel.GroupSimilar(fs)})
+	writeJSON(w, http.StatusOK, map[string]any{"findings": rows, "groups": intel.GroupSimilar(fs), "chains": chainCandidatesWithAssets(fs)})
 }
 
 // buildReport gathers findings per the request filters and assembles a report.
@@ -566,7 +724,51 @@ func (s *Server) buildReport(r *http.Request) report.Report {
 		})
 	}
 	includeInfo := q.Get("include_info") == "1" || q.Get("include_info") == "true"
-	return report.Build(prog, target, items, includeInfo)
+	rep := report.Build(prog, target, items, includeInfo)
+	rep.ChainCandidates = chainCandidatesWithAssets(fs)
+	return rep
+}
+
+// chainCandidatesWithAssets converts intel.DetectChains's output (keyed by
+// store finding ID) into report.ChainCandidate (keyed by the affected assets
+// instead) — used both by the generated report (where finding IDs don't
+// survive into the rendered sections, which get sequential F-01/F-02 IDs
+// instead) and by /api/intel/findings (where asset names are simply more
+// useful to a client than opaque IDs it would have to cross-reference).
+func chainCandidatesWithAssets(fs []*store.Finding) []report.ChainCandidate {
+	assetByID := make(map[string]string, len(fs))
+	for _, f := range fs {
+		assetByID[f.ID] = f.Asset
+	}
+	chains := intel.DetectChains(fs)
+	out := make([]report.ChainCandidate, 0, len(chains))
+	for _, c := range chains {
+		seen := map[string]bool{}
+		var assets []string
+		for _, id := range c.FindingIDs {
+			a := assetByID[id]
+			if a == "" || seen[a] {
+				continue
+			}
+			seen[a] = true
+			assets = append(assets, a)
+		}
+		out = append(out, report.ChainCandidate{
+			ID: c.ID, Title: c.Title, Severity: c.Severity, Explanation: c.Explanation, Assets: assets,
+			FindingIDs: c.FindingIDs,
+		})
+	}
+	// lidera pelo caminho de ataque mais grave — no relatório e no dashboard.
+	// Estável: empata na ordem de detecção do DetectChains.
+	rank := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+	wt := func(s string) int {
+		if r, ok := rank[strings.ToLower(s)]; ok {
+			return r
+		}
+		return 5
+	}
+	sort.SliceStable(out, func(i, j int) bool { return wt(out[i].Severity) < wt(out[j].Severity) })
+	return out
 }
 
 func (s *Server) reportJSON(w http.ResponseWriter, r *http.Request) {
@@ -730,15 +932,42 @@ func (s *Server) runWatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "watch": r.PathValue("name")})
 }
 
+// createProgramReq embeds scope.Program so every normal program field
+// decodes as usual, plus an optional Template name: when set, the
+// template's out_of_scope patterns are merged in (deduped by Save's own
+// normalize) and its platform fills in only if the request left Platform
+// empty. in_scope is NEVER touched by a template — that's always specific
+// to the program being onboarded.
+type createProgramReq struct {
+	scope.Program
+	Template string `json:"template,omitempty"`
+}
+
 func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 	if s.Programs == nil {
 		writeErr(w, http.StatusServiceUnavailable, "registro de programas indisponível")
 		return
 	}
-	var p scope.Program
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	var req createProgramReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
 		return
+	}
+	p := req.Program
+	if tplName := strings.TrimSpace(req.Template); tplName != "" {
+		if s.ScopeTemplates == nil {
+			writeErr(w, http.StatusBadRequest, "nenhum registro de templates de escopo configurado")
+			return
+		}
+		tpl, ok := s.ScopeTemplates.Get(tplName)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "template de escopo desconhecido: "+tplName)
+			return
+		}
+		p.OutOfScope = append(p.OutOfScope, tpl.OutOfScope...)
+		if strings.TrimSpace(p.Platform) == "" {
+			p.Platform = tpl.Platform
+		}
 	}
 	if err := s.Programs.Save(p); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -747,6 +976,76 @@ func (s *Server) createProgram(w http.ResponseWriter, r *http.Request) {
 	saved, _ := s.Programs.Get(strings.ToLower(strings.TrimSpace(p.Name)))
 	_ = project.Init(s.DataDir, saved.Name) // pasta do projeto — best-effort, um sync futuro a recria de qualquer jeito
 	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (s *Server) listScopeTemplates(w http.ResponseWriter, r *http.Request) {
+	var list []scopetemplate.Template
+	if s.ScopeTemplates != nil {
+		list = s.ScopeTemplates.List()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"templates": list})
+}
+
+func (s *Server) getScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusNotFound, "template não encontrado")
+		return
+	}
+	t, ok := s.ScopeTemplates.Get(r.PathValue("name"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "template não encontrado")
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (s *Server) createScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de templates de escopo indisponível")
+		return
+	}
+	var t scopetemplate.Template
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := s.ScopeTemplates.Save(t); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, _ := s.ScopeTemplates.Get(strings.ToLower(strings.TrimSpace(t.Name)))
+	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (s *Server) updateScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de templates de escopo indisponível")
+		return
+	}
+	name := r.PathValue("name")
+	var t scopetemplate.Template
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := s.ScopeTemplates.Update(name, t); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	saved, _ := s.ScopeTemplates.Get(strings.ToLower(strings.TrimSpace(name)))
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) deleteScopeTemplate(w http.ResponseWriter, r *http.Request) {
+	if s.ScopeTemplates == nil {
+		writeErr(w, http.StatusServiceUnavailable, "registro de templates de escopo indisponível")
+		return
+	}
+	if err := s.ScopeTemplates.Delete(r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // updateProgram edits an existing program's scope (in_scope/out_of_scope,
@@ -822,6 +1121,51 @@ func (s *Server) getNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"program": name, "notes": txt})
+}
+
+// getLessons reads the cross-program knowledge base (data/lessons.md) — one
+// file shared by every program, unlike notes.md which is per-program.
+func (s *Server) getLessons(w http.ResponseWriter, r *http.Request) {
+	txt, err := project.ReadLessons(s.DataDir)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lessons": txt})
+}
+
+// appendLesson adds one dated, attributed entry without touching what's
+// already recorded — the safe default for adding a lesson (see putLessons
+// for a wholesale rewrite).
+func (s *Server) appendLesson(w http.ResponseWriter, r *http.Request) {
+	var ls project.Lesson
+	if err := json.NewDecoder(r.Body).Decode(&ls); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.AppendLesson(s.DataDir, ls); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	txt, _ := project.ReadLessons(s.DataDir)
+	writeJSON(w, http.StatusCreated, map[string]any{"lessons": txt})
+}
+
+// putLessons overwrites lessons.md wholesale — for manual reorganizing or
+// cleanup, not the everyday way to add one lesson (use appendLesson/POST).
+func (s *Server) putLessons(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Lessons string `json:"lessons"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "corpo JSON inválido")
+		return
+	}
+	if err := project.WriteLessons(s.DataDir, body.Lessons); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // programCoverage reports which tools have run for a program and which
@@ -1061,6 +1405,185 @@ func (s *Server) getPipelineRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"run": run, "jobs": jobs})
 }
 
+type pipelineRunSummary struct {
+	ID        string     `json:"id"`
+	Pipeline  string     `json:"pipeline"`
+	Target    string     `json:"target"`
+	Status    string     `json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	StartedAt *time.Time `json:"started_at,omitempty"`
+	EndedAt   *time.Time `json:"ended_at,omitempty"`
+}
+
+func toPipelineRunSummary(r *store.PipelineRun) pipelineRunSummary {
+	return pipelineRunSummary{
+		ID: r.ID, Pipeline: r.Pipeline, Target: r.Target, Status: r.Status,
+		CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, EndedAt: r.EndedAt,
+	}
+}
+
+func pipelineRunEffStart(r *store.PipelineRun) time.Time {
+	if r.StartedAt != nil {
+		return *r.StartedAt
+	}
+	return r.CreatedAt
+}
+
+func pipelineRunEffEnd(r *store.PipelineRun) time.Time {
+	if r.EndedAt != nil {
+		return *r.EndedAt
+	}
+	return time.Now()
+}
+
+type findingDiffItem struct {
+	Type     string    `json:"type"`
+	Severity string    `json:"severity"`
+	Title    string    `json:"title"`
+	Tool     string    `json:"tool"`
+	Asset    string    `json:"asset,omitempty"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+func toFindingDiffItem(f *store.Finding) findingDiffItem {
+	return findingDiffItem{
+		Type: f.Type, Severity: f.Severity, Title: f.Title, Tool: f.Tool,
+		Asset: f.Asset, Count: f.Count, LastSeen: f.LastSeen,
+	}
+}
+
+type assetDiffItem struct {
+	Kind      string    `json:"kind"`
+	Value     string    `json:"value"`
+	Tool      string    `json:"tool"`
+	FirstSeen time.Time `json:"first_seen"`
+}
+
+type pipelineRunCompareResp struct {
+	RunEarlier             pipelineRunSummary `json:"run_earlier"`
+	RunLater               pipelineRunSummary `json:"run_later"`
+	NewFindings            []findingDiffItem  `json:"new_findings"`
+	ResolvedFindings       []findingDiffItem  `json:"resolved_findings"`
+	PersistedFindingsCount int                `json:"persisted_findings_count"`
+	NewAssets              []assetDiffItem    `json:"new_assets"`
+	Note                   string             `json:"note"`
+}
+
+// comparePipelineRuns diffs findings/assets between two runs of the SAME
+// pipeline against the SAME target+program — the only pairing where "sumiu
+// desde a última vez" reliably means "o tool rodou de novo e não achou mais",
+// not just "esse tool não rodou nesta run". Findings are deduplicated
+// globally by Key() (program+tool+type+asset+title), so a finding's JobID
+// always points at whichever job first created the row — re-confirmations
+// only bump Count/LastSeen on that same row. That's why this diff classifies
+// by CreatedAt/LastSeen falling inside each run's time window rather than by
+// JobID membership: it's the only signal that survives dedupe. Assets have
+// no such dedup (a fresh row per job even for an already-known value), so
+// "new asset" is decided by first-ever CreatedAt across the whole program.
+func (s *Server) comparePipelineRuns(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	idA, idB := strings.TrimSpace(q.Get("a")), strings.TrimSpace(q.Get("b"))
+	if idA == "" || idB == "" {
+		writeErr(w, http.StatusBadRequest, "informe ?a=<run_id>&b=<run_id>")
+		return
+	}
+	runA, ok := s.Store.GetPipelineRun(idA)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "run 'a' não encontrada")
+		return
+	}
+	runB, ok := s.Store.GetPipelineRun(idB)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "run 'b' não encontrada")
+		return
+	}
+	if runA.ID == runB.ID {
+		writeErr(w, http.StatusBadRequest, "'a' e 'b' são a mesma run")
+		return
+	}
+	if runA.Pipeline != runB.Pipeline {
+		writeErr(w, http.StatusBadRequest, "as duas runs precisam ser da MESMA pipeline — conjuntos de ferramentas diferentes tornam 'resolvido' inválido (o tool pode simplesmente não ter rodado de novo)")
+		return
+	}
+	if runA.Program == "" || runA.Program != runB.Program {
+		writeErr(w, http.StatusBadRequest, "as duas runs precisam ser do MESMO programa")
+		return
+	}
+	if runA.Target != runB.Target {
+		writeErr(w, http.StatusBadRequest, "as duas runs precisam ser do MESMO alvo")
+		return
+	}
+
+	earlier, later := runA, runB
+	if pipelineRunEffStart(later).Before(pipelineRunEffStart(earlier)) {
+		earlier, later = later, earlier
+	}
+	earlierEnd := pipelineRunEffEnd(earlier)
+	laterStart := pipelineRunEffStart(later)
+	laterEnd := pipelineRunEffEnd(later)
+	if laterStart.Before(earlierEnd) {
+		writeErr(w, http.StatusBadRequest, "as runs se sobrepõem no tempo — a comparação exige duas execuções sequenciais, não concorrentes")
+		return
+	}
+
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: earlier.Program, Target: earlier.Target, Limit: 100000})
+	var newF, resolvedF []findingDiffItem
+	persisted := 0
+	for _, f := range findings {
+		existedBeforeLater := !f.CreatedAt.After(earlierEnd)
+		reconfirmedInLater := !f.LastSeen.Before(laterStart) && !f.LastSeen.After(laterEnd)
+		newInLater := !f.CreatedAt.Before(laterStart) && !f.CreatedAt.After(laterEnd)
+		switch {
+		case newInLater:
+			newF = append(newF, toFindingDiffItem(f))
+		case existedBeforeLater && reconfirmedInLater:
+			persisted++
+		case existedBeforeLater && !reconfirmedInLater:
+			resolvedF = append(resolvedF, toFindingDiffItem(f))
+		}
+	}
+	sort.Slice(newF, func(i, j int) bool { return newF[i].LastSeen.Before(newF[j].LastSeen) })
+	sort.Slice(resolvedF, func(i, j int) bool { return resolvedF[i].LastSeen.Before(resolvedF[j].LastSeen) })
+
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: earlier.Program, Limit: 100000})
+	type firstSeenInfo struct {
+		at   time.Time
+		tool string
+	}
+	firstSeen := map[string]firstSeenInfo{}
+	for _, a := range assets {
+		k := a.Kind + "\x00" + a.Value
+		if cur, ok := firstSeen[k]; !ok || a.CreatedAt.Before(cur.at) {
+			firstSeen[k] = firstSeenInfo{at: a.CreatedAt, tool: a.Tool}
+		}
+	}
+	var newA []assetDiffItem
+	for k, info := range firstSeen {
+		if info.at.Before(laterStart) || info.at.After(laterEnd) {
+			continue
+		}
+		parts := strings.SplitN(k, "\x00", 2)
+		kind := parts[0]
+		value := ""
+		if len(parts) > 1 {
+			value = parts[1]
+		}
+		newA = append(newA, assetDiffItem{Kind: kind, Value: value, Tool: info.tool, FirstSeen: info.at})
+	}
+	sort.Slice(newA, func(i, j int) bool { return newA[i].FirstSeen.Before(newA[j].FirstSeen) })
+
+	writeJSON(w, http.StatusOK, pipelineRunCompareResp{
+		RunEarlier:             toPipelineRunSummary(earlier),
+		RunLater:               toPipelineRunSummary(later),
+		NewFindings:            newF,
+		ResolvedFindings:       resolvedF,
+		PersistedFindingsCount: persisted,
+		NewAssets:              newA,
+		Note:                   "classificação por janela de tempo (created_at/last_seen de cada run), não por execução exata — um job manual do mesmo tool+alvo rodado por fora dessas duas pipeline runs, bem no meio de uma das janelas, pode ser contado por engano. 'resolved' assume que o mesmo tool rodou de novo na run mais recente (mesma pipeline) e não reportou mais — se o achado for crítico, confirme manualmente antes de marcar como corrigido.",
+	})
+}
+
 func (s *Server) cancelPipelineRun(w http.ResponseWriter, r *http.Request) {
 	if s.Engine.CancelPipeline(r.PathValue("id")) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -1116,4 +1639,140 @@ func (s *Server) pipelineRunEvents(w http.ResponseWriter, r *http.Request) {
 			send(ev)
 		}
 	}
+}
+
+// Fase 7: getAnalytics retorna métricas e tendências de um programa
+func (s *Server) getAnalytics(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	_, err := s.resolveProgram(name)
+	if err != nil {
+		http.Error(w, "program not found", 400)
+		return
+	}
+
+	// Carregar dados do programa
+	jobs, _ := s.Store.ListJobs(store.JobFilter{Program: name, Limit: 10000})
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: name, Limit: 1000000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: name, Limit: 100000})
+
+	// Retornar estrutura básica
+	result := map[string]interface{}{
+		"program": name,
+		"metrics": map[string]interface{}{
+			"total_findings":    len(findings),
+			"jobs_run":          len(jobs),
+			"assets_discovered": len(assets),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// Fase 8: searchFindings busca findings com query avançada
+func (s *Server) searchFindings(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	progName := r.URL.Query().Get("program")
+
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: progName, Limit: 1000000})
+
+	// Se houver query, filtrar
+	if q != "" {
+		filtered := []*store.Finding{}
+		q = strings.ToLower(q)
+		for _, f := range findings {
+			if strings.Contains(strings.ToLower(f.Evidence), q) ||
+				strings.Contains(strings.ToLower(f.Asset), q) ||
+				strings.Contains(strings.ToLower(f.Target), q) ||
+				strings.Contains(strings.ToLower(f.Type), q) {
+				filtered = append(filtered, f)
+			}
+		}
+		findings = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"findings": findings})
+}
+
+// Fase 9: getTriageSuggestion retorna sugestão de triage automático
+func (s *Server) getTriageSuggestion(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	finding, ok := s.Store.GetFinding(id)
+	if !ok {
+		http.Error(w, "finding not found", 404)
+		return
+	}
+
+	// Carregar todos os findings do programa pra fazer análise comparativa
+	allFindings, _ := s.Store.ListFindings(store.FindingFilter{Program: finding.Program, Limit: 1000000})
+
+	// Gerar sugestão
+	suggestion := map[string]interface{}{
+		"finding_id": finding.ID,
+		"action":     "investigate",
+		"confidence": 50,
+		"reason":     "Análise de triage automático",
+	}
+
+	// Heurística simples: se já tem muitos do mesmo tipo, sugerir confirmar
+	sameTypeCount := 0
+	confirmedCount := 0
+	for _, f := range allFindings {
+		if f.Type == finding.Type {
+			sameTypeCount++
+			if f.Triage == "confirmed" {
+				confirmedCount++
+			}
+		}
+	}
+	if sameTypeCount >= 3 && confirmedCount >= 2 {
+		suggestion["action"] = "confirm"
+		suggestion["confidence"] = 80
+		suggestion["reason"] = "Este tipo de finding foi confirmado " + fmt.Sprintf("%d", confirmedCount) + " vezes antes"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(suggestion)
+}
+
+// Fase 12: getAssetHistory retorna histórico de um asset
+func (s *Server) getAssetHistory(w http.ResponseWriter, r *http.Request) {
+	assetValue := r.PathValue("value")
+
+	// Encontrar este asset em todas as detecções
+	allAssets, _ := s.Store.ListAssets(store.AssetFilter{Limit: 1000000})
+
+	// Simples: retornar histórico do asset
+	detections := 0
+	lastSeen := time.Time{}
+	firstSeen := time.Time{}
+
+	for _, a := range allAssets {
+		if a.Value == assetValue {
+			detections++
+			if lastSeen.IsZero() || a.CreatedAt.After(lastSeen) {
+				lastSeen = a.CreatedAt
+			}
+			if firstSeen.IsZero() || a.CreatedAt.Before(firstSeen) {
+				firstSeen = a.CreatedAt
+			}
+		}
+	}
+
+	result := map[string]interface{}{
+		"asset":      assetValue,
+		"detections": detections,
+		"first_seen": firstSeen,
+		"last_seen":  lastSeen,
+		"status":     "active",
+	}
+
+	if detections == 0 {
+		result["status"] = "not_found"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }

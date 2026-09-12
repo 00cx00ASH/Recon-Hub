@@ -1,0 +1,12 @@
+{
+  "name": "lfi-sweep",
+  "description": "Enumeração passiva (crt.sh) e, em cada host achado, teste de path traversal / LFI nos parâmetros que carregam arquivo (file, path, page, template, include…) — injeta ../../etc/passwd com 11 variantes de bypass (encoding simples/duplo, strip-once, null byte, absoluto, Windows) e confirma só quando a assinatura do arquivo de sistema aparece na resposta e some no baseline. Só lê arquivo como prova.",
+  "steps": [
+    { "tool": "recon-crtsh", "params": { "max": 300 } },
+    {
+      "tool": "scan-path-traversal",
+      "params": { "wordlist": "builtin/lfi-params", "max_params": 40, "concurrency": 15 },
+      "feed": { "param": "urls", "source": "assets", "kind": "subdomain", "as": "lines" }
+    }
+  ]
+}

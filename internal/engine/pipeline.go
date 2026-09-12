@@ -50,8 +50,12 @@ func (e *Engine) SubmitPipeline(pl pipeline.Pipeline, target string, program *sc
 	}
 	// snapshot before starting the background goroutine: runPipeline mutates
 	// run.Status/StartedAt/Steps concurrently, so copying after `go` races
-	// with those writes (caught by `go test -race`).
+	// with those writes (caught by `go test -race`). `rc := *run` é raso: o
+	// slice Steps compartilharia o mesmo array de run.Steps, que a goroutine
+	// muta (Status/JobID/Fed) — então a cópia precisa do seu próprio array de
+	// Steps, senão serializar rc no handler ainda corre contra a goroutine.
 	rc := *run
+	rc.Steps = append([]store.StepRun(nil), run.Steps...)
 	go e.runPipeline(pl, run, program)
 	return &rc, nil
 }

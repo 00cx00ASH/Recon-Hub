@@ -6,6 +6,7 @@ package scope
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -71,11 +72,25 @@ func (p Program) Contains(host string) bool {
 //	example.com     exact host
 //	*.example.com   example.com and any subdomain
 //	.example.com    any subdomain (not the apex)
+//	10.0.0.0/8      CIDR range — host must be a literal IP inside it
 func matchPattern(pattern, host string) bool {
 	pattern = cleanPattern(pattern)
 	switch {
 	case pattern == "":
 		return false
+	case strings.Contains(pattern, "/"):
+		// CIDR — cleanPattern() already ran it through net.ParseCIDR and
+		// normalized it (or left it untouched if invalid), so re-parsing
+		// here just recovers the *net.IPNet; a parse failure means the
+		// pattern was malformed garbage, not a real CIDR — fails closed
+		// (matches nothing) rather than silently degrading to a substring
+		// check that could match unrelated hosts.
+		_, ipNet, err := net.ParseCIDR(pattern)
+		if err != nil {
+			return false
+		}
+		ip := net.ParseIP(host)
+		return ip != nil && ipNet.Contains(ip)
 	case strings.HasPrefix(pattern, "*."):
 		root := pattern[2:]
 		return host == root || strings.HasSuffix(host, "."+root)
@@ -238,6 +253,11 @@ func (r *Registry) Delete(name string) error {
 	return r.Reload()
 }
 
+// CleanList normalizes a list of scope patterns: lowercase, trim, strip
+// scheme/path/port, dedup, drop empties. Exported so internal/scopetemplate
+// can normalize out_of_scope lists the same way a Program does.
+func CleanList(in []string) []string { return cleanList(in) }
+
 func cleanList(in []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -258,10 +278,22 @@ func cleanList(in []string) []string {
 // "example.com". The "*." and "." subdomain prefixes are preserved. Applied
 // both when scope is saved and at match time, so programs saved with messy
 // patterns still match correctly without re-editing.
+//
+// CIDR ranges ("10.0.0.0/8", "2001:db8::/32") are checked FIRST, before the
+// generic path-stripping below — that logic treats anything after a "/" as a
+// URL path to discard, which used to silently mangle a CIDR's prefix length
+// into a single host IP (in_scope "10.10.0.0/24" was saved as "10.10.0.0",
+// then never matched anything else in the range — a lab/internal subnet
+// pasted as scope looked "accepted" but every real target in it came back
+// "fora do escopo"). net.ParseCIDR is the one authority on what's a valid
+// CIDR; nothing else in this function gets to guess.
 func cleanPattern(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
 	if i := strings.Index(s, "://"); i >= 0 {
 		s = s[i+3:]
+	}
+	if _, ipNet, err := net.ParseCIDR(s); err == nil {
+		return ipNet.String()
 	}
 	if i := strings.IndexByte(s, '/'); i >= 0 {
 		s = s[:i]

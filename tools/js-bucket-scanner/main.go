@@ -43,10 +43,12 @@ func main() {
 	tc := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}
 	tr := &http.Transport{TLSClientConfig: tc, DisableKeepAlives: true,
 		DialContext: dialer(cfg.timeout)}
+	applyProxy(tr, cfg.timeout)
+	onRotate := func(msg string) { out.emit(event{Type: "log", Level: "info", Msg: msg}) }
 	t := &target{
 		doJS: cfg.js, doMaps: cfg.maps, timeout: cfg.timeout,
-		client: &http.Client{Timeout: cfg.timeout, Transport: tr},
-		probe: &http.Client{Timeout: cfg.timeout, Transport: tr,
+		client: &http.Client{Timeout: cfg.timeout, Transport: withBlockRotation(tr, onRotate)},
+		probe: &http.Client{Timeout: cfg.timeout, Transport: withBlockRotation(tr, onRotate),
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 

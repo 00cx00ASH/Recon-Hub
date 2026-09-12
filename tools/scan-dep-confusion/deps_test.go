@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 )
 
 func names(ds []dep) []string {
@@ -15,6 +16,40 @@ func names(ds []dep) []string {
 	}
 	sort.Strings(n)
 	return n
+}
+
+// TestHarvestSiteReturnsErrorInsteadOfCrashing é o teste de regressão pro
+// bug real achado em triagem: harvestSite() matava o processo inteiro
+// (os.Exit(2)) na 1ª página que não carregasse — um job com várias URLs
+// (site-list/urls) perdia TODO o resultado por causa de uma única URL ruim
+// (DNS não resolveu, wildcard passado literal por engano, timeout). Agora
+// devolve erro e quem chama decide (main() loga e pula pra próxima).
+func TestHarvestSiteReturnsErrorInsteadOfCrashing(t *testing.T) {
+	client = &http.Client{Timeout: 3 * time.Second}
+	if _, err := harvestSite("http://this-host-definitely-does-not-exist.invalid.test/"); err == nil {
+		t.Fatal("esperava erro pra host que não resolve, veio nil")
+	}
+}
+
+func TestHarvestSiteContinuesAfterOnePageFails(t *testing.T) {
+	client = &http.Client{Timeout: 3 * time.Second}
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><script>import x from "totally-confusable-pkg-name-xyz";</script></html>`))
+	}))
+	defer good.Close()
+
+	pages := []string{"http://this-host-definitely-does-not-exist.invalid.test/", good.URL}
+	var got []string
+	for _, p := range pages {
+		names, err := harvestSite(p)
+		if err != nil {
+			continue // exatamente o comportamento de main() depois da correção
+		}
+		got = append(got, names...)
+	}
+	if len(got) != 1 || got[0] != "totally-confusable-pkg-name-xyz" {
+		t.Fatalf("esperava achar o import da página boa mesmo com a 1ª falhando, veio: %v", got)
+	}
 }
 
 func TestParseNPM(t *testing.T) {

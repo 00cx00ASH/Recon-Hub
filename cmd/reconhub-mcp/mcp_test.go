@@ -29,6 +29,68 @@ func fakeHub(t *testing.T) (*hubClient, *httptest.Server) {
 		}
 		w.Write([]byte(`{"findings":[]}`))
 	})
+	mux.HandleFunc("GET /api/intel/findings", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("program") != "acme" {
+			t.Errorf("intel/findings: query program ausente: %s", r.URL.RawQuery)
+		}
+		w.Write([]byte(`{"findings":[],"groups":[],"chains":[{"id":"open-redirect-oauth","title":"x","severity":"high","explanation":"y","assets":["https://login.acme.com/go","https://login.acme.com/authorize"]}]}`))
+	})
+	mux.HandleFunc("POST /api/findings/{id}/triage", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if r.PathValue("id") != "f1" || body["verdict"] != "confirmed" {
+			t.Errorf("triage: id/body inesperado: id=%s body=%v", r.PathValue("id"), body)
+		}
+		reason, _ := body["reason"].(string)
+		w.Write([]byte(`{"id":"f1","triage":"confirmed","triage_reason":"` + reason + `"}`))
+	})
+	mux.HandleFunc("POST /api/programs", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["name"] != "acme" {
+			t.Errorf("create_program: corpo inesperado: %v", body)
+		}
+		w.WriteHeader(201)
+		w.Write([]byte(`{"name":"acme","in_scope":["*.acme.com"]}`))
+	})
+	mux.HandleFunc("GET /api/findings/{id}/draft.md", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Write([]byte("# Relatório de recon — finding " + r.PathValue("id") + "\n"))
+	})
+	mux.HandleFunc("GET /api/programs/{name}/report.md", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Write([]byte("# Relatório — " + r.PathValue("name") + "\n"))
+	})
+	mux.HandleFunc("GET /api/pipeline-runs/compare", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("a") != "runA" || r.URL.Query().Get("b") != "runB" {
+			t.Errorf("compare: query inesperada: %s", r.URL.RawQuery)
+		}
+		w.Write([]byte(`{"new_findings":[],"resolved_findings":[],"persisted_findings_count":0,"new_assets":[]}`))
+	})
+	mux.HandleFunc("GET /api/scope-templates", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"templates":[{"name":"saas-noise","out_of_scope":["status.acme.com"]}]}`))
+	})
+	mux.HandleFunc("POST /api/scope-templates", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["name"] != "saas-noise" {
+			t.Errorf("create_scope_template: corpo inesperado: %v", body)
+		}
+		w.WriteHeader(201)
+		w.Write([]byte(`{"name":"saas-noise","out_of_scope":["status.acme.com"]}`))
+	})
+	mux.HandleFunc("GET /api/lessons", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"lessons":"# Lições\n\n- **2026-01-01** este WAF bloqueia após 20 req/10s\n"}`))
+	})
+	mux.HandleFunc("POST /api/lessons", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["text"] != "este WAF bloqueia após 20 req/10s" {
+			t.Errorf("add_lesson: corpo inesperado: %v", body)
+		}
+		w.WriteHeader(201)
+		w.Write([]byte(`{"lessons":"# Lições\n\n- **2026-01-01** este WAF bloqueia após 20 req/10s\n"}`))
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &hubClient{base: srv.URL, http: &http.Client{Timeout: 5 * time.Second}}, srv
@@ -61,8 +123,8 @@ func TestInitializeAndList(t *testing.T) {
 
 	resp, _ = handle(&rpcRequest{ID: json.RawMessage(`2`), Method: "tools/list"}, reg)
 	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
-	if len(tools) != 12 {
-		t.Fatalf("esperava 12 tools MCP, veio %d", len(tools))
+	if len(tools) != 22 {
+		t.Fatalf("esperava 22 tools MCP, veio %d", len(tools))
 	}
 	if tools[0]["name"] != "hub_list_tools" {
 		t.Fatalf("ordem inesperada: %v", tools[0]["name"])
@@ -91,6 +153,166 @@ func TestCallForwardsToHub(t *testing.T) {
 
 	// query params encaminhados
 	callTool(t, reg, "hub_list_findings", map[string]any{"severity": "high"})
+}
+
+func TestListChainCandidates(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_list_chain_candidates", map[string]any{"program": "acme"})
+	if out["isError"] == true {
+		t.Fatalf("list_chain_candidates deu erro: %v", out)
+	}
+	txt := out["content"].([]map[string]any)[0]["text"].(string)
+	if !contains(txt, "open-redirect-oauth") {
+		t.Fatalf("resposta sem o chain candidate esperado: %s", txt)
+	}
+	if contains(txt, `"findings"`) || contains(txt, `"groups"`) {
+		t.Fatalf("resposta deveria conter só \"chains\", veio o payload inteiro de /api/intel/findings: %s", txt)
+	}
+}
+
+func TestTriageFinding(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_triage_finding", map[string]any{
+		"id": "f1", "verdict": "confirmed", "reason": "testado manualmente, bucket abre de verdade",
+	})
+	if out["isError"] == true {
+		t.Fatalf("triage_finding deu erro: %v", out)
+	}
+	txt := out["content"].([]map[string]any)[0]["text"].(string)
+	if !contains(txt, "confirmed") || !contains(txt, "bucket abre de verdade") {
+		t.Fatalf("triage_finding sem verdict/reason: %s", txt)
+	}
+}
+
+func TestTriageFindingMissingRequiredArgs(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+	out := callTool(t, reg, "hub_triage_finding", map[string]any{"id": "f1"}) // falta verdict
+	if out["isError"] != true {
+		t.Fatalf("esperava isError=true, veio %v", out)
+	}
+}
+
+func TestCreateProgram(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_create_program", map[string]any{
+		"name": "acme", "in_scope": []any{"*.acme.com", "acme.com"},
+	})
+	if out["isError"] == true {
+		t.Fatalf("create_program deu erro: %v", out)
+	}
+	txt := out["content"].([]map[string]any)[0]["text"].(string)
+	if !contains(txt, "acme") {
+		t.Fatalf("create_program sem o nome: %s", txt)
+	}
+}
+
+func TestCreateProgramRequiresInScope(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+	// in_scope ausente inteiramente
+	out := callTool(t, reg, "hub_create_program", map[string]any{"name": "acme"})
+	if out["isError"] != true {
+		t.Fatalf("esperava isError=true (sem in_scope), veio %v", out)
+	}
+	// in_scope presente mas vazio
+	out = callTool(t, reg, "hub_create_program", map[string]any{"name": "acme", "in_scope": []any{}})
+	if out["isError"] != true {
+		t.Fatalf("esperava isError=true (in_scope vazio), veio %v", out)
+	}
+}
+
+func TestDraftFindingAndProgramReport(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_draft_finding", map[string]any{"id": "f1"})
+	if out["isError"] == true {
+		t.Fatalf("draft_finding deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "f1") {
+		t.Fatalf("draft_finding sem o id: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_program_report", map[string]any{"program": "acme"})
+	if out["isError"] == true {
+		t.Fatalf("program_report deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "acme") {
+		t.Fatalf("program_report sem o nome do programa: %s", txt)
+	}
+}
+
+func TestComparePipelineRuns(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_compare_pipeline_runs", map[string]any{"a": "runA", "b": "runB"})
+	if out["isError"] == true {
+		t.Fatalf("compare_pipeline_runs deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "persisted_findings_count") {
+		t.Fatalf("compare_pipeline_runs sem o campo esperado: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_compare_pipeline_runs", map[string]any{"a": "runA"}) // falta b
+	if out["isError"] != true {
+		t.Fatalf("faltando b deveria dar erro: %v", out)
+	}
+}
+
+func TestScopeTemplates(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_list_scope_templates", map[string]any{})
+	if out["isError"] == true {
+		t.Fatalf("list_scope_templates deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "saas-noise") {
+		t.Fatalf("list_scope_templates sem o template: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_create_scope_template", map[string]any{
+		"name": "saas-noise", "out_of_scope": []any{"status.acme.com"},
+	})
+	if out["isError"] == true {
+		t.Fatalf("create_scope_template deu erro: %v", out)
+	}
+
+	out = callTool(t, reg, "hub_create_scope_template", map[string]any{"name": "no-oos"}) // falta out_of_scope
+	if out["isError"] != true {
+		t.Fatalf("out_of_scope vazio deveria dar erro: %v", out)
+	}
+}
+
+func TestLessons(t *testing.T) {
+	h, _ := fakeHub(t)
+	reg := buildTools(h)
+
+	out := callTool(t, reg, "hub_get_lessons", map[string]any{})
+	if out["isError"] == true {
+		t.Fatalf("get_lessons deu erro: %v", out)
+	}
+	if txt := out["content"].([]map[string]any)[0]["text"].(string); !contains(txt, "WAF bloqueia") {
+		t.Fatalf("get_lessons sem a lição: %s", txt)
+	}
+
+	out = callTool(t, reg, "hub_add_lesson", map[string]any{"text": "este WAF bloqueia após 20 req/10s"})
+	if out["isError"] == true {
+		t.Fatalf("add_lesson deu erro: %v", out)
+	}
+
+	out = callTool(t, reg, "hub_add_lesson", map[string]any{}) // falta text
+	if out["isError"] != true {
+		t.Fatalf("texto ausente deveria dar erro: %v", out)
+	}
 }
 
 func TestCallMissingRequiredArg(t *testing.T) {

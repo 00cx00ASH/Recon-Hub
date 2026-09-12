@@ -3,26 +3,37 @@ package main
 import "strings"
 
 // classify decides whether the response body proves a reflected-XSS
-// candidate for the payload sent — marker + the special characters that
-// prefix it (see buildPayload). It never looks for JS execution (this tool
-// makes plain HTTP requests, nothing ever runs); it only proves that
-// HTML-breaking characters survived unescaped in the response text, which is
-// the same "confirm from the real response" bar every other scanner in this
-// repo holds itself to.
+// candidate for the payload sent (see xssVariants). It never looks for JS
+// execution (this tool makes plain HTTP requests, nothing ever runs); it
+// only proves that HTML-breaking characters survived unescaped in the
+// response text, which is the same "confirm from the real response" bar
+// every other scanner in this repo holds itself to.
 //
-// Two tiers:
-//   - "<" + marker present raw  → real tag injection is possible regardless
-//     of surrounding context. Always high.
-//   - a quote (" or ') + marker present raw, but no "<" + marker → the value
-//     broke out of its quoting, but without an unescaped "<" there's no bare
-//     tag injection. Inside a <script> block that's still a real JS-string
-//     breakout (classic "\";alert(1)//" pattern) → high. Outside a script
-//     block it depends on the surrounding attribute the operator still needs
-//     to eyeball → medium.
+// Three tiers, checked in order:
+//   - the FULL payload present raw → strongest signal, works for every
+//     variant regardless of which tag/event it uses (a filter that blocks
+//     "<script" but not "<svg" still lets this whole string through
+//     unescaped). Always high.
+//   - "<" + marker present raw (but not the full payload — e.g. quotes got
+//     stripped while "<" survived) → real tag injection is still possible.
+//     Always high.
+//   - a quote (" or ') + marker present raw, but neither of the above → the
+//     value broke out of its quoting without an unescaped "<". Inside a
+//     <script> block that's still a real JS-string breakout (classic
+//     "\";alert(1)//" pattern) → high. Outside a script block it depends on
+//     the surrounding attribute the operator still needs to eyeball →
+//     medium.
 //
 // Anything else (marker not reflected, or reflected but every special
 // character got stripped/escaped) is not a finding — returns ok=false.
-func classify(body, marker string) (sev, ftype, context string, ok bool) {
+func classify(body, payload, marker string) (sev, ftype, context string, ok bool) {
+	if strings.Contains(body, payload) {
+		ctx := "dentro de <script>"
+		if !inScriptContext(body, strings.Index(body, payload)) {
+			ctx = "corpo HTML"
+		}
+		return "high", "reflected-xss", ctx + " — payload completo refletido sem escapar nenhum caractere", true
+	}
 	if strings.Contains(body, "<"+marker) {
 		ctx := "dentro de <script>"
 		if !inScriptContext(body, strings.Index(body, "<"+marker)) {
@@ -62,10 +73,29 @@ func inScriptContext(body string, idx int) bool {
 	return lastOpen > lastClose
 }
 
-// buildPayload is the single probe value sent per (url, param): a quote, an
-// apostrophe and an angle-bracket, all in front of the marker. One request
-// tests every signal classify() looks for — matches the "one hit, stop
-// testing this task" pattern the rest of the repo's scanners use.
-func buildPayload(marker string) string {
-	return `"'><` + marker
+// xssVariant is one probe value + a short label for what it tests, so a
+// confirmed finding can say WHICH technique got through (useful when the
+// baseline is blocked but a later variant isn't — that difference is itself
+// evidence of a selective filter/WAF, not just "vulnerable or not").
+type xssVariant struct {
+	Technique string
+	Payload   string
+}
+
+// xssVariants returns the probe values tried, in order, for one (url,
+// param) — testing stops at the first confirmed hit (same "one hit, stop
+// testing this task" pattern the rest of the repo's scanners use), but
+// trying more than one variant before giving up matters here specifically:
+// classify() only ever proves what actually came back unescaped, so a
+// single fixed payload gives up the instant it happens to collide with
+// whatever that one app/WAF filters — variantes que usam tags/técnicas
+// diferentes existem pra não desistir cedo demais só por causa da baseline
+// específica.
+func xssVariants(marker string) []xssVariant {
+	return []xssVariant{
+		{"quebra genérica de aspas/tag", `"'><` + marker},
+		{"tag <svg onload> — bypass de blacklist que só filtra <script>", `<svg onload=` + marker + `>`},
+		{"tag <img onerror> — bypass de blacklist que só filtra <script>/<svg>", `<img src=x onerror=` + marker + `>`},
+		{"case misto <ScRiPt> — bypass de filtro case-sensitive pra \"script\"", `<ScRiPt>` + marker + `</sCriPt>`},
+	}
 }

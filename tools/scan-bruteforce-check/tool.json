@@ -1,0 +1,26 @@
+{
+  "name": "scan-bruteforce-check",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Confirma AUSÊNCIA de rate limiting/lockout num endpoint de login ou OTP: envia um número pequeno e travado de tentativas de credencial errada (teto rígido de 10, nunca força bruta de verdade) contra uma conta de TESTE descartável do operador, e para assim que detecta qualquer sinal de proteção — 429, Retry-After, CAPTCHA/mensagem de bloqueio na resposta, mudança de status/tamanho, ou latência escalando.",
+  "guide": "Alvo = a URL do endpoint de login/OTP (POST). Precisa de params.username: uma conta de TESTE DESCARTÁVEL do próprio operador — NUNCA a conta principal, porque se existir lockout de verdade essa conta pode ficar temporariamente bloqueada (é exatamente isso que estamos testando). Por padrão manda JSON {username, password}; ajuste username_field/password_field se os nomes forem outros (ex: 'email', 'code' pra OTP), ou content_type=form pra x-www-form-urlencoded. extra_fields aceita um JSON de campos estáticos extras (ex: {\"grant_type\":\"password\"}) quando o endpoint exige mais do que usuário+senha.",
+  "validation": "Sem proteção: todas as N tentativas voltam com o mesmo status/tamanho de corpo, sem CAPTCHA/429/Retry-After/mensagem de bloqueio e sem latência crescente — aí sim é reportável como ausência de rate limiting. Qualquer um desses sinais aparecendo já interrompe o scan (a proteção existe, não há o que reportar) e é logado, não tratado como finding.",
+  "exec": ["go", "run", "."],
+  "timeout": "1m",
+  "modes": [
+    { "name": "single", "label": "Endpoint de login/OTP", "help": "URL do endpoint que recebe a tentativa de autenticação (POST)" }
+  ],
+  "params": [
+    { "name": "username", "type": "string", "required": true, "help": "conta de TESTE descartável do operador — nunca a conta principal" },
+    { "name": "username_field", "type": "string", "required": false, "default": "username", "help": "nome do campo de usuário/e-mail no body" },
+    { "name": "password_field", "type": "string", "required": false, "default": "password", "help": "nome do campo de senha/código no body" },
+    { "name": "content_type", "type": "string", "required": false, "default": "json", "help": "'json' ou 'form'" },
+    { "name": "extra_fields", "type": "string", "required": false, "help": "JSON de campos estáticos extras do body, ex: {\"grant_type\":\"password\"}" },
+    { "name": "attempts", "type": "int", "required": false, "default": 5, "help": "tentativas de senha errada a enviar (teto rígido: 10)" },
+    { "name": "delay_ms", "type": "int", "required": false, "default": 400, "help": "intervalo entre tentativas em ms (piso: 150)" },
+    { "name": "length_tolerance_pct", "type": "int", "required": false, "default": 25, "help": "variação de tamanho de corpo tolerada, em %, antes de considerar 'resposta mudou'" },
+    { "name": "latency_mult", "type": "int", "required": false, "default": 3, "help": "quantas vezes a latência da 1ª tentativa conta como escalada de rate limiting por atraso" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

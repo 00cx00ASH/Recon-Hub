@@ -28,6 +28,14 @@ var (
 	gcpMetaKeys   = []string{"computeMetadata", "instance/service-accounts", "project/project-id"}
 	azureMetaKeys = []string{"\"compute\"", "\"osType\"", "\"vmId\"", "azEnvironment"}
 	etcPasswdRe   = regexp.MustCompile(`root:.*:0:0:`)
+	// Alibaba Cloud (endpoint próprio 100.100.100.200): region-id/owner-account-id
+	// não aparecem nas outras clouds e não são substring da URL injetada.
+	alibabaMetaKeys = []string{"region-id", "owner-account-id", "zone-id"}
+	// OCI (mesmo 169.254.169.254, path próprio): campos exclusivos do JSON.
+	ociMetaKeys = []string{"compartmentId", "availabilityDomain", "ociAdName"}
+	// Kubernetes API server sem token responde um JSON de erro reconhecível —
+	// confirma que alcançou o control plane, não um 404 genérico na porta 443.
+	k8sAPIKeys = []string{"\"kind\":\"Status\"", "system:anonymous", "system:serviceaccount"}
 )
 
 // stripReflected removes literal echoes of the injected payload URL from
@@ -87,6 +95,18 @@ func ssrfTargets() []ssrfTarget {
 		{
 			Label: "azure-metadata", URL: "http://169.254.169.254/metadata/instance?api-version=2021-02-01", Sev: "critical",
 			confirm: func(body string) bool { return countHits(body, azureMetaKeys) >= 2 },
+		},
+		{
+			Label: "alibaba-metadata", URL: "http://100.100.100.200/latest/meta-data/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, alibabaMetaKeys) >= 2 },
+		},
+		{
+			Label: "oci-metadata", URL: "http://169.254.169.254/opc/v2/instance/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, ociMetaKeys) >= 2 },
+		},
+		{
+			Label: "k8s-api-server", URL: "https://kubernetes.default.svc/api/v1/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, k8sAPIKeys) >= 2 },
 		},
 		// localhost/loopback não tem assinatura genérica de conteúdo — vira
 		// candidato (probe() decide por diferencial contra o baseline), nunca

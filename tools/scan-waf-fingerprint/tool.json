@@ -1,0 +1,22 @@
+{
+  "name": "scan-waf-fingerprint",
+  "version": "0.2.0",
+  "language": "Go",
+  "category": "recon",
+  "summary": "Identifica o WAF/CDN de proteção na frente de um alvo por duas vias de baixo falso-positivo: (1) assinatura de vendor em headers/cookies/corpo de qualquer resposta (cf-ray, x-sucuri-id, incap_ses, 'Support ID:' do F5, ModSecurity, etc) e (2) comportamental — uma requisição benigna passa mas um payload malicioso é BLOQUEADO (403/406/429/501/503). Reconhece Cloudflare, Akamai, AWS CloudFront/WAF, Imperva Incapsula, Sucuri, F5 BIG-IP, ModSecurity, Barracuda, Wordfence, FortiWeb, Wallarm, Citrix NetScaler, Fastly. É CONTEXTO de metodologia (info), não uma vulnerabilidade.",
+  "guide": "Alvo = URL raiz de um serviço web (https://target.com). A ferramenta faz um GET limpo pra medir o baseline, roda a assinatura de vendor nos headers/cookies/corpo, e — se o baseline passou — manda alguns payloads claramente maliciosos em query string pra ver se o alvo bloqueia (403/429/etc). Use ANTES de escalar scanners: saber que há Cloudflare na frente explica 403s que não são da aplicação e orienta encoding/rotação de circuito. Um 400 nunca é tratado como WAF (é request malformado).",
+  "validation": "Exemplo 1 (vendor): GET https://x.com devolve header 'cf-ray' → Cloudflare identificado passivamente, sem precisar de payload. Exemplo 2 (comportamental): GET /busca devolve 200; GET /busca?wafprobe=<script>alert(1)</script> devolve 403 → filtragem ativa confirmada (baseline 200 vs payload 403). Exemplo 3 (negativo): site atrás de nginx puro, baseline 200 e payloads também 200/404 → nenhum WAF identificado (notice em log, sem finding).",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "identifica o WAF de uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "múltiplas URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com URLs, uma por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por nova linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo com URLs, uma por linha" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 5, "help": "alvos simultâneos" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 8000, "help": "timeout por requisição" }
+  ]
+}

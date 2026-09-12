@@ -1,8 +1,10 @@
-// scan-xss — injeta um marcador único com caracteres de quebra de HTML
-// ("'><MARKER) em parâmetros e confirma XSS refletido só quando esses
-// caracteres voltam sem escapar na resposta real (nunca executa nada —
-// é análise de texto puro sobre o corpo HTTP). Contrato NDJSON do
-// recon-hub no stdout.
+// scan-xss — injeta um marcador único em parâmetros, tentando várias
+// variantes de payload em sequência por (URL, param) até achar uma que
+// volte sem escapar (ver xssVariants em detect.go — quebra genérica de
+// aspas/tag, tags alternativas pra bypass de blacklist de <script>, case
+// misto) — e confirma XSS refletido só quando isso acontece na resposta
+// real (nunca executa nada — é análise de texto puro sobre o corpo HTTP).
+// Contrato NDJSON do recon-hub no stdout.
 package main
 
 import (
@@ -150,13 +152,15 @@ func main() {
 		params = params[:maxParams]
 	}
 
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
 	client := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-			DisableKeepAlives: true,
-			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-		},
+		Timeout:   timeout,
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 
 	// tarefas: (base, param). Cada uma testa 1 payload e para se der hit.
@@ -182,26 +186,39 @@ func main() {
 		defer wg.Done()
 		for t := range ch {
 			marker := randMarker()
-			pay := buildPayload(marker)
-			u := withParam(t.base, t.param, pay)
-			if u == "" {
-				continue
+			var (
+				found                               bool
+				sev, ftype, context, pay, technique string
+				u                                   string
+			)
+			for _, v := range xssVariants(marker) {
+				u = withParam(t.base, t.param, v.Payload)
+				if u == "" {
+					continue
+				}
+				mu2.Lock()
+				reqs++
+				mu2.Unlock()
+				var ok bool
+				sev, ftype, context, ok = probe(client, u, v.Payload, marker)
+				if ok {
+					found = true
+					pay = v.Payload
+					technique = v.Technique
+					break
+				}
 			}
-			mu2.Lock()
-			reqs++
-			mu2.Unlock()
-			sev, ftype, context, ok := probe(client, u, marker)
-			if ok {
+			if found {
 				mu2.Lock()
 				hit++
 				mu2.Unlock()
 				emit(ev{Type: "asset", Kind: "url", Value: u})
 				emit(ev{
 					Type: "finding", Severity: sev, FindingType: ftype,
-					Title:    "XSS refletido em " + t.param + " (" + hostOf(t.base) + ")",
+					Title:    "XSS refletido em " + t.param + " (" + hostOf(t.base) + ") — " + technique,
 					Asset:    u,
-					Evidence: fmt.Sprintf("param %q, payload %q → %s", t.param, pay, context),
-					Meta:     map[string]any{"param": t.param, "payload": pay, "context": context},
+					Evidence: fmt.Sprintf("param %q, técnica %q, payload %q → %s", t.param, technique, pay, context),
+					Meta:     map[string]any{"param": t.param, "payload": pay, "technique": technique, "context": context},
 				})
 			}
 			mu2.Lock()
@@ -227,7 +244,7 @@ func main() {
 }
 
 // probe faz o GET com o payload e classifica a resposta.
-func probe(c *http.Client, u, marker string) (sev, ftype, context string, ok bool) {
+func probe(c *http.Client, u, payload, marker string) (sev, ftype, context string, ok bool) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return "", "", "", false
@@ -240,7 +257,7 @@ func probe(c *http.Client, u, marker string) (sev, ftype, context string, ok boo
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
-	return classify(string(body), marker)
+	return classify(string(body), payload, marker)
 }
 
 // applyAuth attaches the operator's shared auth context for this program —

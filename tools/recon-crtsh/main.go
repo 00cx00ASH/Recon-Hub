@@ -155,12 +155,14 @@ func main() {
 
 func fetchCrtsh(domain string, timeout time.Duration) ([]crtRow, error) {
 	endpoint := "https://crt.sh/?q=" + url.QueryEscape("%."+domain) + "&output=json"
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+		DisableKeepAlives: true,
+	}
+	applyProxy(transport, timeout)
 	client := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-			DisableKeepAlives: true,
-		},
+		Timeout:   timeout,
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 	const attempts = 4
 	var lastErr error
@@ -212,9 +214,11 @@ func parseCrtshBody(body []byte) ([]crtRow, error) {
 func fetchCertspotter(domain string, timeout time.Duration) ([]string, error) {
 	endpoint := "https://api.certspotter.com/v1/issuances?domain=" + url.QueryEscape(domain) +
 		"&include_subdomains=true&expand=dns_names"
+	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, DisableKeepAlives: true}
+	applyProxy(transport, timeout)
 	client := &http.Client{
 		Timeout:   timeout,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, DisableKeepAlives: true},
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 	}
 	req, _ := http.NewRequest(http.MethodGet, endpoint, nil)
 	req.Header.Set("User-Agent", "recon-hub/recon-crtsh")

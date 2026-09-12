@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "language": "Go",
   "category": "scan",
-  "summary": "Testa parâmetros de redirect (url, next, return_to, callback, …) com payloads de bypass (//, \\\\, https:/, userinfo @, sufixo confuso, whitespace) e CONFIRMA o open redirect pelo destino real da resposta — Location de 3xx ou redirect client-side (meta refresh / location JS) — apontando pro canary inofensivo example.com.",
+  "summary": "Testa parâmetros de redirect (url, next, return_to, callback, …) com 22 payloads de bypass (//, \\\\, https:/, userinfo @ simples e duplo, sufixo confuso, whitespace/CR/tab/newline, double-URL-encoding, barra unicode fullwidth) e CONFIRMA o open redirect pelo destino real da resposta — Location de 3xx ou redirect client-side (meta refresh / location JS) — apontando pro canary inofensivo example.com.",
   "guide": "Alvo = uma URL http/https, de preferência já com o parâmetro suspeito na query (ex https://site.com/login?next=/home). Sem query ele testa os nomes da wordlist assim mesmo. O canary é example.com (reservado pela IANA, navegar pra lá não faz nada) — troque em 'canary' se precisar. wordlist = lista de NOMES de parâmetro; a embutida (builtin/open-redirect-params) já cobre os comuns. Modos lista/arquivo varrem várias URLs.",
   "validation": "Exemplo confirmado: /login?next=//evil.com respondendo Location: https://evil.com (ou equivalente client-side) — o destino real bate com o canary, não é só o payload aparecendo na URL. Opere em URLs que já têm um parâmetro de redirect na query sempre que possível; sem isso, a ferramenta testa os nomes da wordlist, mas a taxa de acerto cai bastante.",
   "exec": ["go", "run", "."],

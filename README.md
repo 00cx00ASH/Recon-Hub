@@ -345,26 +345,70 @@ toda requisição** da ferramenta nesse projeto — é assim que dá pra trocar
 o IP de saída.
 
 **Tor embutido, sem serviço pago:** o repo já traz um sidecar de Tor
-(`docker/tor/`) — sobe junto com um flag, sem publicar nada pro host (só é
-alcançável de dentro do container do hub):
-
-```bash
-docker compose --profile tor up -d --build
-```
+(`docker/tor/`) que sobe **sempre junto**, sem flag nenhuma — `docker compose
+up -d --build` já inclui o container Tor, sem publicar nada pro host (só é
+alcançável de dentro do container do hub). Ele fica disponível o tempo todo,
+mas **nenhum tráfego passa por ele até você configurar** — continua opt-in
+por programa, de propósito: alguns programas de bug bounty proíbem
+explicitamente teste via IP anonimizado, então nada deve ser roteado por Tor
+sem você confirmar isso pra aquele programa específico.
 
 Configure o projeto com `socks5://127.0.0.1:9050` no campo Proxy e pronto —
-o tráfego daquele projeto passa pela rede Tor. Se um alvo te bloquear no
-meio do trabalho, pedir um circuito novo troca o nó de saída (e portanto o
-IP) sem precisar reiniciar nada:
+o tráfego daquele projeto passa pela rede Tor.
+
+**Rotação de circuito automática.** Se um alvo bloquear no meio do trabalho
+(429/403 repetidos), a ferramenta já pede um circuito novo sozinha — troca o
+nó de saída (e portanto o IP) sem você precisar fazer nada. Isso é feito
+falando o protocolo de controle do Tor direto (`AUTHENTICATE ""` +
+`SIGNAL NEWNYM`, só possível porque o control port nunca sai do namespace de
+rede do container), com um limiar de tentativas de bloqueio consecutivas
+antes de rotacionar (`RECONHUB_PROXY_BLOCK_THRESHOLD`, default 5) e um
+cooldown de 20s entre rotações pra não martelar o control port. O comando
+manual continua funcionando como fallback, se você quiser forçar uma
+rotação a qualquer momento:
 
 ```bash
 docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
 ```
 
-Hoje isso está implementado em `recon-web-enum` e `scan-fuzz` (as ferramentas
-que mais geram volume de requisições, portanto as mais propensas a levar
-bloqueio) — o padrão está documentado em `docs/TOOL_CONTRACT.md` pra outras
-ferramentas adotarem aos poucos.
+Hoje isso está implementado em 36 das 41 ferramentas (todas as que falam
+HTTP com o alvo). As 5 que ficam de fora, de propósito, porque não usam
+`http.Client` — falam TCP cru, resolvem DNS ou dirigem um navegador:
+`scan-mongodb` (wire protocol do MongoDB), `recon-infra-enum` (port
+scan/banner grab), `recon-subdomain-brute` (brute force de DNS via
+`miekg/dns`, sem HTTP com o alvo), `scan-smuggling` (mede timing numa
+conexão isolada — rotear por Tor
+introduziria latência de circuito variável que contaminaria o próprio sinal
+que a técnica depende) e `scan-xss-dom` (fala CDP com um navegador headless;
+proxy só é suportado no allocator local, nunca no sidecar remoto
+compartilhado — ver `docs/TOOL_CONTRACT.md`). O padrão
+(`RECONHUB_PROXY_URL`/`RECONHUB_PROXY_CONTROL_URL`, ver `tools/recon-web-enum/proxy.go`)
+está documentado em `docs/TOOL_CONTRACT.md` pra ferramentas novas adotarem
+desde o início.
+
+#### Chrome headless (XSS DOM-based)
+
+Mesmo padrão de sidecar do Tor, mas sem opt-in: o repo traz um sidecar de
+Chrome headless (`docker/chrome/`) que também sobe **sempre junto** no
+`docker compose up -d --build`, com o devtools remoto (CDP) só alcançável de
+dentro do container do hub em `127.0.0.1:9222` — nada publicado pro host. A
+engine já injeta `RECONHUB_CHROME_URL=http://127.0.0.1:9222` no ambiente do
+container do hub (ver `docker-compose.yml`), que qualquer ferramenta baseada
+em navegador (`scan-xss-dom` por enquanto) lê automaticamente — sem
+configuração por programa, porque não é segredo por programa, é infra
+compartilhada.
+
+Diferente do Tor, esse sidecar **não suporta proxy/Tor por job**: o Chrome
+já está rodando como processo único compartilhado entre jobs, então não dá
+pra reconfigurar `--proxy-server` dele por requisição. Se você precisa rotear
+`scan-xss-dom` por Tor/proxy pra um projeto específico, passe o parâmetro
+`chrome_path` apontando pra um binário Chrome/Chromium local em vez de usar
+o sidecar — nesse modo a ferramenta sobe um processo novo por job e aplica
+`RECONHUB_PROXY_URL` normalmente (ver `tools/scan-xss-dom/browser.go`).
+
+Fora do `docker compose` (rodando o hub direto com `go run`/binário), sem
+`RECONHUB_CHROME_URL` setado a ferramenta cai pro Chrome local — precisa de
+um binário instalado no PATH ou do parâmetro `chrome_path` apontando pra um.
 
 ### Token de acesso
 
@@ -523,6 +567,7 @@ Pipelines inclusas:
 | `blh-sweep`      | recon-crtsh → scan-broken-link-hijack                       | links externos registráveis   |
 | `cognito-audit`  | recon-crtsh → scan-cognito                                  | Identity Pool aberto a anônimo |
 | `passive-takeover` | recon-passive-enum → scan-subdomain-takeover              | subdomain takeover (cobertura ampla) |
+| `active-subdomain-sweep` | recon-subdomain-brute → scan-subdomain-takeover       | subdomínio + takeover (achados que CT log nunca revelaria) |
 | `gtm-osint`      | recon-crtsh → js-gtm-osint                                  | análise de containers GTM     |
 | `cache-poison-sweep` | recon-crtsh → scan-cache-poisoning                      | web cache poisoning           |
 | `supabase-audit` | recon-crtsh → js-supabase-probe                             | RLS Supabase ausente          |
@@ -798,7 +843,7 @@ fan-out que combina as ferramentas · **`coberta`** = a função existe em outra
 ferramenta(s) da lista · **`fora de escopo`** = extensão de navegador / plugin de
 Burp, não encaixa no contrato de ferramenta CLI.
 
-Hoje: **27 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
+Hoje: **41 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
 pelas categorias acima (nada ficou de fora).
 
 ### recon — Plataformas de Recon
@@ -807,11 +852,13 @@ pelas categorias acima (nada ficou de fora).
 |--------------------------|-------------|--------------------------------------------------------------------------|-----------|
 | `recon-orchestrator`     | monrust3    | Plataforma full-stack que orquestra as ferramentas, com dashboard e escopo por programa | **é o hub** (`cmd/reconhub`) |
 | `recon-monitor`          | monrust     | Monitoramento contínuo: pipelines agendadas, diff de findings entre execuções, alerta no Discord | **é o hub** (`internal/monitor` + `watches/`) |
-| `recon-infra-enum`       | enuminfra   | Port scan TCP (connect) + banner grab + fingerprint de serviço. Presets top100 (~120 portas)/top1000/web/db ou csv/ranges. Aceita host, IP ou CIDR (com teto). Marca serviços sensíveis expostos (redis, mongodb, docker API, kube-apiserver, kubelet, etcd, elastic, rdp, vnc, winrm, mssql/mysql/pg, jmx, java-rmi…) | **pronta** |
-| `recon-web-enum`         | enumrust    | Recon web leve: crawl same-site raso, fingerprint da stack (Server/cookies/markers WordPress/Next/Laravel/… + CDN/WAF), formulários (marca os de login) e parâmetros, e sondagem de ~46 caminhos admin/sensíveis (`/admin`, `/.env`, `/.git/config`, `/server-status`, `/actuator`, `/swagger.json`, `/graphql`…) com calibração de soft-404 | **pronta** |
+| `recon-infra-enum`       | enuminfra   | Port scan TCP (connect) + banner grab + fingerprint de serviço. Presets top100 (~120 portas)/top1000/web/db ou csv/ranges. Aceita host, IP ou CIDR (com teto). Marca serviços sensíveis expostos (redis, mongodb, docker API, kube-apiserver, kubelet, etcd, elastic, rdp, vnc, winrm, mssql/mysql/pg, jmx, java-rmi…). Identifica provedor cloud/CDN por host via PTR (+ fallback de CIDR só pro Cloudflare) | **pronta** |
+| `recon-web-enum`         | enumrust    | Recon web leve: crawl same-site raso, fingerprint da stack (Server/cookies/markers WordPress/Next/Laravel/… + CDN/WAF), formulários (marca os de login) e parâmetros, e sondagem de ~67 caminhos admin/sensíveis (`/admin`, `/.env`, `/.git/config`, `/server-status`, `/actuator`, `/swagger.json`, `/graphql`…) com calibração de soft-404 | **pronta** |
 | `recon-passive-enum`     | nagliEnum   | Enum passivo de subdomínios de 7 fontes grátis em paralelo (crt.sh, certspotter, hackertarget, AlienVault OTX, Anubis/jldc, RapidDNS, Wayback); mescla, deduplica e valida no escopo. Degrada sozinho. Superset do `recon-crtsh` | **pronta** |
 | `recon-lambda-pipeline`  | lemma       | Pipeline de recon em fases (subs → HTTP → cloud → fuzz → crawl → vulns → secrets) sobre muitas ferramentas | **= pipeline** `full-recon` (fan-out, 3 ondas, 20 ferramentas) |
 | `recon-crtsh`            | — (nova)    | Enum passivo de subdomínios via Certificate Transparency (crt.sh); emite assets `subdomain`. Feita para ser o 1º step de pipelines | **pronta** |
+| `recon-subdomain-brute`  | — (nova)    | Enum ATIVA de subdomínio: wordlist (335 prefixos embutidos) + resolução DNS de verdade — acha o que nunca apareceu num CT log. Detecta DNS wildcard (catch-all) sozinho e filtra achado que é só o catch-all respondendo, não gera falso-positivo em massa | **pronta** |
+| `recon-tech-cve`         | — (nova)    | Fingerprint passivo de stack (Server, X-Powered-By, meta generator, assets versionados como jQuery/Bootstrap/núcleo do WordPress) cruzado com uma tabela curada e estática de CVEs conhecidas — sem API externa nem feed de CVE. Sinaliza "versão velha o bastante", nunca confirma exploração | **pronta** |
 
 ### js — JavaScript, Cloud e Segredos
 
@@ -842,18 +889,31 @@ pelas categorias acima (nada ficou de fora).
 | `scan-dep-confusion-npm`    | confussed        | Dependency confusion npm + PoC OOB | **coberta** por `scan-dep-confusion` (npm + PyPI/Cargo/Composer); o passo de *publicar* um pacote-canário é deixado de fora por segurança |
 | `scan-dep-confusion`        | dependencyRust   | Dependency confusion npm/PyPI/Cargo/Composer: lê o manifesto (`package.json`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`, `composer.json`) ou extrai os `import`/`require` de uma página, e checa cada nome no registro público — ausente = build sequestrável | **pronta** |
 | `scan-cognito`              | CrawlCognito     | Acha identificadores AWS Cognito no HTML/JS (User Pool ID, Identity Pool ID, app client IDs, aws-exports) e testa — só leitura — se o Identity Pool entrega credenciais AWS a usuários não autenticados, confirmando via `sts:GetCallerIdentity` (ARN + conta). Opcional: SignUp anônimo (sem criar conta) | **pronta** |
-| `scan-open-redirect`        | crawOPENREDIRECT | Open redirect: 17 payloads de bypass (`//`, `\`, `https:/`, userinfo `@`, sufixo confuso, whitespace) em nomes de parâmetro comuns (wordlist), confirma pelo destino real (Location 3xx ou `<meta refresh>` / `location` JS) apontando pro canary `example.com` | **pronta** |
+| `scan-open-redirect`        | crawOPENREDIRECT | Open redirect: 22 payloads de bypass (`//`, `\`, `https:/`, userinfo `@` simples e duplo, backslash-antes-do-@ de confusão de parser, sufixo confuso, whitespace/CR/tab/newline, double-URL-encoding, barra unicode fullwidth) em nomes de parâmetro comuns (wordlist), confirma pelo destino real (Location 3xx ou `<meta refresh>` / `location` JS) apontando pro canary `example.com` | **pronta** |
 | `scan-subdomain-takeover`   | dnsdangling      | Subdomain takeover (CNAME dangling): cadeia DNS + ~24 fingerprints (S3, Azure, GitHub Pages, Heroku, Netlify, Vercel, Fastly…) + confirmação HTTP | **pronta** |
-| `scan-fuzz`                 | fuffing          | Content discovery por wordlist (dir/arquivo) com calibração de soft-404, multi-URL. Usa as wordlists indexadas (embutidas + SecLists) | **pronta** |
+| `scan-fuzz`                 | fuffing          | Content discovery por wordlist (dir/arquivo) com calibração de soft-404, multi-URL. Usa as wordlists indexadas (embutidas + SecLists). `recursive_depth` opt-in refuza sozinho dentro de todo diretório achado, com teto de diretórios recursados | **pronta** |
 | `scan-mongodb`              | mongoDBCRAWL     | MongoDB sem autenticação: fala o wire protocol (OP_MSG) direto — sem driver. Handshake `hello` + `listDatabases`; se abrir, lista bancos e coleções, e com `sample` lê só os nomes de campo de 1 doc (nunca valores). Distingue "exige auth" de "aberto" | **pronta** |
 | `scan-postman-net`          | postEvil         | Busca na rede PÚBLICA do Postman por um termo; lista collections/workspaces públicas, baixa o JSON de cada collection (`run.pstmn.io`) e varre por segredos (AWS/Google/GitHub/Slack/Stripe/OpenAI/chave privada/Bearer/basic-auth em URL) e hosts internos/staging | **pronta** |
 | `scan-postman-audit`        | postmanSAAS      | Auditoria profunda de uma collection do Postman que você aponta (id/URL/workspace): inventário dos requests, 18 padrões de segredo, PII (e-mail/CPF/SSN/cartão com Luhn/IBAN/telefone, redigidos), auth hardcoded nos blocos `auth`, hosts internos | **pronta** |
+| `scan-xss`                  | — (nova)         | XSS refletido: marcador único com aspa/apóstrofo/`<` em parâmetros clássicos (q, search, name, message, callback…), confirma só quando os caracteres voltam sem escapar na resposta real — nunca dispara payload de execução. Distingue quebra de tag HTML (high) de quebra só de atributo/string JS (medium, precisa confirmação manual) | **pronta** |
+| `scan-xss-dom`               | — (nova)         | XSS DOM-based via navegador headless real (CDP, não `http.Client`): vetor hash (`location.hash` nunca chega no servidor) e vetor query (JS do cliente relê `location.search` após carregar). Confirma por EXECUÇÃO real — uma propriedade `window` só vira `true` se o navegador tratar o payload como código (via `onerror` de `<img>`), nunca por texto na resposta. Não é XSS armazenado (mesma navegação, sem persistência) | **pronta** |
+| `scan-sqli`                  | — (nova)         | SQL injection por vazamento de erro: aspa/aspa-dupla anexada ao valor de parâmetros clássicos (id, page, sort, category…), confirma só quando um erro de banco conhecido (MySQL/Postgres/MSSQL/Oracle/SQLite/ORMs) aparece com o payload e está ausente no baseline sem payload. Nunca time-based/booleana | **pronta** |
+| `scan-ssti`                  | — (nova)         | Server-Side Template Injection: expressão matemática (7 sintaxes de engine — Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB, Smarty, Razor .NET, Pug/Jade Node.js) num parâmetro renderizado de volta (name, message, search…), confirma só quando o resultado CALCULADO aparece na resposta, ausente no baseline, E o texto cru do payload NÃO aparece (prova avaliação, não reflexo tipo XSS). Par de fatores aleatório por requisição | **pronta** |
+| `scan-ssrf`                  | — (nova)         | Server-Side Request Forgery: injeta URLs de recursos internos/bem-conhecidos (metadata AWS/GCP/Azure/Alibaba/OCI, Kubernetes API server, loopback com variantes decimal/hex, `file:///etc/passwd`) em parâmetros buscados pelo SERVIDOR (webhook, import, proxy, avatar por URL…), só reporta quando o CONTEÚDO da resposta prova que o servidor buscou aquele recurso | **pronta** |
+| `scan-auth-flow`             | — (nova)         | SSO/OAuth: descobre o `authorization_endpoint` (`.well-known` ou caminhos comuns), testa bypass de validação de `redirect_uri` (confirmado só pelo destino real da resposta) e inventaria endpoints de metadata SAML encontrados (sem validar assinatura XML) | **pronta** |
+| `scan-smuggling`             | — (nova)         | HTTP Request Smuggling (CL.TE/TE.CL) por timing oracle: corpo ambíguo entre Content-Length e Transfer-Encoding numa conexão TCP isolada, mede se o servidor trava esperando dado que nunca chega. Nunca encadeia uma 2ª requisição real pra "provar" o desync — técnica deliberadamente segura | **pronta** |
+| `scan-idor`                  | — (nova)         | IDOR horizontal com DUAS sessões de teste do operador: compara a resposta cruzada (sessão A lendo o recurso de B, ou vice-versa) contra o baseline legítimo do dono real — só status+tamanho de corpo, nunca guarda o corpo da resposta (sem PII no finding) | **pronta** |
+| `scan-bruteforce-check`      | — (nova)         | Confirma AUSÊNCIA de rate limiting/lockout num endpoint de login/OTP: tentativas de credencial errada travadas (teto rígido de 10) contra uma conta de TESTE descartável do operador, para no 1º sinal de proteção (429/Retry-After/CAPTCHA/mudança de status ou latência) | **pronta** |
+| `scan-privesc`               | — (nova)         | Broken Function Level Authorization (access control vertical) — o par do scan-idor. Dá uma função só-admin + credencial admin (baseline) + conta de menor privilégio; confirma escalada quando a sessão baixa (ou anônima, com `test_anon`) recebe a MESMA resposta (2xx + tamanho na tolerância) que a admin. Só status+tamanho, nunca o corpo. Acesso anônimo = `critical` | **pronta** |
+| `scan-path-traversal`        | — (nova)         | Path traversal / LFI: injeta `../../etc/passwd` com 11 variantes de bypass (profundidade, `....//`, `%2e%2e%2f` simples e duplo, null byte, absoluto, Windows `win.ini`) em parâmetros que carregam arquivo (wordlist `builtin/lfi-params`) e confirma só quando a assinatura do arquivo de sistema aparece na resposta e some no baseline. Payload vai verbatim (sem re-encoding). Só lê como prova | **pronta** |
+| `scan-waf-fingerprint`       | — (nova)         | Identifica o WAF/CDN na frente do alvo por assinatura de vendor (cf-ray, x-sucuri-id, incap_ses, "Support ID:" do F5, ModSecurity… — 14 vendors) ou por bloqueio comportamental (GET benigno passa, payload malicioso vira 403/429). É contexto de metodologia (info), nunca vulnerabilidade — um 400 solto jamais conta como WAF | **pronta** |
+| `scan-mass-assignment`       | — (nova)         | Mass assignment / over-posting (OWASP API3:2023, BOPLA): manda campos privilegiados extras (role, is_admin, verified, balance…) num corpo JSON via POST/PUT/PATCH, cada um com valor SENTINELA aleatório (nunca escala de verdade). Confirma só quando o sentinela volta ligado à chave no objeto serializado pelo servidor E um campo de controle bogus NÃO volta (descarta eco cego do corpo). Par de escrita do scan-privesc | **pronta** |
 
 ### int — Integrações
 
 | nome                | antes               | o que faz                                                    | status    |
 |---------------------|---------------------|-----------------------------------------------------------|-----------|
-| `int-github-audit`  | github-intelligence | Audita a superfície pública de uma conta/org/repo do GitHub: enumera repos, sinaliza arquivos de nome sensível (`.env`, `*.pem`, `*.tfstate`…), baixa+varre por 17 padrões de segredo, e analisa os workflows do Actions (pwn-request `pull_request_target`+checkout, injeção `${{ github.event.* }}` em `run:`, runner self-hosted) + gists. `github_token` opcional (60→5000 req/h). Só leitura | **pronta** |
+| `int-github-audit`  | github-intelligence | Audita a superfície pública de uma conta/org/repo do GitHub: enumera repos, sinaliza arquivos de nome sensível (`.env`, `*.pem`, `*.tfstate`, `.npmrc`/`.pypirc`/`.netrc`/`.weblate`…), baixa+varre por 17 padrões de segredo, e analisa os workflows do Actions (pwn-request `pull_request_target`+checkout, injeção `${{ github.event.* }}` em `run:`, runner self-hosted, config "ambiente" versionada + `secrets.*` exposto + execução sobre conteúdo não confiável — sinal combinado de possível exfiltração de segredo) + gists. `github_token` opcional (60→5000 req/h). Só leitura | **pronta** |
 | `int-burp-mcp`      | mcpBurp             | MCP para dirigir o Burp Suite | **fora de escopo** (plugin do Burp + MCP próprio); o hub já expõe seu próprio MCP em `cmd/reconhub-mcp` |
 
 ### referência
@@ -896,6 +956,7 @@ tools/js-firebase-enum/     firebaseConfig → RTDB/Firestore/Storage abertos (G
 tools/scan-broken-link-hijack/  links externos registráveis (Go, módulo próprio)
 tools/scan-cognito/         Identity Pool AWS entregando creds a anônimo (Go, módulo próprio)
 tools/recon-passive-enum/   enum passivo de subdomínios, 7 fontes (Go, módulo próprio)
+tools/recon-subdomain-brute/ enum ativa de subdomínio: wordlist + DNS, filtra wildcard (Go, módulo próprio)
 tools/js-gtm-osint/         OSINT de Google Tag Manager (Go, módulo próprio)
 tools/scan-cache-poisoning/ web cache poisoning por entrada não-chaveada (Go, módulo próprio)
 tools/js-supabase-probe/    Supabase: RLS ausente / service_role no cliente (Go, módulo próprio)
@@ -910,7 +971,18 @@ tools/int-github-audit/     auditoria da superfície pública do GitHub (Go, mó
 tools/scan-cors/            CORS mal configurado (Go, módulo próprio)
 tools/scan-graphql/         descoberta + misconfig de GraphQL (Go, módulo próprio)
 tools/scan-postman-audit/   auditoria profunda de collection do Postman (Go, módulo próprio)
+tools/recon-tech-cve/       fingerprint passivo de stack × tabela curada de CVEs (Go, módulo próprio)
+tools/scan-auth-flow/       SSO/OAuth: bypass de redirect_uri + metadata SAML (Go, módulo próprio)
+tools/scan-xss/             XSS refletido confirmado por texto, sem navegador (Go, módulo próprio)
+tools/scan-xss-dom/         XSS DOM-based confirmado por execução real num navegador headless (Go, módulo próprio)
+tools/scan-sqli/            SQL injection por vazamento de erro real (Go, módulo próprio)
+tools/scan-ssti/            Server-Side Template Injection confirmado por avaliação real (Go, módulo próprio)
+tools/scan-ssrf/            SSRF confirmado pelo conteúdo da resposta (Go, módulo próprio)
+tools/scan-smuggling/       request smuggling via timing oracle (Go, módulo próprio)
+tools/scan-idor/            IDOR horizontal com duas sessões de teste (Go, módulo próprio)
+tools/scan-bruteforce-check/ ausência de rate limiting/lockout em login/OTP (Go, módulo próprio)
 internal/report/            findings → relatório .md / .html de bug bounty
+internal/scopetemplate/     templates de escopo (out_of_scope/platform) reaproveitáveis
 pipelines/                  crtsh-takeover, bucket-hunt, content-sweep,
                             actuator-sweep, redirect-hunt, secret-sweep,
                             deep-web-audit, firebase-audit, dep-confusion-sweep,
@@ -919,8 +991,10 @@ pipelines/                  crtsh-takeover, bucket-hunt, content-sweep,
                             jwt-sweep, mongodb-sweep, ai-key-sweep, js-recon,
                             postman-recon, web-enum-sweep, infra-sweep,
                             infra-mongo, cors-sweep, graphql-sweep,
+                            sqli-sweep, xss-sweep, dom-xss-sweep,
                             recon-fanout, js-suite, full-recon, demo-echo
 programs/                   escopo dos alvos (projetos)
+scope-templates/            templates de escopo salvos (*.json)
 watches/                    pipelines agendadas (*.json no .gitignore — estado mutável)
 wordlists/                  wordlists embutidas (+ SecLists via seclists_dir)
 web/                        dashboard servido em /
@@ -950,7 +1024,16 @@ hub). Ferramentas MCP expostas:
 | `hub_run_job`            | dispara uma ferramenta contra um alvo           |
 | `hub_get_job` / `hub_list_jobs` / `hub_cancel_job` | acompanha jobs         |
 | `hub_run_pipeline` / `hub_get_pipeline_run` / `hub_list_pipeline_runs` | pipelines |
+| `hub_compare_pipeline_runs` | diff de findings/ativos entre duas pipeline-runs (mesma pipeline+alvo+programa) — novo/resolvido/persiste |
 | `hub_list_findings` / `hub_list_assets` | resultados (com filtros)          |
+| `hub_list_chain_candidates` | combinações de findings confirmados que mudam de categoria juntas (open redirect + OAuth no mesmo host, SSRF no endpoint de metadata cloud…) — cross-referencia dados já coletados, nunca escaneia de novo |
+| `hub_triage_finding`     | registra veredito (confirmed/false_positive/…) + motivo — alimenta o intel |
+| `hub_create_program`     | cria um programa (escopo) só com o `in_scope` que o operador deu |
+| `hub_list_scope_templates` / `hub_create_scope_template` | templates de out_of_scope/platform reaproveitáveis, aplicados no create_program |
+| `hub_get_lessons` / `hub_add_lesson` | base de conhecimento cross-programa (`data/lessons.md`) — aditiva, nunca sobrescreve |
+| `hub_draft_finding` / `hub_program_report` | relatório .md pronto (1 achado, ou o programa inteiro) |
+
+22 tools ao todo (`hub_list_tools` inclusive).
 
 ### Passo a passo
 

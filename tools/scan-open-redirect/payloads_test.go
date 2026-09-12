@@ -17,6 +17,8 @@ func TestHostOf(t *testing.T) {
 		"https://example.com:8443/z":           "example.com",
 		"https://example.com.evil.com/":        "example.com.evil.com",
 		"http://EXAMPLE.COM":                   "example.com",
+		"%252F%252Fexample.com":                "example.com",
+		"／／example.com":                        "example.com",
 		"/relative/only":                       "",
 		"":                                     "",
 	}
@@ -106,6 +108,35 @@ func TestBuildPayloads(t *testing.T) {
 	}
 	if !hasUserinfo {
 		t.Error("faltou o payload userinfo com o host alvo")
+	}
+	var hasBackslashAt bool
+	for _, p := range ps {
+		if p.value == "https://example.com\\@victim.com" {
+			hasBackslashAt = true
+		}
+	}
+	if !hasBackslashAt {
+		t.Error("faltou o payload de confusão de parser (backslash antes do @)")
+	}
+	wantValues := map[string]string{
+		"double-encoded //": "%252F%252Fexample.com",
+		"múltiplos @ (parser pega o 1º, navegador pega o último)": "https://victim.com@victim.com@example.com",
+		"barra unicode fullwidth (／)":                             "／／example.com",
+		"carriage return antes da url":                            "%0Dhttps://example.com",
+	}
+	for label, want := range wantValues {
+		found := false
+		for _, p := range ps {
+			if p.label == label {
+				found = true
+				if p.value != want {
+					t.Errorf("%s: got %q, quer %q", label, p.value, want)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("faltou o payload %q", label)
+		}
 	}
 }
 

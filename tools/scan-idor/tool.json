@@ -1,0 +1,23 @@
+{
+  "name": "scan-idor",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Compara a resposta do MESMO endpoint pedida com DUAS sessões diferentes (as próprias contas de teste do operador) pra confirmar IDOR horizontal: a sessão A consegue ler o recurso da sessão B, ou vice-versa? Confirma comparando a resposta cruzada contra o baseline legítimo do dono de verdade (status 2xx igual + tamanho de corpo parecido) — nunca lê nem guarda o corpo da resposta, só status+tamanho, então não fica PII de usuário real no finding.",
+  "guide": "Alvo = a URL do recurso da SESSÃO A (ex: https://site.com/api/orders/1001). Precisa também de url_b (o MESMO endpoint, com o ID do recurso da SESSÃO B — ex: .../orders/1002) e credencial das duas sessões (cookie_a/bearer_a, cookie_b/bearer_b — pelo menos uma de cada). São DUAS CONTAS SUAS DE TESTE, não credencial de outro usuário — IDOR se testa assim: se A consegue ler o recurso de B usando só a própria sessão, achou o bug. target e url_b precisam ser do mesmo host.",
+  "validation": "Exemplo confirmado: sessão A pede /orders/1002 (que pertence à B) e recebe status 200 com corpo do mesmo tamanho que a B recebe pedindo o próprio /orders/1002 — a resposta que A recebeu é estruturalmente igual à real, não uma página de erro disfarçada de sucesso. Sem essa comparação contra o baseline de B, um 200 genérico (ex: uma SPA que sempre devolve o mesmo shell HTML) daria falso positivo.",
+  "exec": ["go", "run", "."],
+  "timeout": "2m",
+  "modes": [
+    { "name": "single", "label": "Par de recursos", "help": "URL do recurso da sessão A (alvo) + url_b (mesmo endpoint, recurso da sessão B)", "target_label": "URL do recurso A" }
+  ],
+  "params": [
+    { "name": "url_b", "type": "string", "required": true, "help": "URL do MESMO endpoint pro recurso da sessão B" },
+    { "name": "cookie_a", "type": "string", "required": false, "help": "Cookie da sessão A (ou bearer_a)" },
+    { "name": "bearer_a", "type": "string", "required": false, "help": "Bearer token da sessão A (ou cookie_a)" },
+    { "name": "cookie_b", "type": "string", "required": false, "help": "Cookie da sessão B (ou bearer_b)" },
+    { "name": "bearer_b", "type": "string", "required": false, "help": "Bearer token da sessão B (ou cookie_b)" },
+    { "name": "tolerance_pct", "type": "int", "required": false, "default": 15, "help": "diferença de tamanho de corpo tolerada, em %, pra considerar 'a mesma resposta'" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

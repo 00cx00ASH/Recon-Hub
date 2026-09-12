@@ -65,11 +65,19 @@
 
   main{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 49px)}
   @media (max-width:820px){ main{grid-template-columns:1fr} }
+  /* grid item sem min-width:0 não encolhe abaixo do min-content de dentro
+     (ex: a option mais larga de um <select>) — mesmo alvo do overflow-x
+     documentado no CLAUDE.md, achado agora com um form de parâmetro maior
+     (scan-fuzz) mas é um bug estrutural do grid, não deste form específico. */
+  main > .panel, main > .content{min-width:0}
 
   .panel{padding:1.1rem 1.1rem 5rem;border-right:1px solid var(--border);background:var(--surface)}
   .panel h2,.content h2{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 .7rem}
   .field{display:flex;flex-direction:column;gap:.3rem;margin-bottom:.9rem}
-  .field label{font-size:12px;color:var(--dim)}
+  .field label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+  .field label .pname{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint);background:var(--surface-2);border:1px solid var(--border);border-radius:3px;padding:.05rem .35rem}
+  .field label .ptype{font-size:10.5px;color:var(--faint)}
+  .field label .preq{font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);border-radius:3px;padding:.05rem .35rem}
   .field input,.field select{font-family:"IBM Plex Mono",monospace;font-size:13px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:.55rem;transition:border-color .15s}
   .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
   .field .help{font-size:11px;color:var(--faint)}
@@ -88,7 +96,8 @@
   .tabs button:hover{color:var(--text);border-color:var(--border-strong)}
   .tabs button[aria-selected="true"]{color:var(--text);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
   .view{display:none}
-  .view.active{display:block}
+  .view.active{display:block;animation:viewin .15s ease-out}
+  @keyframes viewin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
   .jobhead{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem}
   .pill{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:.2rem .55rem;border-radius:var(--radius-sm);border:1px solid var(--border-strong);color:var(--dim)}
@@ -121,12 +130,13 @@
   .sev.low,.sev.info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
   .muted{color:var(--faint);font-size:12px;padding:1.5rem 0}
 
-  .httpstat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:.12rem .45rem;border-radius:var(--radius-sm);border:1px solid var(--border-strong);color:var(--faint);white-space:nowrap}
-  .httpstat.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
-  .httpstat.redirect{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}
-  .httpstat.blocked{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent);opacity:.75}
-  .httpstat.clientErr{color:var(--faint)}
-  .httpstat.serverErr{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .httpstat{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:.2rem .5rem;border-radius:var(--radius-sm);border:1px solid transparent;color:var(--text);white-space:nowrap;background:var(--surface-2);transition:background .15s,box-shadow .15s;cursor:pointer}
+  .httpstat:hover{box-shadow:0 2px 6px rgba(0,0,0,.2)}
+  .httpstat.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent);background:color-mix(in srgb,var(--ok) 12%,var(--surface-2))}
+  .httpstat.redirect{color:var(--info);border-color:color-mix(in srgb,var(--info) 35%,transparent);background:color-mix(in srgb,var(--info) 12%,var(--surface-2))}
+  .httpstat.blocked{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent);background:color-mix(in srgb,var(--warn) 12%,var(--surface-2))}
+  .httpstat.clientErr{color:var(--faint);background:var(--surface-2)}
+  .httpstat.serverErr{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 35%,transparent);background:color-mix(in srgb,var(--crit) 12%,var(--surface-2))}
 
   .urow{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.4rem;cursor:pointer;background:var(--surface);transition:border-color .15s,box-shadow .15s}
   .urow:hover{border-color:var(--border-strong);box-shadow:var(--shadow-card)}
@@ -138,7 +148,13 @@
   .proggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
   .progcard{border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1rem;background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:.5rem;transition:border-color .15s,box-shadow .15s,transform .15s}
   .progcard:hover{border-color:var(--border-strong);box-shadow:var(--shadow-hover);transform:translateY(-2px)}
-  .progcard .pname{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13.5px}
+  .progcard .pname{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:.5rem;justify-content:space-between}
+  .progcard .pbadges{display:flex;gap:.25rem;flex-wrap:wrap;align-items:center}
+  .progcard .pbadge{font-family:"IBM Plex Mono",monospace;font-size:9px;font-weight:600;padding:.15rem .35rem;border-radius:3px;text-transform:uppercase;letter-spacing:.04em}
+  .progcard .pbadge.critical{background:color-mix(in srgb,var(--crit) 25%,var(--surface));color:var(--crit)}
+  .progcard .pbadge.high{background:color-mix(in srgb,var(--crit) 20%,var(--surface));color:var(--crit)}
+  .progcard .pbadge.medium{background:color-mix(in srgb,var(--warn) 20%,var(--surface));color:var(--warn)}
+  .progcard .pbadge.low{background:color-mix(in srgb,var(--info) 20%,var(--surface));color:var(--info)}
   .progcard .pbar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface-2)}
   .progcard .pbar i{display:block;height:100%}
   .progcard .pcounts{display:flex;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint)}
@@ -156,6 +172,21 @@
   .grouprow:hover{background:var(--surface)}
   .anom{color:var(--crit)}
   #findFilterChip{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);border-radius:999px;padding:.2rem .6rem}
+
+  .toolcontext{background:color-mix(in srgb,var(--accent-2) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent-2) 30%,transparent);border-radius:var(--radius);padding:.75rem;margin:.6rem 0;display:flex;flex-direction:column;gap:.4rem}
+  .toolcontext .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:12px}
+  .toolcontext .badge{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--text);background:var(--accent-2);border-radius:3px;padding:.1rem .4rem;flex:none}
+  .toolcontext .output{display:flex;gap:.3rem;flex-wrap:wrap;font-size:11px;color:var(--dim)}
+  .toolcontext .output-badge{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;padding:.1rem .45rem;font-family:"IBM Plex Mono",monospace}
+  .toolcontext .output-badge.findings{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .toolcontext .output-badge.assets{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+
+  .param-badge{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:.05rem .3rem;border-radius:2px;background:var(--surface-2);border:1px solid var(--border);margin-left:.2rem}
+  .param-badge.int{color:var(--info);border-color:color-mix(in srgb,var(--info) 45%,transparent)}
+  .param-badge.bool{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .param-badge.string{color:var(--dim);border-color:var(--border-strong)}
+  .param-badge.file{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+  .param-badge.wordlist{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
 
   .plrun{max-width:520px;border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem;background:var(--surface);box-shadow:var(--shadow-card)}
   .plsteps{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim)}
@@ -186,6 +217,19 @@
   .mapchip.tab{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
   .mapdown{display:flex;justify-content:center;color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:16px;padding:.3rem 0;line-height:1}
   @media (max-width:820px){ .mapshortcut{flex-direction:column;align-items:flex-start} }
+  .chaincard{border:2px solid color-mix(in srgb,var(--crit) 50%,var(--border));border-radius:var(--radius);background:color-mix(in srgb,var(--crit) 8%,var(--surface));padding:.8rem 1rem;margin-bottom:.6rem;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .15s,background .15s}
+  .chaincard:hover{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 12%,var(--surface));transform:translateY(-2px);box-shadow:0 4px 12px color-mix(in srgb,var(--crit) 20%,transparent)}
+  .chaincard .chtitle{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px}
+  .chaincard p{margin:.4rem 0 0;font-size:12.5px;color:var(--dim);line-height:1.5}
+  .chaincard .chassets{margin-top:.4rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);word-break:break-all}
+  /* caminho de ataque: nós = findings componentes reais (resolvidos por id),
+     nó final = o impacto da cadeia. flex-wrap pra não vazar em mobile. */
+  .chainpath{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin:.55rem 0 .1rem}
+  .chainnode{display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border-strong);border-radius:999px;background:var(--bg);padding:.1rem .5rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--text);max-width:100%}
+  .chainnode .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .chainnode .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:22ch}
+  .chainarrow{color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:12px;flex:0 0 auto}
+  .chaingoal{border-color:color-mix(in srgb,var(--crit) 55%,var(--border));background:color-mix(in srgb,var(--crit) 14%,var(--bg));font-weight:600}
 
   .md{max-width:78ch;font-size:13.5px;line-height:1.65}
   .md h1,.md h2,.md h3,.md h4{font-family:"IBM Plex Mono",monospace;line-height:1.25;margin:1.8em 0 .6em;color:var(--text);text-transform:none;letter-spacing:0}
@@ -224,21 +268,32 @@
 
   /* ---------- toasts + modal de confirmação (substituem alert()/confirm() nativos) ---------- */
   #toasts{position:fixed;bottom:1.1rem;right:1.1rem;z-index:200;display:flex;flex-direction:column;gap:.5rem;max-width:min(380px,calc(100vw - 2.2rem))}
-  .toast{background:var(--surface);border:1px solid var(--border-strong);border-left:3px solid var(--info);border-radius:6px;padding:.65rem .8rem;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;gap:.5rem;align-items:flex-start;animation:toastin .18s ease-out}
+  .toast{background:var(--surface);border:1px solid var(--border-strong);border-left:3px solid var(--info);border-radius:6px;padding:.65rem .8rem;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:.4rem;animation:toastin .18s ease-out;position:relative;overflow:hidden}
+  .toast::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--info);animation:toastbar 6s linear forwards}
   .toast.error{border-left-color:var(--crit)}
+  .toast.error::before{background:var(--crit)}
   .toast.ok{border-left-color:var(--ok)}
+  .toast.ok::before{background:var(--ok)}
+  .toast-content{display:flex;gap:.4rem;align-items:flex-start}
+  .toast .ticon{flex:none;font-size:14px;width:18px}
   .toast .tmsg{flex:1;word-break:break-word}
   .toast .tx{background:none;border:0;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;flex:none;padding:0}
+  .tx:hover{color:var(--text)}
   @keyframes toastin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes toastbar{from{width:100%}to{width:0}}
 
   /* ---------- barra de seleção — assets/findings escolhidos pra alimentar uma pipeline ---------- */
-  #selBar{position:fixed;left:1.1rem;bottom:1.1rem;z-index:190;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:.65rem .85rem;box-shadow:var(--shadow-hover);font-size:12px;max-width:min(680px,calc(100vw - 2.2rem))}
-  #selBar b{color:var(--accent)}
-  #selBar select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:.4rem .55rem}
-  #selBar button{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:var(--radius-sm);padding:.4rem .7rem;cursor:pointer}
-  #selRun{background:var(--accent);color:#1a1400;border:0;font-weight:600}
+  #selBar{position:fixed;left:1.1rem;bottom:1.1rem;z-index:190;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:2px solid var(--accent);border-radius:var(--radius);padding:.65rem .85rem;box-shadow:0 0 12px color-mix(in srgb,var(--accent) 30%,transparent),var(--shadow-hover);font-size:12px;max-width:min(680px,calc(100vw - 2.2rem));animation:selbar-pulse .3s ease-out}
+  @keyframes selbar-pulse{from{box-shadow:0 0 24px color-mix(in srgb,var(--accent) 50%,transparent),var(--shadow-hover)}to{box-shadow:0 0 12px color-mix(in srgb,var(--accent) 30%,transparent),var(--shadow-hover)}}
+  #selBar b{color:var(--accent);font-weight:700}
+  #selBar select{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:.4rem .55rem;transition:border-color .15s}
+  #selBar select:focus{outline:none;border-color:var(--accent)}
+  #selBar button{font-family:"IBM Plex Mono",monospace;font-size:12px;border-radius:var(--radius-sm);padding:.4rem .7rem;cursor:pointer;transition:transform .12s,box-shadow .12s,filter .12s}
+  #selRun{background:var(--accent);color:#1a1400;border:0;font-weight:600;box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 35%,transparent)}
+  #selRun:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
   #selRun:disabled{opacity:.5;cursor:not-allowed}
-  #selClear{background:none;border:1px solid var(--border-strong);color:var(--dim)}
+  #selClear{background:none;border:1px solid var(--border-strong);color:var(--dim);transition:color .15s,border-color .15s}
+  #selClear:hover{color:var(--text);border-color:var(--border-strong)}
   td input[type="checkbox"]{cursor:pointer}
 
   #confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:210;display:flex;align-items:center;justify-content:center;padding:1rem}
@@ -248,6 +303,19 @@
   #confirmBox button{font-family:"IBM Plex Mono",monospace;font-size:12.5px;border-radius:4px;padding:.5rem 1rem;cursor:pointer}
   #confirmCancel{background:none;border:1px solid var(--border-strong);color:var(--dim)}
   #confirmOk{background:var(--crit);border:0;color:#1a0a06;font-weight:600}
+
+  .queueitem{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.7rem;margin-bottom:.5rem;font-size:12px;display:flex;flex-direction:column;gap:.4rem}
+  .queueitem.queued{border-left:3px solid var(--accent)}
+  .queueitem.running{border-left:3px solid var(--info);animation:pulse .8s infinite}
+  .queueitem.done{border-left:3px solid var(--ok)}
+  .queueitem.error{border-left:3px solid var(--crit)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+  .queueitem-head{display:flex;gap:.4rem;align-items:center;font-weight:600}
+  .queueitem-status{font-size:10px;font-weight:600;padding:.05rem .3rem;border-radius:3px;background:var(--bg);color:var(--faint);text-transform:uppercase}
+  .queueitem-status.running{background:color-mix(in srgb,var(--info) 20%,var(--bg));color:var(--info)}
+  .queueitem-status.done{background:color-mix(in srgb,var(--ok) 20%,var(--bg));color:var(--ok)}
+  .queueitem-status.error{background:color-mix(in srgb,var(--crit) 20%,var(--bg));color:var(--crit)}
+  .queueitem-detail{font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace}
 
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -291,6 +359,20 @@
   </div>
 </div>
 
+<div id="queueOverlay" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:215;display:flex;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:1.2rem 1.3rem;max-width:640px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.4);max-height:80vh;display:flex;flex-direction:column">
+    <h3 style="margin:0 0 1rem;font-family:'IBM Plex Mono',monospace;font-size:1rem;letter-spacing:.05em;color:var(--text)">Preview da fila</h3>
+    <div id="queueList" style="flex:1;overflow-y:auto;margin-bottom:1rem;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.8rem;background:var(--bg)"></div>
+    <div style="display:flex;gap:.6rem;justify-content:space-between">
+      <span id="queueStats" style="font-size:12px;color:var(--faint);align-self:center"></span>
+      <div style="display:flex;gap:.6rem">
+        <button id="queueCancel" style="background:none;border:1px solid var(--border-strong);color:var(--dim);border-radius:var(--radius-sm);padding:.5rem 1rem;cursor:pointer;font-family:'IBM Plex Mono',monospace">Cancelar</button>
+        <button id="queueRun" style="background:var(--accent);color:#1a1400;border:0;border-radius:var(--radius-sm);padding:.5rem 1rem;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-weight:600">Executar fila</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="entryHelp" hidden>
   <h2>Como entrar</h2>
   <p class="sub">O recon-hub nasce fechado. Você precisa do <b>token de acesso</b> uma única vez (o navegador guarda depois).</p>
@@ -325,10 +407,12 @@ docker compose exec reconhub cat /app/data/token</pre>
     <h2>Novo job</h2>
     <div class="field">
       <label for="tool">Ferramenta</label>
+      <input id="toolSearch" placeholder="buscar por nome ou o que faz…" spellcheck="false" autocomplete="off">
       <select id="tool"></select>
       <span class="help" id="toolHelp"></span>
       <span class="help" id="toolGuide" style="color:var(--dim);border-left:2px solid var(--border-strong);padding-left:.5rem;margin-top:.2rem"></span>
       <span class="help" id="toolValidation" style="color:var(--ok);border-left:2px solid color-mix(in srgb,var(--ok) 45%,transparent);padding-left:.5rem;margin-top:.2rem"></span>
+      <div id="toolContext" class="toolcontext" hidden></div>
       <details id="toolDoc" style="margin-top:.35rem">
         <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">ℹ ajuda completa</summary>
         <div class="md" id="toolDocBody" style="font-size:12px;max-width:none;margin-top:.4rem"><p class="muted" style="padding:.3rem 0">carregando…</p></div>
@@ -351,7 +435,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <div style="display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem">
           <input id="npName" placeholder="nome (ex: acme, ou 'Meu Programa Acme')" spellcheck="false" autocomplete="off">
           <span class="help" id="npSlugPreview" style="color:var(--faint)"></span>
-          <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+          <textarea id="npIn" rows="3" placeholder="in scope, um por linha:&#10;*.acme.com&#10;acme.io&#10;10.10.0.0/24 (CIDR, pra lab/rede interna)" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <textarea id="npOut" rows="2" placeholder="out of scope (opcional):&#10;blog.acme.com" spellcheck="false" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           <button id="npSave" class="run" style="padding:.45rem">Criar projeto</button>
           <span class="help" id="npMsg"></span>
@@ -361,6 +445,7 @@ docker compose exec reconhub cat /app/data/token</pre>
     <div id="params"></div>
     <button class="run" id="run" disabled>Rodar job</button>
     <p class="summary" id="regSummary"><span class="k">registro:</span> carregando…</p>
+    <button id="reloadReg" title="Recarrega ferramentas/pipelines/wordlists do disco SEM reiniciar o hub — adicionar ou editar uma tool fica disponível na hora, zero downtime" style="font-size:11px;padding:.1rem .5rem;cursor:pointer;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:3px;color:var(--dim)">↻ recarregar registro</button>
   </section>
 
   <section class="content">
@@ -388,7 +473,7 @@ docker compose exec reconhub cat /app/data/token</pre>
     </div>
 
     <div class="view" id="view-map">
-      <p class="muted" style="margin-top:0">Por onde começar, e o que vem depois — clique num nó pra já ir com a ferramenta/pipeline certa selecionada. 33 ferramentas e 31 pipelines é fácil de se perder; isto aqui é o mapa.</p>
+      <p class="muted" style="margin-top:0">Por onde começar, e o que vem depois — clique num nó pra já ir com a ferramenta/pipeline certa selecionada. 41 ferramentas e 35 pipelines é fácil de se perder; isto aqui é o mapa.</p>
       <div id="mapBody"></div>
     </div>
 
@@ -403,6 +488,10 @@ docker compose exec reconhub cat /app/data/token</pre>
           <button class="cancel" id="jCancel" hidden>cancelar</button>
         </div>
         <div class="bar"><i id="jBar"></i></div>
+        <div id="jNextSteps" hidden style="margin-bottom:1.2rem">
+          <h2 style="margin-bottom:.7rem">Próximos passos sugeridos</h2>
+          <div id="jNextStepsBox"></div>
+        </div>
         <h2>Stream</h2>
         <div class="log" id="log"></div>
         <h2 style="margin-top:1.1rem">Findings deste job (<span id="jFCount">0</span>)</h2>
@@ -540,6 +629,7 @@ docker compose exec reconhub cat /app/data/token</pre>
         <a id="repMd" style="font-family:'IBM Plex Mono',monospace;font-size:11px">⬇ relatório .md</a>
         <a id="repHtml" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px">↗ relatório .html</a>
       </div>
+      <div id="chainsBox" style="margin-bottom:.9rem"></div>
       <div id="groupsBox" style="margin-bottom:.9rem"></div>
       <div class="wrapx"><table>
         <thead><tr><th><input type="checkbox" id="findSelAll" title="selecionar todos (pra usar em pipeline)"></th><th>sev</th><th>prioridade</th><th>tipo</th><th>título</th><th>asset</th><th>http</th><th>×</th><th>ferramenta</th><th>quando</th><th></th><th>triagem</th></tr></thead>
@@ -596,7 +686,7 @@ docker compose exec reconhub cat /app/data/token</pre>
           <p class="help" style="margin:0 0 .6rem">Alvos que as ferramentas podem testar sob esse projeto — um por linha. Editar aqui atualiza o que já existe, não cria outro projeto.</p>
           <div class="field">
             <label for="projIn">in scope</label>
-            <textarea id="projIn" rows="3" spellcheck="false" placeholder="*.acme.com&#10;acme.io" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
+            <textarea id="projIn" rows="3" spellcheck="false" placeholder="*.acme.com&#10;acme.io&#10;10.10.0.0/24 (CIDR)" style="font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border-strong);border-radius:3px;padding:.5rem;resize:vertical"></textarea>
           </div>
           <div class="field">
             <label for="projOut">out of scope</label>
@@ -730,12 +820,107 @@ function assetCell(value){
 // "selecionar vários" dispara uma run por valor único selecionado (dedupe
 // automático porque é um Set), mantendo o back-end intocado.
 const PIPELINE_SELECTION = new Set();
+const QUEUE = [];  // fila de jobs aguardando execução: { pipeline, target, program }
+
+function queueJobs(jobs){
+  QUEUE.push(...jobs);
+  toastOk(`${jobs.length} job(s) adicionado(s) à fila`);
+  showQueuePreview();
+}
+
+function showQueuePreview(){
+  const overlay = $('#queueOverlay');
+  const list = $('#queueList');
+  list.innerHTML = '';
+
+  if (QUEUE.length === 0) {
+    list.append(el('p', { style:'color:var(--faint);text-align:center;padding:1rem', textContent:'fila vazia' }));
+    $('#queueRun').disabled = true;
+    overlay.hidden = false;
+    return;
+  }
+
+  for (let i = 0; i < QUEUE.length; i++) {
+    const job = QUEUE[i];
+    const item = el('div', { className:'queueitem queued' });
+
+    const head = el('div', { className:'queueitem-head' });
+    head.append(
+      el('span', { style:'flex:none', textContent:`#${i+1}` }),
+      el('span', { className:'queueitem-status running', textContent:'pendente' }),
+      el('span', { style:'flex:1;word-break:break-all', textContent:job.target })
+    );
+    item.append(head);
+
+    const detail = el('div', { className:'queueitem-detail', textContent:`${job.pipeline} · ${job.program || 'sem programa'}` });
+    item.append(detail);
+
+    list.append(item);
+  }
+
+  $('#queueStats').textContent = `${QUEUE.length} job(s) · tempo estimado: ${Math.ceil(QUEUE.length * 2)}min`;
+  $('#queueRun').disabled = false;
+  overlay.hidden = false;
+}
+
+function executeQueue(){
+  const overlay = $('#queueOverlay');
+  const run = $('#queueRun');
+  run.disabled = true;
+  run.textContent = 'executando…';
+
+  (async () => {
+    let ok = 0, fail = 0;
+    for (let i = 0; i < QUEUE.length; i++) {
+      const job = QUEUE[i];
+      try {
+        await api('/pipeline-runs', {
+          method: 'POST',
+          body: JSON.stringify({ pipeline: job.pipeline, target: job.target, program: job.program })
+        });
+        ok++;
+      } catch (e) {
+        fail++;
+      }
+      // update visual feedback
+      const items = document.querySelectorAll('.queueitem');
+      if (items[i]) {
+        const status = items[i].querySelector('.queueitem-status');
+        if (status) {
+          if (fail > 0) {
+            status.textContent = 'erro';
+            status.className = 'queueitem-status error';
+          } else {
+            status.textContent = 'ok';
+            status.className = 'queueitem-status done';
+          }
+        }
+      }
+    }
+
+    toastOk(`${ok}/${QUEUE.length} jobs executados`);
+    QUEUE.length = 0;
+    overlay.hidden = true;
+    run.textContent = 'Executar fila';
+
+    renderFindingsTable();
+    renderAssetsTable();
+    selectTab('pipelines');
+    loadPipelineRuns();
+  })();
+}
 
 function updateSelBar(){
   const n = PIPELINE_SELECTION.size;
-  $('#selBar').hidden = n === 0;
+  const bar = $('#selBar');
+  bar.hidden = n === 0;
   $('#selCount').textContent = n + (n === 1 ? ' selecionado' : ' selecionados');
   $('#selRun').disabled = n === 0 || !$('#selPipeline').value;
+  // retrigger animation pra dar visual feedback
+  if (!bar.hidden) {
+    bar.style.animation = 'none';
+    setTimeout(() => { bar.style.animation = 'selbar-pulse .3s ease-out'; }, 10);
+  }
 }
 function toggleSelection(value, checked){
   if (!value) return;
@@ -774,34 +959,51 @@ $('#selClear').addEventListener('click', () => {
   renderFindingsTable();
   renderAssetsTable();
 });
-$('#selRun').addEventListener('click', async () => {
+
+$('#queueCancel').addEventListener('click', () => {
+  $('#queueOverlay').hidden = true;
+});
+
+$('#queueRun').addEventListener('click', () => {
+  executeQueue();
+});
+$('#selRun').addEventListener('click', () => {
   const pipeline = $('#selPipeline').value, program = $('#selProgram').value;
   const targets = [...PIPELINE_SELECTION];
   if (!pipeline || !targets.length) return;
-  $('#selRun').disabled = true;
-  let ok = 0, fail = 0, lastID = null;
-  for (const target of targets) {
-    try { lastID = (await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) })).id; ok++; }
-    catch { fail++; }
-  }
-  if (ok) toastOk(`${ok} pipeline(s) iniciada(s)` + (fail ? `, ${fail} falharam` : ''));
-  else toastError(`nenhuma pipeline iniciada — ${fail} falha(s)`);
+
+  // criar jobs pra fila
+  const jobs = targets.map(target => ({ pipeline, target, program }));
+  queueJobs(jobs);
+
   PIPELINE_SELECTION.clear();
   updateSelBar();
-  renderFindingsTable();
-  renderAssetsTable();
-  if (ok) { selectTab('pipelines'); loadPipelineRuns(); if (lastID) openPipelineRun(lastID); }
 });
 
 /* ---------- toast + confirm (substituem alert()/confirm() nativos) ---------- */
 function toast(msg, type){
   const box = $('#toasts');
   const t = el('div', { className: 'toast' + (type ? ' ' + type : '') });
-  t.append(el('span', { className:'tmsg', textContent: msg }));
+  const content = el('div', { className: 'toast-content' });
+
+  const icon = el('span', { className: 'ticon' });
+  if (type === 'error') {
+    icon.textContent = '✕';
+  } else if (type === 'ok') {
+    icon.textContent = '✓';
+  } else {
+    icon.textContent = 'ℹ';
+  }
+
+  content.append(icon);
+  content.append(el('span', { className:'tmsg', textContent: msg }));
+
   const x = el('button', { className:'tx', textContent:'✕', title:'fechar' });
   const timer = setTimeout(() => t.remove(), 6000);
   x.addEventListener('click', () => { clearTimeout(timer); t.remove(); });
-  t.append(x);
+  content.append(x);
+
+  t.append(content);
   box.append(t);
   return t;
 }
@@ -900,14 +1102,43 @@ async function pingHealth() {
 pingHealth(); setInterval(pingHealth, 10000);
 
 /* ---------- tools ---------- */
+// nomes legíveis pras categorias de tool.json (recon|js|scan|int) — mesma
+// linguagem já usada em docs/GUIA-DE-USO.md pras mesmas 4 categorias.
+const TOOL_CATEGORY_LABELS = { recon: 'Recon', js: 'JS · Cloud · Segredos', scan: 'Scan (vulnerabilidades)', int: 'Integrações' };
+const TOOL_CATEGORY_ORDER = ['recon', 'js', 'scan', 'int'];
+
+// renderToolOptions reconstrói o <select> agrupado por categoria
+// (<optgroup>) e filtrado pela busca em #toolSearch (nome OU resumo,
+// case-insensitive) — chamada tanto no load inicial quanto a cada
+// tecla digitada na busca. Preserva a seleção atual quando ela ainda
+// aparece no resultado filtrado.
+function renderToolOptions(){
+  const sel = $('#tool');
+  const q = ($('#toolSearch').value || '').trim().toLowerCase();
+  const prevValue = sel.value;
+  sel.innerHTML = '';
+  if (!TOOLS.length) { sel.append(el('option', { value:'', textContent:'nenhuma ferramenta registrada' })); return; }
+
+  const filtered = q ? TOOLS.filter(t => t.name.toLowerCase().includes(q) || (t.summary || '').toLowerCase().includes(q)) : TOOLS;
+  if (!filtered.length) { sel.append(el('option', { value:'', textContent:`nenhuma ferramenta bate com "${q}"` })); return; }
+
+  const byCat = {};
+  for (const t of filtered) (byCat[t.category] = byCat[t.category] || []).push(t);
+  const cats = [...TOOL_CATEGORY_ORDER.filter(c => byCat[c]), ...Object.keys(byCat).filter(c => !TOOL_CATEGORY_ORDER.includes(c))];
+  for (const cat of cats) {
+    const grp = el('optgroup', { label: TOOL_CATEGORY_LABELS[cat] || cat || 'Outras' });
+    for (const t of byCat[cat]) grp.append(el('option', { value: t.name, textContent: `${t.name}  ·  ${t.language || '?'}` }));
+    sel.append(grp);
+  }
+  if (filtered.some(t => t.name === prevValue)) sel.value = prevValue;
+}
+$('#toolSearch').addEventListener('input', () => { renderToolOptions(); renderToolMeta(); });
+
 async function loadTools() {
   try {
     const { tools } = await api('/tools');
     TOOLS = tools || [];
-    const sel = $('#tool');
-    sel.innerHTML = '';
-    if (!TOOLS.length) { sel.append(el('option', { value:'', textContent:'nenhuma ferramenta registrada' })); }
-    for (const t of TOOLS) sel.append(el('option', { value: t.name, textContent: `${t.name}  ·  ${t.language || '?'}` }));
+    renderToolOptions();
     renderToolMeta();
     $('#regSummary').innerHTML = `<span class="k">registro:</span> ${TOOLS.length} ferramenta(s)`;
     $('#run').disabled = !TOOLS.length;
@@ -915,6 +1146,29 @@ async function loadTools() {
     $('#regSummary').innerHTML = `<span class="k">registro:</span> erro — ${e.message}`;
   }
 }
+
+// Recarrega tools/pipelines/wordlists do disco sem reiniciar o hub (POST
+// /api/reload) — é o que garante que adicionar/editar uma ferramenta não
+// derruba a aplicação. Atualiza o seletor e a aba Pipelines na sequência.
+async function reloadRegistries() {
+  const btn = $('#reloadReg');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ recarregando…'; }
+  try {
+    const res = await api('/reload', { method: 'POST' });
+    await loadTools();
+    if (typeof loadPipelines === 'function') { try { await loadPipelines(); } catch {} }
+    if (res.ok) {
+      toastOk(`registro recarregado — ${res.tools} ferramentas, ${res.pipelines} pipelines (sem reiniciar)`);
+    } else {
+      toastError('recarregado com erro(s): ' + (res.errors || []).join(' · ') + ' — índice anterior mantido');
+    }
+  } catch (e) {
+    toastError('falha ao recarregar: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ recarregar registro'; }
+  }
+}
+$('#reloadReg')?.addEventListener('click', reloadRegistries);
 function currentTool() { return TOOLS.find(t => t.name === $('#tool').value); }
 function currentMode() {
   const t = currentTool();
@@ -930,6 +1184,64 @@ function renderToolMeta() {
   $('#toolGuide').hidden = !(t && t.guide);
   $('#toolValidation').textContent = (t && t.validation) ? ('✓ ' + t.validation) : '';
   $('#toolValidation').hidden = !(t && t.validation);
+
+  // contexto de uso da ferramenta
+  const ctx = $('#toolContext');
+  if (t) {
+    ctx.innerHTML = '';
+    const categoryLabels = { recon: 'Recon', js: 'JS · Cloud · Segredos', scan: 'Scan (vulnerabilidades)', int: 'Integrações' };
+    const catLabel = categoryLabels[t.category] || t.category;
+
+    const row1 = el('div', { className: 'row' });
+    row1.append(el('span', { className: 'badge', textContent: catLabel }));
+    row1.append(el('span', { className: 'faint', style: 'font-size:11px', textContent: t.language ? '· ' + t.language : '' }));
+    ctx.append(row1);
+
+    const categoryDescriptions = {
+      recon: 'Descobre novos alvos, subdomínios e infraestrutura',
+      js: 'Analisa JavaScript, APIs e serviços em nuvem',
+      scan: 'Escaneia vulnerabilidades em alvos descobertos',
+      int: 'Integra com ferramentas e plataformas externas'
+    };
+    const catDesc = categoryDescriptions[t.category] || '';
+    if (catDesc) {
+      ctx.append(el('div', { style: 'font-size:11px;color:var(--dim);line-height:1.4', textContent: catDesc }));
+    }
+
+    // tipo de output: findings vs assets
+    const outputRow = el('div', { className: 'output' });
+    outputRow.append(document.createTextNode('Output: '));
+    if (!t.guide || t.guide.toLowerCase().includes('asset')) {
+      outputRow.append(el('span', { className: 'output-badge assets', textContent: 'Assets' }));
+    }
+    if (!t.guide || t.guide.toLowerCase().includes('finding')) {
+      outputRow.append(el('span', { className: 'output-badge findings', textContent: 'Findings' }));
+    }
+    ctx.append(outputRow);
+
+    // extrair exemplo de alvo do guide e usar como placeholder
+    let examplePlaceholder = 'exemplo.com';
+    if (t.guide) {
+      const match = t.guide.match(/ex(?:emplo)?:?\s+([^\s,.)]+)/i);
+      if (match) examplePlaceholder = match[1];
+    }
+    const categoryPlaceholders = {
+      recon: 'exemplo.com',
+      js: 'https://site.com/js-endpoint',
+      scan: 'https://site.com/alvo',
+      int: 'token-ou-id-da-api'
+    };
+    examplePlaceholder = categoryPlaceholders[t.category] || examplePlaceholder;
+    $('#target').placeholder = examplePlaceholder;
+
+    const mapBtn = el('a', { style: 'font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent-2);text-decoration:underline;cursor:pointer', textContent: '→ ver no Mapa' });
+    mapBtn.addEventListener('click', () => { selectTab('map'); });
+    ctx.append(mapBtn);
+
+    ctx.hidden = false;
+  } else {
+    ctx.hidden = true;
+  }
 
   // ajuda completa (README da ferramenta) — carrega ao abrir o <details>
   const doc = $('#toolDoc');
@@ -953,6 +1265,33 @@ function renderToolMeta() {
   renderModeAndParams();
 }
 
+// humanizeParamName transforma "max_recursive_dirs" em "Max recursive dirs"
+// — o nome técnico exato continua visível ao lado (span.pname), pra quem
+// já conhece o parâmetro pelo nome do tool.json/guia não perder a
+// referência, mas quem tá vendo o formulário pela 1ª vez lê algo com
+// espaço em vez de underscore.
+function humanizeParamName(name){
+  const s = name.replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function validateParams() {
+  const t = currentTool();
+  const target = $('#target').value.trim();
+  if (!t || !target) return false;
+  for (const p of (t.params || [])) {
+    if (p.required) {
+      const input = $('[data-pname="' + p.name + '"]');
+      if (!input || !input.value.trim()) return false;
+    }
+  }
+  return true;
+}
+
+function updateRunButton() {
+  $('#run').disabled = !validateParams();
+}
+
 function renderModeAndParams() {
   const t = currentTool();
   const mode = currentMode();
@@ -970,7 +1309,12 @@ function renderModeAndParams() {
     if (modeParams.has(p.name) && !allow.has(p.name)) continue; // param de outro modo
     const id = 'p_' + p.name;
     const f = el('div', { className: 'field' });
-    f.append(el('label', { htmlFor: id, textContent: `${p.name}  (${p.type})${p.required ? ' *' : ''}` }));
+    const labelEl = el('label', { htmlFor: id });
+    labelEl.append(document.createTextNode(humanizeParamName(p.name)));
+    labelEl.append(el('code', { className: 'pname', textContent: p.name }));
+    labelEl.append(el('span', { className: 'param-badge ' + p.type, textContent: p.type }));
+    if (p.required) labelEl.append(el('span', { className: 'preq', textContent: 'obrigatório' }));
+    f.append(labelEl);
     let input;
     if (p.type === 'bool') {
       input = el('select', { id });
@@ -986,13 +1330,18 @@ function renderModeAndParams() {
       input = el('input', { id, type: p.type === 'int' ? 'number' : 'text', value: p.default ?? '' });
     }
     input.dataset.pname = p.name; input.dataset.ptype = p.type;
+    input.addEventListener('change', updateRunButton);
+    input.addEventListener('input', updateRunButton);
     f.append(input);
     if (p.help) f.append(el('span', { className: 'help', textContent: p.help }));
     box.append(f);
   }
+  updateRunButton();
 }
-$('#tool').addEventListener('change', renderToolMeta);
-$('#toolMode').addEventListener('change', renderModeAndParams);
+$('#tool').addEventListener('change', () => { renderToolMeta(); updateRunButton(); });
+$('#toolMode').addEventListener('change', () => { renderModeAndParams(); updateRunButton(); });
+$('#target').addEventListener('input', updateRunButton);
+$('#jobProgram').addEventListener('change', updateRunButton);
 $('#toolDoc').addEventListener('toggle', async () => {
   const t = currentTool();
   if (!$('#toolDoc').open || !t || toolDocLoadedFor === t.name) return;
@@ -1060,6 +1409,60 @@ function setBar(ev){
   if (ev.type === 'done') $('#jBar').style.width = '100%';
 }
 
+async function loadJobNextSteps(jobId){
+  try {
+    const { next_steps } = await api('/jobs/' + jobId + '/next-steps');
+    const box = $('#jNextStepsBox');
+    box.innerHTML = '';
+    if (!next_steps || !next_steps.length) {
+      $('#jNextSteps').hidden = true;
+      return;
+    }
+    for (const step of next_steps) {
+      const card = el('div', { className: 'suggcard' });
+      const top = el('div', { className: 'top' });
+      top.append(el('span', { className: 'tool', textContent: step.name }));
+      if (step.tag) {
+        const tagStyles = {
+          'retest': 'background:color-mix(in srgb,var(--info) 20%,var(--bg));color:var(--info);',
+          'novo': 'background:color-mix(in srgb,var(--ok) 20%,var(--bg));color:var(--ok);',
+          'urgent': 'background:color-mix(in srgb,var(--crit) 20%,var(--bg));color:var(--crit);'
+        };
+        const badge = el('span', {
+          className: 'ex',
+          textContent: step.tag,
+          style: tagStyles[step.tag] || 'background:var(--surface-2);' + 'font-size:9px;font-weight:600;padding:.1rem .4rem;border-radius:3px;text-transform:uppercase;letter-spacing:.03em'
+        });
+        top.append(badge);
+      }
+      if (step.phase) top.append(el('span', { className: 'ex', textContent: step.phase }));
+      card.append(top);
+      card.append(el('div', { className: 'reason', textContent: step.reason }));
+      if (step.time_minutes) {
+        card.append(el('div', { className: 'ex', textContent: `⏱ ~${step.time_minutes}min` }));
+      }
+      // O destino do botão depende do tipo: ferramenta vai pro formulário já
+      // selecionada, pipeline pra aba Pipelines pré-selecionada, e uma cadeia
+      // pra aba Findings (onde fica a seção de encadeamentos). Antes o botão
+      // sempre setava #tool — o que era inválido pra pipeline/chain.
+      const label = step.type === 'chain' ? '▶ ver encadeamentos'
+        : step.type === 'pipeline' ? '▶ abrir pipeline'
+        : '▶ executar';
+      const btn = el('button', { textContent: label });
+      btn.addEventListener('click', () => {
+        if (step.type === 'chain') selectTab('findings');
+        else if (step.type === 'pipeline') goPipeline(step.name);
+        else goTool(step.name);
+      });
+      card.append(btn);
+      box.append(card);
+    }
+    $('#jNextSteps').hidden = false;
+  } catch (e) {
+    $('#jNextSteps').hidden = true;
+  }
+}
+
 async function attachJob(id){
   if (es) { es.close(); es = null; }
   currentJob = id;
@@ -1079,6 +1482,7 @@ async function attachJob(id){
   $('#jCancel').hidden = terminal.has(job.status);
   if (terminal.has(job.status)) {
     try { const r = await api('/jobs/' + id); (r.events||[]).forEach(ev => { logLine(ev); setBar(ev); }); } catch {}
+    loadJobNextSteps(id);
     return;
   }
 
@@ -1095,6 +1499,7 @@ async function attachJob(id){
       api('/jobs/' + id).then(r => { pill(r.job.status); $('#jCancel').hidden = true; }).catch(()=>{});
       refreshJobFindings(id); refreshJobAssets(id);
       loadJobs();
+      loadJobNextSteps(id);
     }
   };
   es.onerror = () => { /* EventSource reconecta sozinho; Last-Event-ID evita duplicatas */ };
@@ -1400,6 +1805,8 @@ async function renderCoverage(name){
     if (s.examples && s.examples.length) card.append(el('div', { className:'ex', textContent: 'ex: ' + s.examples.join(', ') }));
     const btn = el('button', { textContent:'▶ usar nesse job' });
     btn.addEventListener('click', () => {
+      $('#toolSearch').value = '';
+      renderToolOptions();
       $('#tool').value = s.tool;
       renderToolMeta();
       propagateProject(name, { reload: false });
@@ -1600,11 +2007,75 @@ let FINDINGS_FILTER = null; // { tool, type, host } | null
 function isPublicSource(row){ return !!(row && row.meta && row.meta.source === 'public'); }
 
 function matchesFindFilter(f){
-  if (FINDINGS_FILTER && !(f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host)) return false;
+  if (FINDINGS_FILTER) {
+    if (typeof FINDINGS_FILTER === 'function') {
+      if (!FINDINGS_FILTER(f)) return false;
+    } else if (!(f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host)) {
+      return false;
+    }
+  }
   const bucket = $('#findHttpBucket').value;
   if (bucket && httpBucketOf(f) !== bucket) return false;
   if ($('#findHidePublic').checked && isPublicSource(f)) return false;
   return true;
+}
+
+function renderChains(chains){
+  const box = $('#chainsBox');
+  box.innerHTML = '';
+  if (!chains || !chains.length) return;
+  const det = el('details', { open: true });
+  const summary = el('summary', {
+    style: "cursor:pointer;font-size:12px;color:var(--crit);font-family:'IBM Plex Mono',monospace;font-weight:600;display:flex;align-items:center;gap:.5rem",
+  });
+  summary.append(
+    el('span', { textContent: '⚠ possíveis encadeamentos' }),
+    el('span', { style:'background:var(--crit);color:#1a0a06;border-radius:999px;padding:.05rem .35rem;font-size:10px;font-weight:700', textContent: chains.length })
+  );
+  det.append(summary);
+  const wrap = el('div', { style:'margin-top:.5rem' });
+  for (const c of chains) {
+    const card = el('div', { className:'chaincard', style:'cursor:pointer', title:'clique pra filtrar findings desta chain' });
+    card.append(el('div', { className:'chtitle' }, [
+      el('span', { className:'sev ' + c.severity, textContent: c.severity }),
+      el('span', { textContent: c.title }),
+    ]));
+    // caminho de ataque: resolve os finding_ids da chain contra os findings já
+    // carregados (FINDINGS_ALL) e desenha os nós componentes → o impacto. Só
+    // aparece quando dá pra resolver de verdade — nunca um grafo decorativo.
+    const parts = (c.finding_ids || []).map(id => FINDINGS_ALL.find(f => f.id === id)).filter(Boolean);
+    if (parts.length) {
+      const sevDot = { critical:'var(--crit)', high:'var(--crit)', medium:'var(--warn)', low:'var(--info)', info:'var(--faint)' };
+      const path = el('div', { className:'chainpath' });
+      parts.forEach((p, i) => {
+        if (i) path.append(el('span', { className:'chainarrow', textContent:'→' }));
+        const node = el('span', { className:'chainnode', title:(p.type || '') + (p.asset ? ' — ' + p.asset : '') });
+        node.append(el('span', { className:'dot', style:'background:' + (sevDot[p.severity] || 'var(--faint)') }));
+        node.append(el('span', { className:'lbl', textContent: p.type || p.title || 'finding' }));
+        path.append(node);
+      });
+      path.append(el('span', { className:'chainarrow', textContent:'⟶' }));
+      const goal = el('span', { className:'chainnode chaingoal', title: c.title });
+      goal.append(el('span', { className:'dot', style:'background:' + (sevDot[c.severity] || 'var(--crit)') }));
+      goal.append(el('span', { className:'lbl', textContent: '🎯 impacto ' + c.severity }));
+      path.append(goal);
+      card.append(path);
+    }
+    card.append(el('p', { textContent: c.explanation }));
+    if (c.assets && c.assets.length) {
+      card.append(el('div', { className:'chassets', textContent: 'assets envolvidos: ' + c.assets.join(', ') }));
+    }
+    card.addEventListener('click', () => {
+      // filtrar findings que fazem parte dessa chain
+      const findingIds = new Set(c.finding_ids || []);
+      FINDINGS_FILTER = f => findingIds.has(f.id);
+      renderFindingsTable();
+      window.scrollTo(0, $('#findingsRows').offsetTop);
+    });
+    wrap.append(card);
+  }
+  det.append(wrap);
+  box.append(det);
 }
 
 function renderGroups(groups){
@@ -1651,7 +2122,11 @@ function renderFindingsTable(){
   const chip = $('#findFilterChip');
   if (FINDINGS_FILTER) {
     chip.hidden = false;
-    chip.textContent = `filtrado: ${FINDINGS_FILTER.tool} · ${FINDINGS_FILTER.type} · ${FINDINGS_FILTER.host}  ✕`;
+    if (typeof FINDINGS_FILTER === 'function') {
+      chip.textContent = 'filtrado por encadeamento  ✕';
+    } else {
+      chip.textContent = `filtrado: ${FINDINGS_FILTER.tool} · ${FINDINGS_FILTER.type} · ${FINDINGS_FILTER.host}  ✕`;
+    }
   } else {
     chip.hidden = true;
   }
@@ -1707,12 +2182,14 @@ async function loadFindings(){
   FINDINGS_FILTER = null;
   try {
     const prog = $('#findProgram').value;
-    const { findings, groups } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
+    const { findings, groups, chains } = await api('/intel/findings?limit=1000' + (prog ? '&program=' + encodeURIComponent(prog) : ''));
     FINDINGS_ALL = findings || [];
+    renderChains(chains);
     renderGroups(groups);
     renderFindingsTable();
   } catch {
     FINDINGS_ALL = [];
+    renderChains(null);
     renderFindingsTable();
   }
 }
@@ -1870,8 +2347,10 @@ const METHODOLOGY = [
     items: [
       { type: 'pipeline', name: 'web-enum-sweep', label: 'web-enum-sweep' },
       { type: 'pipeline', name: 'content-sweep', label: 'content-sweep' },
+      { type: 'pipeline', name: 'active-subdomain-sweep', label: 'active-subdomain-sweep' },
       { type: 'tool', name: 'recon-web-enum', label: 'recon-web-enum' },
       { type: 'tool', name: 'recon-infra-enum', label: 'recon-infra-enum' },
+      { type: 'tool', name: 'recon-subdomain-brute', label: 'recon-subdomain-brute' },
     ],
   },
   {
@@ -1887,7 +2366,9 @@ const METHODOLOGY = [
     phase: '4 · Vulnerabilidades', desc: 'A fase mais larga — cada pipeline confirma pela resposta real, nunca só pelo payload aparecer.',
     items: [
       { type: 'pipeline', name: 'xss-sweep', label: 'xss-sweep' },
+      { type: 'pipeline', name: 'dom-xss-sweep', label: 'dom-xss-sweep' },
       { type: 'pipeline', name: 'sqli-sweep', label: 'sqli-sweep' },
+      { type: 'pipeline', name: 'ssti-sweep', label: 'ssti-sweep' },
       { type: 'pipeline', name: 'redirect-hunt', label: 'redirect-hunt' },
       { type: 'pipeline', name: 'cors-sweep', label: 'cors-sweep' },
       { type: 'pipeline', name: 'cache-poison-sweep', label: 'cache-poison-sweep' },
@@ -1931,6 +2412,8 @@ function goPipeline(name){
 }
 function goTool(name){
   selectTab('current');
+  $('#toolSearch').value = ''; // uma busca residual não pode esconder a ferramenta pedida
+  renderToolOptions();
   const sel = $('#tool');
   if ([...sel.options].some(o => o.value === name)) { sel.value = name; renderToolMeta(); }
   $('#target').focus();
@@ -2330,7 +2813,22 @@ async function loadPanel(){
   }));
   for (const [name, sum] of summaries) {
     const card = el('div', { className:'progcard' });
-    card.append(el('div', { className:'pname', textContent: name }));
+    const pnameBox = el('div', { className:'pname' });
+    pnameBox.append(el('span', { textContent: name }));
+
+    if (sum) {
+      const bySev = sum.findings_by_severity || {};
+      const badges = el('div', { className:'pbadges' });
+      for (const sev of ['critical', 'high', 'medium']) {
+        const n = bySev[sev] || 0;
+        if (n > 0) {
+          badges.append(el('span', { className: 'pbadge ' + sev, textContent: `${n} ${sev}` }));
+        }
+      }
+      if (badges.children.length) pnameBox.append(badges);
+    }
+
+    card.append(pnameBox);
     if (sum) {
       const bySev = sum.findings_by_severity || {};
       const total = Object.values(bySev).reduce((a, b) => a + b, 0) || 1;
@@ -2374,6 +2872,10 @@ async function loadPanel(){
 function selectTab(view){
   for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
   for (const v of document.querySelectorAll('.view')) v.classList.toggle('active', v.id === 'view-' + view);
+  // sem isso, trocar de aba vindo de uma posição rolada pra baixo faz a
+  // próxima aba abrir no meio/fim do conteúdo, parecendo "quebrado" — a
+  // troca de aba é sempre conteúdo novo, então sempre começa do topo.
+  window.scrollTo(0, 0);
   if (view === 'panel') loadPanel();
   if (view === 'map') renderMap();
   if (view === 'jobs') loadJobs();

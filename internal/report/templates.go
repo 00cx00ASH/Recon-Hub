@@ -1,6 +1,10 @@
 package report
 
-import "strings"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // tmpl is the reusable knowledge for one class of finding: what it is, why it
 // matters, how to reproduce it, how to fix it. Keyed by finding type.
@@ -31,6 +35,9 @@ func genericRepro(f Item) []string {
 		if req, ok := m["request"].(string); ok && req != "" {
 			steps = append(steps, "Requisição:\n```\n"+req+"\n```")
 		}
+		if ctrl := negativeControlLine(m); ctrl != "" {
+			steps = append(steps, ctrl)
+		}
 	}
 	if f.Evidence != "" {
 		steps = append(steps, "Observe: "+f.Evidence)
@@ -39,6 +46,31 @@ func genericRepro(f Item) []string {
 		steps = append(steps, "Reproduza a condição descrita na evidência.")
 	}
 	return steps
+}
+
+// negativeControlLine surfaces, as an explicit sentence, any baseline/
+// controle-negativo data a tool already collected in Meta (qualquer chave
+// contendo "baseline" — convenção usada por scan-idor, scan-sqli, scan-ssrf,
+// scan-smuggling…). A diferença entre "achei uma anomalia" e "provei que
+// NÃO é coincidência" é ter comparado contra uma condição de controle sem
+// o bug — a ferramenta já fez essa comparação internamente pra confirmar o
+// finding; isso só torna esse raciocínio visível em quem lê o relatório.
+func negativeControlLine(m map[string]any) string {
+	var keys []string
+	for k := range m {
+		if strings.Contains(strings.ToLower(k), "baseline") {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return ""
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
+	}
+	return "Controle negativo (condição sem o bug, já comparada pela ferramenta): " + strings.Join(parts, ", ") + " — é a diferença contra isso que descarta coincidência, não só o payload/anomalia aparecendo sozinho."
 }
 
 // templates maps a finding type (exact, then prefix) to its knowledge.
@@ -395,6 +427,9 @@ var templates = map[string]tmpl{
 			if p, ok := f.Meta["payload"].(string); ok && p != "" {
 				steps = append(steps, "Payload injetado: `"+p+"`")
 			}
+			if tech, ok := f.Meta["technique"].(string); ok && tech != "" {
+				steps = append(steps, "Técnica: "+tech+" — o scanner testa várias variantes por parâmetro antes de desistir; essa foi a que passou.")
+			}
 			steps = append(steps, "Observe: "+f.Evidence, "O marcador do payload aparece cru no HTML da resposta — sem escaping.")
 			return steps
 		},
@@ -414,6 +449,27 @@ var templates = map[string]tmpl{
 			return steps
 		},
 	},
+	"dom-xss": {
+		Name: "Cross-Site Scripting (XSS) DOM-based", CWE: "CWE-79",
+		Description: "JavaScript do lado do cliente lê uma fonte controlável pelo atacante (`location.hash` ou `location.search`/`URLSearchParams`) e insere o valor no DOM sem sanitização (tipicamente via `innerHTML` ou equivalente) — confirmado por execução real num navegador headless, não por análise de texto da resposta HTTP.",
+		Impact:      "Execução de JavaScript arbitrário no navegador da vítima no contexto de origem do site: roubo de sessão/token, ações em nome do usuário, phishing in-page — mesmo impacto do XSS refletido clássico. Quando o vetor é `hash`, o payload nunca é enviado ao servidor (fragmento de URL não faz parte da requisição HTTP), então não aparece em log de acesso nem é bloqueável por WAF de borda — a correção precisa ser no código JS do cliente, não em filtro de borda.",
+		Remediation: "Nunca inserir valor vindo de `location.hash`/`location.search`/`URLSearchParams` diretamente via `innerHTML`, `outerHTML`, `document.write` ou similar. Usar `textContent`/`innerText` quando o valor é texto puro, ou sanitizar com uma biblioteca (ex: DOMPurify) quando HTML de verdade é necessário. CSP com `script-src` restritivo reduz o impacto mas não corrige a causa.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/79.html", "https://owasp.org/www-community/attacks/DOM_Based_XSS", "https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			vec, _ := f.Meta["vector"].(string)
+			steps := []string{"Abra num navegador: `" + f.Asset + "`"}
+			switch vec {
+			case "hash":
+				steps = append(steps, "Vetor: fragmento da URL (`location.hash`) — nunca chega no servidor, só existe no navegador.")
+			case "query":
+				if p, ok := f.Meta["param"].(string); ok && p != "" {
+					steps = append(steps, "Vetor: parâmetro de query `"+p+"` relido do lado do cliente via `location.search`/`URLSearchParams` depois da página carregar.")
+				}
+			}
+			steps = append(steps, "Observe: "+f.Evidence, "O navegador executou o payload como código (onerror de uma <img> injetada disparou) — não é reflexo de texto, é execução real confirmada.")
+			return steps
+		},
+	},
 	"sqli-error-based": {
 		Name: "SQL Injection (baseada em erro)", CWE: "CWE-89",
 		Description: "Um caractere de quebra de string SQL (`'` ou `\"`) anexado a um parâmetro faz a aplicação vazar uma mensagem de erro real do banco de dados na resposta — prova que o valor chega numa query sem sanitização/parametrização.",
@@ -429,6 +485,25 @@ var templates = map[string]tmpl{
 			return steps
 		},
 	},
+	"ssti": {
+		Name: "Server-Side Template Injection (SSTI)", CWE: "CWE-1336",
+		Description: "Uma expressão matemática injetada num parâmetro (sintaxe de Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB ou Smarty) foi AVALIADA pelo motor de template no servidor — o resultado calculado apareceu na resposta, ausente no baseline sem payload, e o texto cru do payload NÃO apareceu (descartando simples reflexão/XSS). Prova que entrada do usuário chega diretamente à renderização de um template em vez de ser tratada como dado inerte.",
+		Impact:      "Motores de template sem sandbox (a maioria das instalações padrão de Jinja2/Twig/FreeMarker/Velocity/ERB) permitem escalar de uma expressão matemática pra execução arbitrária de código no servidor (RCE) — mas isso NÃO foi confirmado por esta ferramenta, que para deliberadamente na prova de avaliação de expressão, nunca executa comando de verdade.",
+		Remediation: "Nunca renderizar entrada do usuário como TEMPLATE — só como DADO passado a um template já definido pelo desenvolvedor (ex: `render_template('pagina.html', nome=entrada_usuario)`, nunca `render_template_string(entrada_usuario)`). Se precisar de personalização dinâmica de verdade, use um motor com sandbox reforçado e allowlist de expressões, nunca `eval`/interpretação livre do texto do usuário.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/1336.html", "https://portswigger.net/research/server-side-template-injection", "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing_for_Server_Side_Template_Injection"},
+		Repro: func(f Item) []string {
+			steps := []string{"Requisite sem payload (baseline): confirme que a resposta normal NÃO contém o resultado calculado."}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				eng, _ := f.Meta["engine"].(string)
+				steps = append(steps, "Requisite com o payload anexado ao valor do parâmetro (sintaxe "+eng+"): `"+p+"`")
+			}
+			if prod, ok := f.Meta["product"].(string); ok && prod != "" {
+				steps = append(steps, "Observe o resultado calculado `"+prod+"` na resposta — não o texto do payload cru, o VALOR já avaliado.")
+			}
+			steps = append(steps, "URL de teste: `"+f.Asset+"`", "Observe: "+f.Evidence)
+			return steps
+		},
+	},
 }
 
 // more exact templates for the medium+ variants that a blunt prefix would
@@ -436,6 +511,128 @@ var templates = map[string]tmpl{
 // supabase-key-exposed, …) intentionally have no template — they're skipped
 // unless include_info, and then use the honest generic fallback.
 var extra = map[string]tmpl{
+	"idor-horizontal": {
+		Name: "IDOR horizontal (Insecure Direct Object Reference)", CWE: "CWE-639",
+		Description: "Uma sessão autenticada consegue ler o recurso de OUTRA sessão no mesmo endpoint, trocando só o identificador (ex: `/orders/{id}`) — a aplicação confere autenticação mas não autorização (não valida que o dono do recurso é quem está pedindo). Confirmado comparando a resposta cruzada contra o baseline legítimo do dono real (mesmo status 2xx e tamanho de corpo dentro da tolerância), não só um 200 genérico.",
+		Impact:      "Qualquer usuário autenticado consegue ler (e, se o mesmo padrão valer para escrita, possivelmente alterar) dados de outros usuários trocando um ID sequencial ou previsível — vazamento de dados em massa automatizável, sem precisar de credencial da vítima.",
+		Remediation: "Validar em toda leitura/escrita que o recurso pedido pertence à sessão autenticada (checagem de autorização por objeto, não só autenticação). Preferir identificadores não sequenciais (UUID) como defesa em profundidade — isso não substitui a checagem de autorização.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/639.html", "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Controle negativo (baseline): peça `" + f.Asset + "` autenticado como o DONO real do recurso — anote status e tamanho do corpo. É contra ISSO que a resposta cruzada é comparada, não contra um 200 genérico."}
+			if s, ok := f.Meta["owner_baseline_status"].(float64); ok {
+				steps = append(steps, fmt.Sprintf("Baseline do dono: status %.0f", s))
+			}
+			steps = append(steps, "Cruzada: peça a MESMA URL autenticado com a OUTRA sessão (dona de um recurso diferente).")
+			steps = append(steps, "Observe: "+f.Evidence, "A resposta cruzada bate estruturalmente com o baseline do dono (controle negativo acima) — a diferença contra um 200 genérico/página de erro disfarçada é o que prova que não é coincidência.")
+			return steps
+		},
+	},
+	"access-control-vertical": {
+		Name: "Broken Function Level Authorization (access control vertical)", CWE: "CWE-285",
+		Description: "Uma função que deveria exigir privilégio elevado (administração) respondeu igual para uma sessão de menor privilégio — ou sem autenticação nenhuma. Confirmado comparando a resposta da sessão de baixo privilégio/anônima contra o baseline legítimo da sessão admin no MESMO endpoint (mesmo status 2xx + tamanho de corpo dentro da tolerância), não um 200 genérico.",
+		Impact:      "Um usuário comum (ou qualquer anônimo, no caso crítico) executa função administrativa — listar/alterar usuários, mudar config, ações privilegiadas — sem ter a role para isso. Quando o ator é anônimo, a função admin está exposta a qualquer um na internet.",
+		Remediation: "Aplicar checagem de autorização por função no servidor em TODO endpoint privilegiado (não só esconder o link no front nem confiar em role vinda do cliente). Negar por padrão: o endpoint exige a role explicitamente, e a ausência dela é 403. Testar a matriz papel×endpoint em CI.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/285.html", "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint (função que deveria ser só-admin): `" + f.Asset + "`"}
+			actor := "sessão de menor privilégio"
+			if a, ok := f.Meta["actor"].(string); ok && a == "anonymous" {
+				actor = "requisição SEM credencial (anônima)"
+			}
+			steps = append(steps,
+				"Baseline: a sessão ADMIN acessa o endpoint — anote status e tamanho (é contra isso que a comparação é feita, não contra um 200 qualquer).",
+				"Repetição: peça o MESMO endpoint com a "+actor+".",
+				"Observe: "+f.Evidence,
+				"Confirme manualmente abrindo a URL com a "+actor+" que o CONTEÚDO é mesmo a função admin, não uma página de 'sem permissão' que deu 200.")
+			return steps
+		},
+	},
+	"path-traversal": {
+		Name: "Path traversal / Local File Inclusion (LFI)", CWE: "CWE-22",
+		Description: "Um parâmetro que carrega nome/caminho de arquivo aceita sequências de traversal (`../`) e serve o conteúdo de um arquivo fora do diretório pretendido. Confirmado quando a assinatura de um arquivo de sistema conhecido (`/etc/passwd` → `root:x:0:0`; `win.ini`) aparece na resposta com o payload e está ausente no baseline sem ele — leitura de arquivo arbitrário, não um erro genérico.",
+		Impact:      "Leitura de arquivos arbitrários do servidor (config com credenciais, chaves privadas, código-fonte, /etc/passwd). Dependendo de como a aplicação usa o arquivo, pode escalar pra LFI→RCE (inclusão do arquivo como código via log poisoning, wrapper `php://`, ou arquivo de sessão) — isso é o passo manual seguinte, não confirmado por esta ferramenta.",
+		Remediation: "Nunca construir caminho de arquivo a partir de entrada do usuário diretamente. Validar contra uma allowlist de arquivos permitidos (ou um id mapeado pra caminho no servidor), canonicalizar o caminho (`realpath`) e confirmar que o resultado está DENTRO do diretório base pretendido, e rodar o serviço com o mínimo de permissão de leitura no filesystem.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/22.html", "https://owasp.org/www-community/attacks/Path_Traversal"},
+		Repro: func(f Item) []string {
+			steps := []string{"Alvo: `" + f.Asset + "`"}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				steps = append(steps, "Payload que confirmou (variante de bypass): `"+p+"`")
+			}
+			steps = append(steps, "Baseline: a mesma URL com o valor original do parâmetro NÃO contém a assinatura do arquivo de sistema.", "Observe: "+f.Evidence, "A assinatura (ex: `root:x:0:0:` do /etc/passwd) só aparece COM o payload — prova a leitura do arquivo, não coincidência.")
+			return steps
+		},
+	},
+	"mass-assignment": {
+		Name: "Mass assignment / over-posting (Broken Object Property Level Authorization)", CWE: "CWE-915",
+		Description: "Um endpoint que aceita corpo JSON liga ('binda') automaticamente um campo privilegiado vindo do cliente — role, is_admin, verified, balance — que não deveria ser settable por ele. Confirmado enviando o campo extra com um valor SENTINELA aleatório e vendo o servidor devolvê-lo ligado à chave no objeto que serializou, enquanto um campo de controle bogus no mesmo corpo NÃO volta (descarta eco cego do corpo). A ferramenta não escala de verdade — só prova que o campo é bindável.",
+		Impact:      "Dependendo do campo, o cliente controla propriedade que deveria ser do servidor: role/is_admin/permissions → escalada de privilégio (virar admin); verified/approved/kyc_verified → burlar verificação/moderação; balance/credit/discount → fraude financeira. A exploração real (setar o campo pra um valor de privilégio de verdade) é o passo seguinte — aqui está provado que o bind aceita o campo.",
+		Remediation: "Nunca fazer bind automático do corpo inteiro pro modelo. Usar uma allowlist explícita de campos que aquele ator pode setar (DTO/serializer por role), e tratar campos sensíveis (role, flags de privilégio, saldo) como somente-servidor — settáveis só por fluxo autorizado dedicado, nunca pelo update genérico do objeto.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/915.html", "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint: `" + f.Asset + "`"}
+			method, _ := f.Meta["method"].(string)
+			field, _ := f.Meta["field"].(string)
+			if method == "" {
+				method = "POST/PUT/PATCH"
+			}
+			if field != "" {
+				steps = append(steps, "Faça um "+method+" com o corpo legítimo MAIS o campo extra `"+field+"` setado pra um valor sentinela único.")
+				steps = append(steps, "Inclua no MESMO corpo um campo de nome bogus (controle) com outro valor único.")
+				steps = append(steps, "Observe: "+f.Evidence)
+				steps = append(steps, "Confirme o impacto: repita com `"+field+"` setado pra um valor de privilégio REAL (ex: role=admin, is_admin=true) usando uma conta de TESTE e veja se persiste/eleva — isto NÃO foi feito pela ferramenta.")
+			} else {
+				steps = append(steps, "Observe: "+f.Evidence)
+			}
+			return steps
+		},
+	},
+	"waf-detected": {
+		Name: "WAF/CDN de proteção identificado (informativo)", CWE: "",
+		Description: "O alvo está atrás de um WAF/CDN identificado por assinatura de vendor (headers/cookies/corpo) ou por bloqueio comportamental (requisição benigna passa, payload malicioso é barrado com 403/429). Isto **não é uma vulnerabilidade** — é contexto de metodologia que explica respostas de borda e orienta a abordagem dos demais testes.",
+		Impact:      "Nenhum por si só. O valor é operacional: saber qual proteção está na frente evita interpretar um 403 do WAF como se fosse da aplicação, e indica que encoding/rotação de circuito/ajuste de payload podem ser necessários pra avaliar os endpoints de verdade.",
+		Remediation: "Não aplicável (achado informativo). Se for reportar algo relacionado, foque no que o WAF deixou passar, não na presença dele.",
+		Refs:        []string{"https://owasp.org/www-community/Web_Application_Firewall"},
+		Repro: func(f Item) []string {
+			return []string{"Alvo: `" + f.Asset + "`", "Sinal: " + f.Evidence, "Reforço: repita o GET benigno e o GET com payload malicioso em query string e compare os status — o contraste (ou a assinatura de vendor nos headers) é o que identifica a proteção."}
+		},
+	},
+	"missing-rate-limiting": {
+		Name: "Ausência de rate limiting / lockout em endpoint de autenticação", CWE: "CWE-307",
+		Description: "Um endpoint de login/OTP aceitou várias tentativas seguidas de credencial errada sem CAPTCHA, `429`, aumento de latência ou mensagem de bloqueio — nenhum sinal de proteção contra força bruta apareceu no número de tentativas testado.",
+		Impact:      "Sem limite de tentativas, um atacante pode testar senhas/códigos em volume (força bruta ou credential stuffing) contra qualquer conta, limitado só pela banda/paciência dele. Combinado com uma wordlist de senhas vazadas, isso pode levar a account takeover em massa.",
+		Remediation: "Implementar rate limiting por conta e por IP/dispositivo (ex: backoff progressivo, CAPTCHA após N tentativas, bloqueio temporário da conta). Para OTP, limitar tentativas por código emitido e invalidar o código após poucas tentativas erradas.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/307.html", "https://cheatsheetseries.owasp.org/cheatsheets/Credential_Stuffing_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint: `" + f.Asset + "`"}
+			if n, ok := f.Meta["attempts"].(float64); ok {
+				steps = append(steps, fmt.Sprintf("Envie %.0f tentativas seguidas de credencial errada pra uma conta de teste descartável.", n))
+			} else {
+				steps = append(steps, "Envie várias tentativas seguidas de credencial errada pra uma conta de teste descartável.")
+			}
+			steps = append(steps, "Observe: "+f.Evidence, "Nenhuma tentativa recebeu CAPTCHA, 429, Retry-After ou mensagem de bloqueio — todas tratadas de forma idêntica.")
+			return steps
+		},
+	},
+	"github-ambient-config-secret-risk": {
+		Name: "Possível exfiltração de segredo via config \"ambiente\" (não confirmado)", CWE: "CWE-522",
+		Description: "Um workflow expõe um secret do repo como env var (`secrets.*`) E roda sobre conteúdo potencialmente não confiável (checkout de PR via `pull_request_target`, ou runner self-hosted) E o repositório tem versionado um arquivo de config de CLI conhecido por um footgun específico (`.weblate`, `.npmrc`, `.pypirc`, `.netrc`, `.curlrc`, `.wgetrc`): esses arquivos são descobertos subindo diretórios/lidos do checkout, e o destino de requisição que fornecem não é necessariamente vinculado à origem do segredo carregado à parte — se a ferramenta de CLI usada nesse job confiar nesse arquivo pra decidir pra onde manda a requisição, um PR malicioso que edita esse arquivo pode redirecionar o segredo pra um host do atacante. É uma COMBINAÇÃO DE SINAIS, não uma exploração confirmada — o hub não sabe se a ferramenta específica usada no `run:` realmente tem esse comportamento.",
+		Impact:      "Se confirmado, o segredo do repo (token de API, credencial de deploy) vaza pra infraestrutura do atacante assim que o workflow roda sobre um PR malicioso — sem precisar de interpolação `${{ }}` direta num `run:` (por isso não é pego por github-actions-injection).",
+		Remediation: "Não expor secrets em jobs que fazem checkout de conteúdo não confiável (`pull_request_target` + checkout do head, ou self-hosted em repo público). Se a ferramenta de CLI usada aceitar, vincule explicitamente a URL/origem esperada (equivalente ao que corrigiu o caso real: validar a origem com o MESMO parser que faz a requisição, não confiar em arquivo de config descoberto no checkout).",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/522.html", "https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions"},
+		Repro: func(f Item) []string {
+			steps := []string{"Workflow: `" + f.Asset + "`"}
+			if repo, ok := f.Meta["repo"].(string); ok && repo != "" {
+				steps = append(steps, "Repo: `"+repo+"`")
+			}
+			steps = append(steps, "Observe: "+f.Evidence)
+			steps = append(steps,
+				"Leia o workflow: identifique QUAL ferramenta de CLI roda no job que tem o secret exposto.",
+				"Verifique se essa ferramenta lê algum arquivo de config do tipo .weblate/.npmrc/.pypirc/.netrc/.curlrc/.wgetrc pra decidir a URL/host de destino da requisição.",
+				"Se ler: confirme se o segredo (env var) é enviado pra qualquer URL que esse arquivo definir, ou só pra uma origem fixa/confiável — isso é o que decide se é explorável de verdade.",
+				"Sem essa confirmação manual, trate como hipótese a verificar, não como achado confirmado.")
+			return steps
+		},
+	},
 	"jwt-no-exp": {
 		Name: "JWT sem expiração", CWE: "CWE-613",
 		Description: "Um JWT usado pela aplicação não tem o claim `exp` — o token nunca expira.",

@@ -97,20 +97,23 @@ func TestSQLiteSetFindingTriage(t *testing.T) {
 	}
 	id := fs[0].ID
 
-	got, err := s.SetFindingTriage(id, "false_positive")
+	got, err := s.SetFindingTriage(id, "false_positive", "confirmei manualmente, era um 403 sem prova")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Triage != "false_positive" || got.TriagedAt == nil {
 		t.Fatalf("triage não aplicado: %+v", got)
 	}
+	if got.TriageReason != "confirmei manualmente, era um 403 sem prova" {
+		t.Fatalf("triage_reason não aplicado: %+v", got)
+	}
 
 	fs2, _ := s.ListFindings(FindingFilter{})
-	if len(fs2) != 1 || fs2[0].Triage != "false_positive" {
+	if len(fs2) != 1 || fs2[0].Triage != "false_positive" || fs2[0].TriageReason == "" {
 		t.Fatalf("triage não persistiu: %+v", fs2)
 	}
 
-	if _, err := s.SetFindingTriage("ghost", "confirmed"); err == nil {
+	if _, err := s.SetFindingTriage("ghost", "confirmed", ""); err == nil {
 		t.Fatal("esperava erro para finding inexistente")
 	}
 }
