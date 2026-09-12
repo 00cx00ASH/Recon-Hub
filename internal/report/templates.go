@@ -527,6 +527,21 @@ var extra = map[string]tmpl{
 			return steps
 		},
 	},
+	"path-traversal": {
+		Name: "Path traversal / Local File Inclusion (LFI)", CWE: "CWE-22",
+		Description: "Um parâmetro que carrega nome/caminho de arquivo aceita sequências de traversal (`../`) e serve o conteúdo de um arquivo fora do diretório pretendido. Confirmado quando a assinatura de um arquivo de sistema conhecido (`/etc/passwd` → `root:x:0:0`; `win.ini`) aparece na resposta com o payload e está ausente no baseline sem ele — leitura de arquivo arbitrário, não um erro genérico.",
+		Impact:      "Leitura de arquivos arbitrários do servidor (config com credenciais, chaves privadas, código-fonte, /etc/passwd). Dependendo de como a aplicação usa o arquivo, pode escalar pra LFI→RCE (inclusão do arquivo como código via log poisoning, wrapper `php://`, ou arquivo de sessão) — isso é o passo manual seguinte, não confirmado por esta ferramenta.",
+		Remediation: "Nunca construir caminho de arquivo a partir de entrada do usuário diretamente. Validar contra uma allowlist de arquivos permitidos (ou um id mapeado pra caminho no servidor), canonicalizar o caminho (`realpath`) e confirmar que o resultado está DENTRO do diretório base pretendido, e rodar o serviço com o mínimo de permissão de leitura no filesystem.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/22.html", "https://owasp.org/www-community/attacks/Path_Traversal"},
+		Repro: func(f Item) []string {
+			steps := []string{"Alvo: `" + f.Asset + "`"}
+			if p, ok := f.Meta["payload"].(string); ok && p != "" {
+				steps = append(steps, "Payload que confirmou (variante de bypass): `"+p+"`")
+			}
+			steps = append(steps, "Baseline: a mesma URL com o valor original do parâmetro NÃO contém a assinatura do arquivo de sistema.", "Observe: "+f.Evidence, "A assinatura (ex: `root:x:0:0:` do /etc/passwd) só aparece COM o payload — prova a leitura do arquivo, não coincidência.")
+			return steps
+		},
+	},
 	"waf-detected": {
 		Name: "WAF/CDN de proteção identificado (informativo)", CWE: "",
 		Description: "O alvo está atrás de um WAF/CDN identificado por assinatura de vendor (headers/cookies/corpo) ou por bloqueio comportamental (requisição benigna passa, payload malicioso é barrado com 403/429). Isto **não é uma vulnerabilidade** — é contexto de metodologia que explica respostas de borda e orienta a abordagem dos demais testes.",

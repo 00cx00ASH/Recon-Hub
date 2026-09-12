@@ -105,7 +105,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ## 4. O que temos hoje
 
-### 38 ferramentas, por grupo
+### 39 ferramentas, por grupo
 
 **recon — achar superfície**
 
@@ -195,7 +195,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
   mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
   só roteia tráfego se o operador configurar explicitamente pra aquele
-  programa (opt-in — alguns programas proíbem IP anonimizado). 34 das 38
+  programa (opt-in — alguns programas proíbem IP anonimizado). 35 das 39
   ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
   (429/403 repetido). Ver README > Docker > Proxy/Tor.
 - **Chrome headless** — sidecar próprio (`docker/chrome/`), também sempre

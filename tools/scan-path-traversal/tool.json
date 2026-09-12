@@ -1,0 +1,25 @@
+{
+  "name": "scan-path-traversal",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Testa parâmetros que carregam caminho/nome de arquivo (file, path, page, template, include, download…) com 11 variantes de path traversal — profundidade bruta (../../etc/passwd), strip-once (....//), barra/ponto URL-encoded simples e duplo (%2e%2e%2f, %252f), null byte legado, caminho absoluto, e as variantes Windows (..\\windows\\win.ini) — e CONFIRMA LFI/traversal só quando a assinatura de um arquivo de sistema real (/etc/passwd: 'root:x:0:0'; win.ini: '[fonts]'; boot.ini) aparece na resposta com o payload mas está AUSENTE no baseline sem ele. O payload vai verbatim na query (sem re-encoding), então as variantes pré-encodadas chegam exatamente como pretendido. Só LÊ arquivo de sistema como prova — nunca escreve, nunca extrai dado real além da assinatura que confirma.",
+  "guide": "Alvo = uma URL http/https, de preferência já com o parâmetro suspeito na query (ex: https://site.com/baixar?file=relatorio.pdf). Sem query, testa os nomes da wordlist como valor único. A wordlist padrão (builtin/lfi-params) tem ~130 nomes de parâmetro propensos a carregar arquivo. Modos lista/arquivo varrem várias URLs. Rode depois do recon-web-enum/js-hunter identificarem endpoints que recebem nome de arquivo — é onde traversal vive.",
+  "validation": "Exemplo confirmado: ?file=../../../../../../etc/passwd responde com 'root:x:0:0:' no corpo, e a mesma URL sem o payload (?file=relatorio.pdf) não tem essa string — a diferença prova leitura de arquivo arbitrário, não um erro genérico. O `meta.payload` diz qual das 11 variantes de bypass confirmou (útil pra saber que filtro o alvo tem). Confirma só o que vaza conteúdo de arquivo conhecido; wrappers PHP (php://filter base64) e RFI ficam pro passo manual de propósito.",
+  "exec": ["go", "run", "."],
+  "timeout": "15m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "uma URL (idealmente já com ?param=arquivo)", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "várias URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo no servidor, uma URL por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "wordlist", "type": "wordlist", "required": false, "default": "builtin/lfi-params", "help": "lista de NOMES de parâmetro a testar" },
+    { "name": "params", "type": "string", "required": false, "help": "nomes de parâmetro extra, separados por vírgula" },
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por vírgula/linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "caminho de arquivo no servidor, uma URL por linha" },
+    { "name": "max_params", "type": "int", "required": false, "default": 80, "help": "teto de parâmetros testados por URL" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 15, "help": "requisições simultâneas (cada parâmetro faz baseline + até 11 variantes)" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 8000, "help": "timeout por requisição" }
+  ]
+}

@@ -186,11 +186,22 @@ Por causa disso:
   {{GOAL}}. O budget de jobs/tempo é controlado pelo processo Python (não
   por você) — não pergunte por um número, ele já está sendo aplicado por
   fora.
-- Quando avaliar que chegou numa condição de "Parar de vez" (seção
-  correspondente acima) — budget não é mais seu de decidir quando parar,
-  mas findings esgotados / nada novo por 2-3 rodadas / pergunta que só o
-  operador responde ainda valem — feche sua resposta desta rodada com o
-  resumo de praxe e, sozinha na última linha, escreva exatamente:
+- **Achou um finding REPORTÁVEL (score/severidade alta + `meta.confirmed`
+  real, ou uma cadeia de `hub_list_chain_candidates`) → pare aqui.** Sem
+  operador lendo em tempo real, seguir gerando tráfego por cima de algo
+  que já merece revisão humana é o oposto do que se quer. Antes de parar,
+  MONTE A PROVA: `hub_draft_finding` pra gerar o PoC/relatório a partir da
+  evidência real (nunca inventada) e `hub_triage_finding` `confirmed`.
+  Depois feche a resposta com o resumo + o PoC e, sozinha na última linha,
+  escreva exatamente:
+  {STOP_MARKER}
+  Assim o operador encontra o achado já com a prova montada, não uma
+  menção perdida no meio do log.
+- Outras condições de "Parar de vez" (seção correspondente acima) —
+  budget não é mais seu de decidir quando parar, mas findings esgotados /
+  nada novo por 2-3 rodadas / pergunta que só o operador responde ainda
+  valem — mesmo procedimento: feche com o resumo de praxe e, sozinha na
+  última linha, escreva exatamente:
   {STOP_MARKER}
   Isso é o sinal que o processo Python usa pra não te chamar de novo.
 """

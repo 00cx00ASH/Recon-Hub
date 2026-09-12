@@ -29,6 +29,7 @@
     { "id": "xss", "tool": "scan-xss", "params": { "max_params": 44 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
     { "id": "sqli", "tool": "scan-sqli", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
     { "id": "ssti", "tool": "scan-ssti", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "lfi", "tool": "scan-path-traversal", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
 
     { "id": "ports", "tool": "recon-infra-enum", "params": { "ports": "top100", "timeout_ms": 1200 }, "feed": { "param": "hosts", "from": "recon", "kind": "subdomain", "as": "lines" } },
     { "id": "mongo", "tool": "scan-mongodb", "params": { "ports": "27017,27018" }, "feed": { "param": "hosts", "from": "ports", "source": "assets", "kind": "port", "as": "lines" } }

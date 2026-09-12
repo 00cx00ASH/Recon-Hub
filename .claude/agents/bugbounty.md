@@ -93,11 +93,25 @@ seção), nunca "só mais um".
    - Achou asset novo (subdomínio, endpoint, bucket, porta) → é candidato
      a gatilho de aprofundar (lista abaixo).
    - Achou finding com `score`/severidade alta e `meta.confirmed` real
-     (não só um 401/403 cru) → **pare o loop agora**, não só no fim.
-     Avise o operador imediatamente com o achado, e só continue
-     explorando OUTRAS partes do programa se ele confirmar (esse é o
-     único "pede permissão" que sobrevive nesse modo — achado crítico
-     não fica enterrado no meio de 20 rodadas silenciosas).
+     (não só um 401/403 cru) → **é reportável: pare o loop agora**, não
+     só no fim. Antes de pausar, monte a prova: chame `hub_draft_finding`
+     pra gerar o PoC/relatório daquele achado a partir da evidência real
+     (nunca inventada) e `hub_triage_finding` `confirmed` (com `reason`)
+     pra fechar o loop de aprendizado. Depois avise o operador
+     imediatamente com o achado + o PoC, e só continue explorando OUTRAS
+     partes do programa se ele confirmar (esse é o único "pede permissão"
+     que sobrevive nesse modo — achado crítico não fica enterrado no meio
+     de 20 rodadas silenciosas, e sai com a prova já montada, não só uma
+     menção). Rodando sem operador (agent-runner), "pausar" = encerrar a
+     exploração com o marcador de parada (ver addendum), não seguir
+     gerando mais tráfego por cima de um achado que já merece revisão.
+   - **Depois de QUALQUER rodada de scan, chame `hub_list_chain_candidates`
+     (filtrando por `program`)** — ele cross-referencia os findings
+     confirmados e aponta se o achado novo combina com algo anterior numa
+     cadeia (open-redirect+OAuth, SSRF+metadata, IDOR→credencial, etc).
+     Se formar uma cadeia, trate como reportável (bullet acima): a cadeia
+     quase sempre sobe a severidade do conjunto. Isto é automático — não
+     dependa de lembrar os padrões de cabeça.
    - Achou finding claramente ruído (severidade info, 401/403 sem prova,
      `meta.confirmed:false`) → marque com `hub_triage_finding`
      (`false_positive`, com `reason`) na hora, não deixe acumular — é
@@ -246,6 +260,14 @@ ainda falta rodar num programa.
   Cloudflare/DigitalOcean/Oracle/...) via PTR — é uma dica pra priorizar
   o que investigar (ex: AWS confirmado → `scan-ssrf` tem mais chance de
   achar metadata endpoint real), nunca prova de nada sozinho.
+- `scan-waf-fingerprint` — identifica o WAF/CDN na frente do alvo por
+  assinatura de vendor (cf-ray, x-sucuri-id, "Support ID:" do F5,
+  ModSecurity… 14 vendors) ou por bloqueio comportamental (GET benigno
+  passa, payload malicioso vira 403/429). É contexto de metodologia
+  (`info`), NÃO vulnerabilidade: serve pra não confundir um 403 do WAF
+  com a aplicação, e pra calibrar encoding/abordagem dos demais scanners.
+  Rode cedo num alvo novo; se identificar Cloudflare/Akamai/etc, os 403s
+  subsequentes provavelmente são da borda, não do app.
 - `recon-web-enum` — crawl raso, fingerprint de stack/WAF/CDN, ~67
   caminhos administrativos com calibração de soft-404. Inclui
   `try_bypass` (opt-in): pra cada 401/403 já confirmado em caminho
@@ -316,6 +338,14 @@ ainda falta rodar num programa.
   payload NÃO aparece — prova avaliação real, não reflexo tipo XSS.
   Não confirma RCE (isso é o passo manual seguinte, específico do
   engine identificado em `meta.engine`).
+- Path traversal / LFI: `scan-path-traversal` — injeta `../../etc/passwd`
+  com 11 variantes de bypass (profundidade, `....//`, `%2e%2e%2f` simples
+  e duplo, null byte, absoluto, Windows `win.ini`) em parâmetros que
+  carregam arquivo (file, path, page, template, include…, wordlist
+  `builtin/lfi-params`) e confirma só quando a assinatura do arquivo de
+  sistema aparece na resposta e some no baseline. Só LÊ como prova; o
+  `meta.payload` diz qual bypass passou (= que filtro o alvo tem). LFI→RCE
+  e RFI são o passo manual seguinte.
 - Cache poisoning: `scan-cache-poisoning` — headers não-chaveados
   (X-Forwarded-Host etc.), isolado por cache-buster.
 - Request smuggling: `scan-smuggling` — timing oracle, nunca encadeia
@@ -577,8 +607,12 @@ sessão autenticada real ou julgamento de lógica de negócio:
 - **Lógica de negócio** (ex: burlar fluxo de checkout, cupom, limite de
   taxa de negócio) — inerentemente manual, nenhum scanner genérico
   resolve isso direito.
-- **File upload / LFI-RFI / path traversal clássico** — sem ferramenta
-  dedicada.
+- **Path traversal / LFI** — **já tem** (`scan-path-traversal`): confirma
+  LEITURA de arquivo de sistema (`/etc/passwd`/`win.ini`) por conteúdo, com
+  11 variantes de bypass de filtro. O que fica de fora: LFI→RCE (incluir o
+  arquivo como código via log poisoning / wrapper `php://` / session), RFI
+  (`allow_url_include`) e file upload — esses são o passo manual seguinte,
+  específicos de como a app usa o arquivo.
 - **Mobile/API móvel, cliente desktop** — fora do escopo do hub (web/API
   HTTP só).
 

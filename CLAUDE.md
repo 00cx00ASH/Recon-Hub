@@ -297,3 +297,28 @@ sobre caçar bugs em programas de terceiros.
   ninguém notar** — se o comentário cita um exemplo (`"10.0.0.0/8"`), tem
   que existir um teste pra esse exemplo específico, não só pros formatos
   óbvios (host puro, `*.host`).
+- **`proxy.go` (compartilhado, 34 cópias idênticas) agora RESPEITA o rate
+  limit do alvo, não só BYPASSA.** Antes o `blockRotator` só existia quando
+  `RECONHUB_PROXY_CONTROL_URL` estava setado (Tor) e sua única ação era
+  rotacionar circuito depois de N bloqueios. Faltava o outro lado: num 429/503
+  ele não fazia backoff nem honrava `Retry-After` — martelava até o threshold.
+  Agora `withBlockRotation` SEMPRE embrulha (mesmo sem Tor) e o `RoundTrip`,
+  num 429/503, dorme antes de devolver a resposta (pausando naturalmente o
+  worker que chamou), honrando `Retry-After` (segundos ou HTTP-date) limitado
+  a `RECONHUB_RATELIMIT_MAX_BACKOFF_MS` (default 30s; 0 desliga). Respeitar é
+  sempre; bypassar (rotação) segue só com Tor. Qualquer mudança no proxy.go
+  precisa ser propagada às 34 cópias (são byte-idênticas — `md5sum` único é o
+  invariante; há teste `parseRetryAfter`/`backoffFor` em `proxy_test.go`).
+- **Encoding-bypass de payload vive nos injetores de URL/path/IP, por design
+  — não nos de caractere, e NÃO é pra espalhar base64/hash em tudo.** Onde o
+  payload É a string que atravessa o filtro (`scan-path-traversal`:
+  `%2e%2e%2f` simples/duplo, `....//`, null byte, Windows; `scan-open-redirect`:
+  22 variantes; `scan-ssrf`: IP decimal/hex/octal/IPv6/`%25`), as variantes de
+  encoding são o próprio conjunto de payloads e vão verbatim na query (ver
+  `withParamRaw` no path-traversal — `q.Encode()` re-encodaria e quebraria um
+  `%2e` pré-encodado). Nos injetores de caractere (`scan-sqli` aspa, `scan-xss`,
+  `scan-ssti`) o URL-encoding já é automático na query e base64/hash só passa
+  se a app decodificar aquele formato (raro, app-específico) — espalhar isso
+  multiplicaria o tráfego por N e feriria o "nunca DoS / pacing é padrão" da
+  filosofia. Resumo: adicione variante de encoding onde ela de fato atravessa
+  um filtro decodável, não como cargo cult em todo scanner.
