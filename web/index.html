@@ -296,6 +296,19 @@
   #confirmCancel{background:none;border:1px solid var(--border-strong);color:var(--dim)}
   #confirmOk{background:var(--crit);border:0;color:#1a0a06;font-weight:600}
 
+  .queueitem{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.7rem;margin-bottom:.5rem;font-size:12px;display:flex;flex-direction:column;gap:.4rem}
+  .queueitem.queued{border-left:3px solid var(--accent)}
+  .queueitem.running{border-left:3px solid var(--info);animation:pulse .8s infinite}
+  .queueitem.done{border-left:3px solid var(--ok)}
+  .queueitem.error{border-left:3px solid var(--crit)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+  .queueitem-head{display:flex;gap:.4rem;align-items:center;font-weight:600}
+  .queueitem-status{font-size:10px;font-weight:600;padding:.05rem .3rem;border-radius:3px;background:var(--bg);color:var(--faint);text-transform:uppercase}
+  .queueitem-status.running{background:color-mix(in srgb,var(--info) 20%,var(--bg));color:var(--info)}
+  .queueitem-status.done{background:color-mix(in srgb,var(--ok) 20%,var(--bg));color:var(--ok)}
+  .queueitem-status.error{background:color-mix(in srgb,var(--crit) 20%,var(--bg));color:var(--crit)}
+  .queueitem-detail{font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace}
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -334,6 +347,20 @@
     <div class="row">
       <button id="confirmCancel">Cancelar</button>
       <button id="confirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="queueOverlay" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:215;display:flex;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:1.2rem 1.3rem;max-width:640px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.4);max-height:80vh;display:flex;flex-direction:column">
+    <h3 style="margin:0 0 1rem;font-family:'IBM Plex Mono',monospace;font-size:1rem;letter-spacing:.05em;color:var(--text)">Preview da fila</h3>
+    <div id="queueList" style="flex:1;overflow-y:auto;margin-bottom:1rem;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.8rem;background:var(--bg)"></div>
+    <div style="display:flex;gap:.6rem;justify-content:space-between">
+      <span id="queueStats" style="font-size:12px;color:var(--faint);align-self:center"></span>
+      <div style="display:flex;gap:.6rem">
+        <button id="queueCancel" style="background:none;border:1px solid var(--border-strong);color:var(--dim);border-radius:var(--radius-sm);padding:.5rem 1rem;cursor:pointer;font-family:'IBM Plex Mono',monospace">Cancelar</button>
+        <button id="queueRun" style="background:var(--accent);color:#1a1400;border:0;border-radius:var(--radius-sm);padding:.5rem 1rem;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-weight:600">Executar fila</button>
+      </div>
     </div>
   </div>
 </div>
@@ -784,6 +811,95 @@ function assetCell(value){
 // "selecionar vários" dispara uma run por valor único selecionado (dedupe
 // automático porque é um Set), mantendo o back-end intocado.
 const PIPELINE_SELECTION = new Set();
+const QUEUE = [];  // fila de jobs aguardando execução: { pipeline, target, program }
+
+function queueJobs(jobs){
+  QUEUE.push(...jobs);
+  toastOk(`${jobs.length} job(s) adicionado(s) à fila`);
+  showQueuePreview();
+}
+
+function showQueuePreview(){
+  const overlay = $('#queueOverlay');
+  const list = $('#queueList');
+  list.innerHTML = '';
+
+  if (QUEUE.length === 0) {
+    list.append(el('p', { style:'color:var(--faint);text-align:center;padding:1rem', textContent:'fila vazia' }));
+    $('#queueRun').disabled = true;
+    overlay.hidden = false;
+    return;
+  }
+
+  for (let i = 0; i < QUEUE.length; i++) {
+    const job = QUEUE[i];
+    const item = el('div', { className:'queueitem queued' });
+
+    const head = el('div', { className:'queueitem-head' });
+    head.append(
+      el('span', { style:'flex:none', textContent:`#${i+1}` }),
+      el('span', { className:'queueitem-status running', textContent:'pendente' }),
+      el('span', { style:'flex:1;word-break:break-all', textContent:job.target })
+    );
+    item.append(head);
+
+    const detail = el('div', { className:'queueitem-detail', textContent:`${job.pipeline} · ${job.program || 'sem programa'}` });
+    item.append(detail);
+
+    list.append(item);
+  }
+
+  $('#queueStats').textContent = `${QUEUE.length} job(s) · tempo estimado: ${Math.ceil(QUEUE.length * 2)}min`;
+  $('#queueRun').disabled = false;
+  overlay.hidden = false;
+}
+
+function executeQueue(){
+  const overlay = $('#queueOverlay');
+  const run = $('#queueRun');
+  run.disabled = true;
+  run.textContent = 'executando…';
+
+  (async () => {
+    let ok = 0, fail = 0;
+    for (let i = 0; i < QUEUE.length; i++) {
+      const job = QUEUE[i];
+      try {
+        await api('/pipeline-runs', {
+          method: 'POST',
+          body: JSON.stringify({ pipeline: job.pipeline, target: job.target, program: job.program })
+        });
+        ok++;
+      } catch (e) {
+        fail++;
+      }
+      // update visual feedback
+      const items = document.querySelectorAll('.queueitem');
+      if (items[i]) {
+        const status = items[i].querySelector('.queueitem-status');
+        if (status) {
+          if (fail > 0) {
+            status.textContent = 'erro';
+            status.className = 'queueitem-status error';
+          } else {
+            status.textContent = 'ok';
+            status.className = 'queueitem-status done';
+          }
+        }
+      }
+    }
+
+    toastOk(`${ok}/${QUEUE.length} jobs executados`);
+    QUEUE.length = 0;
+    overlay.hidden = true;
+    run.textContent = 'Executar fila';
+
+    renderFindingsTable();
+    renderAssetsTable();
+    selectTab('pipelines');
+    loadPipelineRuns();
+  })();
+}
 
 function updateSelBar(){
   const n = PIPELINE_SELECTION.size;
@@ -834,26 +950,25 @@ $('#selClear').addEventListener('click', () => {
   renderFindingsTable();
   renderAssetsTable();
 });
-$('#selRun').addEventListener('click', async () => {
+
+$('#queueCancel').addEventListener('click', () => {
+  $('#queueOverlay').hidden = true;
+});
+
+$('#queueRun').addEventListener('click', () => {
+  executeQueue();
+});
+$('#selRun').addEventListener('click', () => {
   const pipeline = $('#selPipeline').value, program = $('#selProgram').value;
-  const pipelineSelect = $('#selPipeline');
-  const pipelineLabel = pipelineSelect.options[pipelineSelect.selectedIndex]?.text || pipeline;
   const targets = [...PIPELINE_SELECTION];
   if (!pipeline || !targets.length) return;
-  $('#selRun').disabled = true;
-  let ok = 0, fail = 0, lastID = null;
-  for (const target of targets) {
-    try { lastID = (await api('/pipeline-runs', { method:'POST', body: JSON.stringify({ pipeline, target, program }) })).id; ok++; }
-    catch { fail++; }
-  }
-  const msg = `${ok}/${targets.length} ${pipelineLabel} em ${targets.length} alvo(s)` + (fail ? ` (${fail} erro)` : ' ✓');
-  if (ok) toastOk(msg);
-  else toastError(`falha ao iniciar pipelines — ${fail}/${targets.length}`);
+
+  // criar jobs pra fila
+  const jobs = targets.map(target => ({ pipeline, target, program }));
+  queueJobs(jobs);
+
   PIPELINE_SELECTION.clear();
   updateSelBar();
-  renderFindingsTable();
-  renderAssetsTable();
-  if (ok) { selectTab('pipelines'); loadPipelineRuns(); if (lastID) openPipelineRun(lastID); }
 });
 
 /* ---------- toast + confirm (substituem alert()/confirm() nativos) ---------- */
