@@ -1,0 +1,21 @@
+{
+  "name": "scan-waf-fingerprint",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Detecção e fingerprint de WAF/proteção: testa payloads comuns (SQLi, path traversal, XSS, LDAP injection) contra o alvo e analisa respostas (status codes, headers, corpo) pra identificar qual WAF/proteção está em pé (Cloudflare, AWS WAF, ModSecurity, F5, Imperva, Barracuda, nginx, Sucuri). Reporta qual WAF foi detectado e com que certeza.",
+  "guide": "Alvo = URL raiz de um serviço web (http://target.com). A ferramenta primeiro faz um GET limpo pra saber o status code normal, depois injetar payloads agressivos e mede se mudou de status (403/429 típicos de WAF). Compara headers/corpo contra assinaturas conhecidas pra identificar qual proteção. Use pra entender que barreiras você vai encontrar (Cloudflare vai desafiar captcha, AWS WAF pode dar 403 direto, ModSecurity pode vazar o nome). Não é invasivo — só GET com payloads em query string.",
+  "validation": "Exemplo: GET /api/users retorna 200. GET /api/users?id=1' OR '1'='1 retorna 403 + header 'cf-ray' = Cloudflare detectado. Exemplo 2: GET /admin retorna 403 + corpo 'ModSecurity' = ModSecurity. Exemplo 3: GET /api retorna 200, GET /api?x=../../../etc/passwd retorna 429 = rate limit ou WAF genérico.",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "múltiplas URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com URLs, uma por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por nova linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo com URLs, uma por linha" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 3000, "help": "timeout por requisição" }
+  ]
+}

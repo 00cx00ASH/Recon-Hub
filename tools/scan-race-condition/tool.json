@@ -1,0 +1,22 @@
+{
+  "name": "scan-race-condition",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Detecção de race condition: envia N requisições simultâneas contra um endpoint e compara respostas (status code, corpo). Se respostas variam — status diferente, conteúdo diferente — há race condition potencial. Útil pra encontrar state inconsistency, double-spend (2x crédito), race-to-zero, ou authorization bypass via timing.",
+  "guide": "Alvo = URL raiz de um endpoint estado-modificável (http://target.com/api/transfer). A ferramenta envia múltiplas requisições concorrentes rápidas (default 20, ajustável) e checa se TODAS as respostas são idênticas. Se não forem — alguma retorna erro, outra sucesso, ou conteúdos divergem — é race condition. Confirme manualmente repetindo a operação lado a lado pra entender a sem-idiência.",
+  "validation": "Exemplo: POST /api/transfer 20x concorrentes, 15x retornam 200 + 'sucesso', 5x retornam 409 'saldo insuficiente' = race condition entre check-saldo e transfer — pode drenagem de conta. Exemplo 2: GET /api/profile 20x, todas retornam 200 + mesmo JSON = sem race condition (notice). Exemplo 3: POST /vote 20x, variação no campo 'total_votes' (10, 11, 10, 12, 11...) = race condition no contador — votos são contados não-atomicamente.",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "múltiplas URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com URLs, uma por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por nova linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo com URLs, uma por linha" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 20, "help": "número de requisições simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 2000, "help": "timeout por requisição" }
+  ]
+}
