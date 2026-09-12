@@ -252,8 +252,18 @@ sobre caçar bugs em programas de terceiros.
   atualizar os 4 lugares junto: README (linha do catálogo + a tabela em
   si), `docs/GUIA-DE-USO.md` (título "N ferramentas, por grupo"), texto
   da aba Mapa em `web/index.html`, e a fração de adoção de proxy em
-  README + `docs/TOOL_CONTRACT.md` (denominador = total; numerador =
-  total menos as que documentadamente não usam `http.Client`).
+  README + `docs/GUIA-DE-USO.md` + `docs/TOOL_CONTRACT.md` (denominador =
+  total; numerador = nº real de cópias de `proxy.go` = `find tools
+  -maxdepth 2 -name proxy.go | wc -l`, que é exatamente total menos as
+  que documentadamente não usam `http.Client`). E quando a prosa
+  ENUMERA essas exceções (a README lista "as N que ficam de fora" uma a
+  uma), essa lista também dessincroniza: ao adicionar `scan-privesc`
+  a fração dizia "36 das 40" com 35 cópias reais de `proxy.go`, E a
+  enumeração omitia `recon-subdomain-brute` (DNS puro via `miekg/dns`,
+  nunca teve `http.Client`) — o número e a lista driftaram juntos, por
+  motivos independentes. Confira os dois: numerador == `proxy.go` real,
+  e a enumeração == o conjunto de tools SEM `proxy.go` (`for d in
+  tools/*/; do [ -f "$d/proxy.go" ] || basename "$d"; done`).
 - **O `FileStore` (backend padrão, JSON-lines) carrega tudo em memória no
   `store.Open()` e nunca relê o arquivo do disco depois — só o próprio
   processo que abriu o store vê o que ele mesmo escreve.** Popular dados

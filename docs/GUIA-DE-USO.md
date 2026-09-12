@@ -195,7 +195,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
   mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
   só roteia tráfego se o operador configurar explicitamente pra aquele
-  programa (opt-in — alguns programas proíbem IP anonimizado). 36 das 40
+  programa (opt-in — alguns programas proíbem IP anonimizado). 35 das 40
   ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
   (429/403 repetido). Ver README > Docker > Proxy/Tor.
 - **Chrome headless** — sidecar próprio (`docker/chrome/`), também sempre

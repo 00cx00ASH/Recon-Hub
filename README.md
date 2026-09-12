@@ -371,11 +371,13 @@ rotação a qualquer momento:
 docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
 ```
 
-Hoje isso está implementado em 36 das 40 ferramentas (todas as que falam
-HTTP com o alvo). As 4 que ficam de fora, de propósito, porque não usam
-`http.Client` — falam TCP cru ou dirigem um navegador: `scan-mongodb` (wire
-protocol do MongoDB), `recon-infra-enum` (port scan/banner grab),
-`scan-smuggling` (mede timing numa conexão isolada — rotear por Tor
+Hoje isso está implementado em 35 das 40 ferramentas (todas as que falam
+HTTP com o alvo). As 5 que ficam de fora, de propósito, porque não usam
+`http.Client` — falam TCP cru, resolvem DNS ou dirigem um navegador:
+`scan-mongodb` (wire protocol do MongoDB), `recon-infra-enum` (port
+scan/banner grab), `recon-subdomain-brute` (brute force de DNS via
+`miekg/dns`, sem HTTP com o alvo), `scan-smuggling` (mede timing numa
+conexão isolada — rotear por Tor
 introduziria latência de circuito variável que contaminaria o próprio sinal
 que a técnica depende) e `scan-xss-dom` (fala CDP com um navegador headless;
 proxy só é suportado no allocator local, nunca no sidecar remoto
