@@ -316,6 +316,21 @@ sobre caçar bugs em programas de terceiros.
   único jeito de validar o schema do manifesto sem o Docker. `modes[].params`
   é `[]string` (nomes); param novo de modo tem que existir no `params`
   top-level.
+- **A aba Mapa (array `METHODOLOGY` em `web/index.html`) representa cada
+  categoria de vuln por um chip — e uma tool de categoria nova some dele se
+  ninguém adicionar.** Sutileza que engana: tools COM pipeline aparecem pelo
+  chip da PIPELINE (ex: `scan-sqli`→`sqli-sweep`, `scan-cors`→`cors-sweep`,
+  `scan-path-traversal`→`lfi-sweep`), então estão cobertas automaticamente;
+  só as tools SINGLE-TARGET SEM pipeline (`scan-idor`, `scan-privesc`,
+  `scan-mass-assignment`, `scan-nosqli`, `scan-xss-stored`,
+  `scan-bruteforce-check`, `scan-waf-fingerprint`) precisam de um chip
+  `{type:'tool'}` próprio — e foram justamente essas que driftaram pra fora
+  do Mapa ao longo de várias sessões. É o "aparecer na aba Mapa" que a
+  filosofia exige. Ao adicionar uma tool de vuln sem pipeline, some um chip
+  na fase certa do `METHODOLOGY` (4 · Vulnerabilidades, em geral) e valide a
+  UI com Playwright (chips presentes + sem overflow horizontal em 390px),
+  como manda o passo 5 de "Antes de commitar". Confira o que falta: tool de
+  vuln sem pipeline própria cujo nome não aparece em `web/index.html`.
 - **O `FileStore` (backend padrão, JSON-lines) carrega tudo em memória no
   `store.Open()` e nunca relê o arquivo do disco depois — só o próprio
   processo que abriu o store vê o que ele mesmo escreve.** Popular dados
