@@ -176,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("POST /api/reload", s.auth(s.reloadRegistries))
 	mux.HandleFunc("GET /api/tools", s.auth(s.listTools))
 	mux.HandleFunc("GET /api/tools/{name}", s.auth(s.getTool))
 	mux.HandleFunc("GET /api/tools/{name}/readme", s.auth(s.getToolReadme))
@@ -294,6 +295,41 @@ func (s *Server) docs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
+}
+
+// reloadRegistries re-lê tools/pipelines/wordlists do disco SEM reiniciar o
+// processo — é o que garante que adicionar ou editar uma ferramenta/pipeline
+// não exige derrubar o hub (zero downtime). Cada Reload() monta o índice novo
+// fora do lock e só troca sob write lock, então jobs em andamento e leituras
+// concorrentes (List/Get) não são interrompidos. Se algum manifesto novo
+// estiver quebrado, o Reload daquele registro falha e o índice ANTIGO é
+// mantido (não deixa o hub num estado meio-carregado).
+func (s *Server) reloadRegistries(w http.ResponseWriter, r *http.Request) {
+	var errs []string
+	if err := s.Reg.Reload(); err != nil {
+		errs = append(errs, "tools: "+err.Error())
+	}
+	if err := s.Pipelines.Reload(); err != nil {
+		errs = append(errs, "pipelines: "+err.Error())
+	}
+	if err := s.Wordlists.Reload(); err != nil {
+		errs = append(errs, "wordlists: "+err.Error())
+	}
+	if len(errs) > 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":     false,
+			"errors": errs,
+			"note":   "índice(s) com erro mantiveram a versão anterior — o hub segue no ar com o que já tinha",
+			"tools":  len(s.Reg.List()), "pipelines": len(s.Pipelines.List()),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"tools":     len(s.Reg.List()),
+		"pipelines": len(s.Pipelines.List()),
+		"message":   "registries recarregados sem reiniciar o hub",
+	})
 }
 
 func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {

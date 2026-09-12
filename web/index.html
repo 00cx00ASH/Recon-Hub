@@ -445,6 +445,7 @@ docker compose exec reconhub cat /app/data/token</pre>
     <div id="params"></div>
     <button class="run" id="run" disabled>Rodar job</button>
     <p class="summary" id="regSummary"><span class="k">registro:</span> carregando…</p>
+    <button id="reloadReg" title="Recarrega ferramentas/pipelines/wordlists do disco SEM reiniciar o hub — adicionar ou editar uma tool fica disponível na hora, zero downtime" style="font-size:11px;padding:.1rem .5rem;cursor:pointer;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:3px;color:var(--dim)">↻ recarregar registro</button>
   </section>
 
   <section class="content">
@@ -1145,6 +1146,29 @@ async function loadTools() {
     $('#regSummary').innerHTML = `<span class="k">registro:</span> erro — ${e.message}`;
   }
 }
+
+// Recarrega tools/pipelines/wordlists do disco sem reiniciar o hub (POST
+// /api/reload) — é o que garante que adicionar/editar uma ferramenta não
+// derruba a aplicação. Atualiza o seletor e a aba Pipelines na sequência.
+async function reloadRegistries() {
+  const btn = $('#reloadReg');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ recarregando…'; }
+  try {
+    const res = await api('/reload', { method: 'POST' });
+    await loadTools();
+    if (typeof loadPipelines === 'function') { try { await loadPipelines(); } catch {} }
+    if (res.ok) {
+      toastOk(`registro recarregado — ${res.tools} ferramentas, ${res.pipelines} pipelines (sem reiniciar)`);
+    } else {
+      toastError('recarregado com erro(s): ' + (res.errors || []).join(' · ') + ' — índice anterior mantido');
+    }
+  } catch (e) {
+    toastError('falha ao recarregar: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ recarregar registro'; }
+  }
+}
+$('#reloadReg')?.addEventListener('click', reloadRegistries);
 function currentTool() { return TOOLS.find(t => t.name === $('#tool').value); }
 function currentMode() {
   const t = currentTool();
