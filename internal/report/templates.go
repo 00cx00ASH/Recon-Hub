@@ -527,6 +527,26 @@ var extra = map[string]tmpl{
 			return steps
 		},
 	},
+	"access-control-vertical": {
+		Name: "Broken Function Level Authorization (access control vertical)", CWE: "CWE-285",
+		Description: "Uma função que deveria exigir privilégio elevado (administração) respondeu igual para uma sessão de menor privilégio — ou sem autenticação nenhuma. Confirmado comparando a resposta da sessão de baixo privilégio/anônima contra o baseline legítimo da sessão admin no MESMO endpoint (mesmo status 2xx + tamanho de corpo dentro da tolerância), não um 200 genérico.",
+		Impact:      "Um usuário comum (ou qualquer anônimo, no caso crítico) executa função administrativa — listar/alterar usuários, mudar config, ações privilegiadas — sem ter a role para isso. Quando o ator é anônimo, a função admin está exposta a qualquer um na internet.",
+		Remediation: "Aplicar checagem de autorização por função no servidor em TODO endpoint privilegiado (não só esconder o link no front nem confiar em role vinda do cliente). Negar por padrão: o endpoint exige a role explicitamente, e a ausência dela é 403. Testar a matriz papel×endpoint em CI.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/285.html", "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint (função que deveria ser só-admin): `" + f.Asset + "`"}
+			actor := "sessão de menor privilégio"
+			if a, ok := f.Meta["actor"].(string); ok && a == "anonymous" {
+				actor = "requisição SEM credencial (anônima)"
+			}
+			steps = append(steps,
+				"Baseline: a sessão ADMIN acessa o endpoint — anote status e tamanho (é contra isso que a comparação é feita, não contra um 200 qualquer).",
+				"Repetição: peça o MESMO endpoint com a "+actor+".",
+				"Observe: "+f.Evidence,
+				"Confirme manualmente abrindo a URL com a "+actor+" que o CONTEÚDO é mesmo a função admin, não uma página de 'sem permissão' que deu 200.")
+			return steps
+		},
+	},
 	"path-traversal": {
 		Name: "Path traversal / Local File Inclusion (LFI)", CWE: "CWE-22",
 		Description: "Um parâmetro que carrega nome/caminho de arquivo aceita sequências de traversal (`../`) e serve o conteúdo de um arquivo fora do diretório pretendido. Confirmado quando a assinatura de um arquivo de sistema conhecido (`/etc/passwd` → `root:x:0:0`; `win.ini`) aparece na resposta com o payload e está ausente no baseline sem ele — leitura de arquivo arbitrário, não um erro genérico.",

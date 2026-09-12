@@ -57,6 +57,7 @@ tools/scan-idor/scan-idor
 tools/scan-graphql/scan-graphql
 tools/scan-mongodb/scan-mongodb
 tools/scan-open-redirect/scan-open-redirect
+tools/scan-privesc/scan-privesc
 tools/scan-postman-audit/scan-postman-audit
 tools/scan-postman-net/scan-postman-net
 tools/scan-smuggling/scan-smuggling

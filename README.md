@@ -371,7 +371,7 @@ rotação a qualquer momento:
 docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
 ```
 
-Hoje isso está implementado em 35 das 39 ferramentas (todas as que falam
+Hoje isso está implementado em 36 das 40 ferramentas (todas as que falam
 HTTP com o alvo). As 4 que ficam de fora, de propósito, porque não usam
 `http.Client` — falam TCP cru ou dirigem um navegador: `scan-mongodb` (wire
 protocol do MongoDB), `recon-infra-enum` (port scan/banner grab),
@@ -841,7 +841,7 @@ fan-out que combina as ferramentas · **`coberta`** = a função existe em outra
 ferramenta(s) da lista · **`fora de escopo`** = extensão de navegador / plugin de
 Burp, não encaixa no contrato de ferramenta CLI.
 
-Hoje: **39 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
+Hoje: **40 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
 pelas categorias acima (nada ficou de fora).
 
 ### recon — Plataformas de Recon
@@ -902,6 +902,7 @@ pelas categorias acima (nada ficou de fora).
 | `scan-smuggling`             | — (nova)         | HTTP Request Smuggling (CL.TE/TE.CL) por timing oracle: corpo ambíguo entre Content-Length e Transfer-Encoding numa conexão TCP isolada, mede se o servidor trava esperando dado que nunca chega. Nunca encadeia uma 2ª requisição real pra "provar" o desync — técnica deliberadamente segura | **pronta** |
 | `scan-idor`                  | — (nova)         | IDOR horizontal com DUAS sessões de teste do operador: compara a resposta cruzada (sessão A lendo o recurso de B, ou vice-versa) contra o baseline legítimo do dono real — só status+tamanho de corpo, nunca guarda o corpo da resposta (sem PII no finding) | **pronta** |
 | `scan-bruteforce-check`      | — (nova)         | Confirma AUSÊNCIA de rate limiting/lockout num endpoint de login/OTP: tentativas de credencial errada travadas (teto rígido de 10) contra uma conta de TESTE descartável do operador, para no 1º sinal de proteção (429/Retry-After/CAPTCHA/mudança de status ou latência) | **pronta** |
+| `scan-privesc`               | — (nova)         | Broken Function Level Authorization (access control vertical) — o par do scan-idor. Dá uma função só-admin + credencial admin (baseline) + conta de menor privilégio; confirma escalada quando a sessão baixa (ou anônima, com `test_anon`) recebe a MESMA resposta (2xx + tamanho na tolerância) que a admin. Só status+tamanho, nunca o corpo. Acesso anônimo = `critical` | **pronta** |
 | `scan-path-traversal`        | — (nova)         | Path traversal / LFI: injeta `../../etc/passwd` com 11 variantes de bypass (profundidade, `....//`, `%2e%2e%2f` simples e duplo, null byte, absoluto, Windows `win.ini`) em parâmetros que carregam arquivo (wordlist `builtin/lfi-params`) e confirma só quando a assinatura do arquivo de sistema aparece na resposta e some no baseline. Payload vai verbatim (sem re-encoding). Só lê como prova | **pronta** |
 | `scan-waf-fingerprint`       | — (nova)         | Identifica o WAF/CDN na frente do alvo por assinatura de vendor (cf-ray, x-sucuri-id, incap_ses, "Support ID:" do F5, ModSecurity… — 14 vendors) ou por bloqueio comportamental (GET benigno passa, payload malicioso vira 403/429). É contexto de metodologia (info), nunca vulnerabilidade — um 400 solto jamais conta como WAF | **pronta** |
 

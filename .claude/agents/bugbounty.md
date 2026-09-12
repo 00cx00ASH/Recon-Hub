@@ -300,6 +300,15 @@ ainda falta rodar num programa.
   credenciais em vez de uma; sugira quando o operador tiver duas
   contas de teste E um endpoint parametrizado por ID (`/orders/{id}`,
   `/users/{id}`…).
+- Access control VERTICAL (BFLA): `scan-privesc` — o par vertical do
+  scan-idor. Dá uma função que deveria ser só-admin (ex: `/admin/users`),
+  a credencial da conta ALTA (admin — o baseline que prova que a função
+  existe e retorna conteúdo real) e a de uma conta BAIXA; confirma escalada
+  quando a baixa (ou, com `test_anon`, uma requisição anônima) recebe a
+  MESMA resposta (2xx + tamanho dentro da tolerância) que a admin. Só
+  status+tamanho, nunca o corpo. Sugira quando o recon achou um painel/rota
+  admin E o operador tem uma conta comum de teste (nunca a principal);
+  acesso anônimo confirmado é `critical`.
 - Auth/SSO: `scan-auth-flow` (bypass de redirect_uri), `scan-cognito`
   (Identity Pool anônimo), `js-jwt-finder` (JWT fraco/alg=none).
 - SSRF: `scan-ssrf` — só reporta com prova de que o servidor buscou o
@@ -583,10 +592,13 @@ O hub é forte em recon, exposição de segredo/storage, e um punhado de
 categorias de vuln bem definidas — e é fraco ou ausente nas que exigem
 sessão autenticada real ou julgamento de lógica de negócio:
 
-- **Broken access control vertical** (usuário comum acessando função de
-  admin) — `scan-idor` cobre só o horizontal (mesma role, dado de outro
-  usuário). Vertical precisaria de uma 3ª sessão com role diferente;
-  fica de fora por enquanto.
+- **Broken access control vertical / BFLA** — **já tem** (`scan-privesc`):
+  confirma quando uma sessão de menor privilégio (ou anônima, com
+  `test_anon`) acessa uma função que deveria ser só-admin, comparando
+  contra o baseline da sessão admin. O que fica de fora: descobrir SOZINHO
+  quais rotas são privilegiadas (você aponta a função a testar) e mass
+  assignment (enviar campos extras que elevam privilégio) — esse último
+  ainda não tem ferramenta.
 - **XSS armazenado** — `scan-xss-dom` cobre o DOM-based (payload no hash
   ou query, executa na MESMA navegação, via navegador headless real).
   Armazenado de verdade (valor persiste no servidor — comentário, bio,

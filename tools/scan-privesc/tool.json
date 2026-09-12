@@ -1,0 +1,23 @@
+{
+  "name": "scan-privesc",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Broken Function Level Authorization (access control vertical): testa se uma função que deveria exigir privilégio ALTO (ex: /admin/users) responde igual pra uma sessão de MENOR privilégio — ou até anônima. Usa as contas de teste do operador (uma baixa, uma alta); a alta é o baseline que prova que a função existe e retorna conteúdo real. Confirma escalada quando a sessão baixa/anônima recebe a MESMA resposta (status 2xx + tamanho de corpo dentro da tolerância) que a admin. Nunca lê nem guarda o corpo — só status+tamanho, sem dado da função admin no finding. É o par vertical do scan-idor (que é horizontal).",
+  "guide": "Alvo = a URL de uma função que SÓ a admin deveria acessar (ex: https://app.com/admin/users, /api/admin/config). Passe cookie_high/bearer_high da conta admin (obrigatório — é o baseline) e cookie_low/bearer_low de uma conta comum de teste. Opcional test_anon=true pra checar acesso sem credencial. Rode depois do recon-web-enum achar painéis admin. Precisa de DUAS contas de teste do operador — nunca a conta principal/produção; se não tiver uma conta de baixo privilégio, use só test_anon.",
+  "validation": "Exemplo confirmado (high): a sessão admin abre /admin/users com 200 e 8 KB; a sessão de usuário comum abre a MESMA URL e também recebe 200 com ~8 KB (diferença < 15%) — o controle por função não separou os níveis, usuário comum executa função de admin. Exemplo crítico: test_anon=true e a requisição SEM credencial recebe o mesmo 200/8 KB — a função admin não exige autenticação. Contra-exemplo (sem finding): a sessão baixa recebe 403/redirect pro login, ou um 200 com corpo bem menor (página 'sem permissão') — controle de acesso funcionando. O hub compara tamanho, nunca guarda o conteúdo.",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "a função admin a testar", "target_label": "URL da função admin" }
+  ],
+  "params": [
+    { "name": "cookie_high", "type": "string", "required": false, "help": "Cookie da sessão ALTA (admin) — o baseline (ou bearer_high)" },
+    { "name": "bearer_high", "type": "string", "required": false, "help": "Bearer token da sessão ALTA (admin)" },
+    { "name": "cookie_low", "type": "string", "required": false, "help": "Cookie da sessão de MENOR privilégio (ou bearer_low)" },
+    { "name": "bearer_low", "type": "string", "required": false, "help": "Bearer token da sessão de MENOR privilégio" },
+    { "name": "test_anon", "type": "bool", "required": false, "default": false, "help": "também testar acesso ANÔNIMO (sem credencial) à função" },
+    { "name": "tolerance_pct", "type": "int", "required": false, "default": 15, "help": "diferença de tamanho de corpo tolerada, em %, pra considerar 'a mesma resposta'" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}
