@@ -1390,6 +1390,19 @@ async function loadJobNextSteps(jobId){
       const card = el('div', { className: 'suggcard' });
       const top = el('div', { className: 'top' });
       top.append(el('span', { className: 'tool', textContent: step.name }));
+      if (step.tag) {
+        const tagStyles = {
+          'retest': 'background:color-mix(in srgb,var(--info) 20%,var(--bg));color:var(--info);',
+          'novo': 'background:color-mix(in srgb,var(--ok) 20%,var(--bg));color:var(--ok);',
+          'urgent': 'background:color-mix(in srgb,var(--crit) 20%,var(--bg));color:var(--crit);'
+        };
+        const badge = el('span', {
+          className: 'ex',
+          textContent: step.tag,
+          style: tagStyles[step.tag] || 'background:var(--surface-2);' + 'font-size:9px;font-weight:600;padding:.1rem .4rem;border-radius:3px;text-transform:uppercase;letter-spacing:.03em'
+        });
+        top.append(badge);
+      }
       if (step.phase) top.append(el('span', { className: 'ex', textContent: step.phase }));
       card.append(top);
       card.append(el('div', { className: 'reason', textContent: step.reason }));

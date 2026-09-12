@@ -7,13 +7,14 @@ import (
 
 // NextStep recomenda uma ferramenta ou pipeline pra executar depois.
 type NextStep struct {
-	Type        string `json:"type"`                   // "tool" | "pipeline"
+	Type        string `json:"type"`                   // "tool" | "pipeline" | "chain" | "retest"
 	Name        string `json:"name"`                   // nome da ferramenta ou pipeline
 	Reason      string `json:"reason"`                 // por que recomendar isto
 	Category    string `json:"category"`               // "recon", "scanning", "confirmation", "analysis"
 	TimeMinutes int    `json:"time_minutes"`           // tempo estimado
 	Phase       string `json:"phase"`                  // fase metodológica (recon ativo, scanning, etc)
 	SuggestedAt string `json:"suggested_at,omitempty"` // timestamp
+	Tag         string `json:"tag,omitempty"`          // "retest", "urgent", etc
 }
 
 // SuggestNextSteps recomenda 2-3 próximos passos baseado em job/findings/assets.
@@ -32,6 +33,9 @@ func SuggestNextSteps(job *store.Job, findings []*store.Finding, assets []*store
 
 	// Detecta chains e recomenda exploração delas
 	chains := detectChainsFromFindings(findings)
+
+	// Identifica ferramentas já testadas pra sugerir re-testing em novos alvos
+	testedByType := groupToolsByType(findings)
 
 	// Se tool anterior foi recon passivo, sugere recon ativo ou scanning
 	if isReconPassive(job.Tool) {
@@ -164,6 +168,32 @@ func SuggestNextSteps(job *store.Job, findings []*store.Finding, assets []*store
 		}}, suggestions...)
 	}
 
+	// Se já testou recon passivo, sugere re-escanear com ativo em novos alvos
+	if len(testedByType["recon-passive"]) > 0 && assetsByKind["subdomain"] > 0 && !testedTools["recon-subdomain-brute"] {
+		suggestions = append(suggestions, NextStep{
+			Type:        "tool",
+			Name:        "recon-subdomain-brute",
+			Reason:      "Já foi feito recon passivo. Agora tenta brute force de DNS nos subdomínios descobertos pra achar os não-públicos.",
+			Category:    "recon",
+			TimeMinutes: 30,
+			Phase:       "recon ativo",
+			Tag:         "retest",
+		})
+	}
+
+	// Se não testou scanning web ainda e tem endpoints, sugere começar
+	if assetsByKind["url"] > 3 && !testedTools["scan-xss"] {
+		suggestions = append(suggestions, NextStep{
+			Type:        "tool",
+			Name:        "scan-xss",
+			Reason:      "Você descobriu " + countStr(assetsByKind["url"]) + " URLs. Escaneia XSS refletido nelas — típica vulnerabilidade em endpoints públicos.",
+			Category:    "scanning",
+			TimeMinutes: 20,
+			Phase:       "vulnerability scanning",
+			Tag:         "novo",
+		})
+	}
+
 	// Se nenhuma sugestão foi feita, dá uma genérica baseada na metodologia
 	if len(suggestions) == 0 {
 		suggestions = append(suggestions, NextStep{
@@ -235,4 +265,32 @@ func containsStr(m map[string]int, key string) bool {
 
 func detectChainsFromFindings(findings []*store.Finding) []intel.ChainCandidate {
 	return intel.DetectChains(findings)
+}
+
+func groupToolsByType(findings []*store.Finding) map[string][]*store.Finding {
+	m := make(map[string][]*store.Finding)
+	for _, f := range findings {
+		toolType := categorizeToolByName(f.Tool)
+		m[toolType] = append(m[toolType], f)
+	}
+	return m
+}
+
+func categorizeToolByName(tool string) string {
+	if isReconPassive(tool) {
+		return "recon-passive"
+	}
+	activeRecon := map[string]bool{"recon-subdomain-brute": true, "recon-web-enum": true, "recon-infra-enum": true}
+	if activeRecon[tool] {
+		return "recon-active"
+	}
+	vulnScan := map[string]bool{"scan-xss": true, "scan-sqli": true, "scan-ssti": true, "scan-open-redirect": true, "scan-ssrf": true}
+	if vulnScan[tool] {
+		return "vulnerability-scan"
+	}
+	logicScan := map[string]bool{"scan-auth-flow": true, "scan-cors": true, "scan-idor": true}
+	if logicScan[tool] {
+		return "logic-scan"
+	}
+	return "other"
 }
