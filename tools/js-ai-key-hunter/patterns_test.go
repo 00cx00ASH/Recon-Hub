@@ -30,36 +30,22 @@ func TestScanRealLooking(t *testing.T) {
 		}
 	}
 	// gemini value é 'x' repetido -> placeholder (allSame) -> não deve entrar
-	if _, bad := got["Google AI (Gemini)"]; bad {
+	if _, bad := got["Google API Key (AIza, produto não confirmado)"]; bad {
 		t.Error("chave gemini toda 'x' deveria ser filtrada como placeholder")
 	}
 }
 
-// TestScanPineconeRequiresContext é o teste de regressão pro bug real achado
-// em triagem: um UUID v4 puro (o shape da chave do Pinecone) é indistinguível
-// de QUALQUER outro UUID de uma página — session id, tracking id de
-// analytics, id de feature flag, id gerado por um CMP de cookie consent de
-// terceiro. Sem exigir "pinecone" por perto, confirmava em qualquer bundle
-// grande só por coincidência.
 func TestScanPineconeRequiresContext(t *testing.T) {
-	uuid := "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d"
-
-	// UUID solto, sem NADA de contexto — não deveria confirmar.
-	if hs := scan("var sessionId = '"+uuid+"';", 16); len(hs) != 0 {
-		t.Errorf("UUID solto sem contexto não deveria casar como Pinecone: %+v", hs)
+	uuid := "3d9f7a2c-6b1e-4f80-9c3a-7e2b5d8f1a04"
+	// UUID solto (build id, trace id, session id...) não deve virar "Pinecone"
+	// sem a palavra aparecer perto — é o formato de qualquer UUID.
+	if hs := scan(`const traceId = "`+uuid+`";`, 16); len(hs) != 0 {
+		t.Errorf("UUID sem contexto 'pinecone' não deveria casar: %+v", hs)
 	}
-	// mesmo shape, mas claramente de outra biblioteca (CMP de cookie consent) —
-	// caso real que apareceu na triagem.
-	if hs := scan("window.__cmp.consentId = '"+uuid+"';", 16); len(hs) != 0 {
-		t.Errorf("id de CMP de cookie consent não deveria casar como Pinecone: %+v", hs)
-	}
-
-	// com "pinecone" por perto, deve confirmar normalmente.
-	body := `const PINECONE_API_KEY = "` + uuid + `";`
-	hs := scan(body, 16)
-	got := providersOf(hs)
+	body := `const pineconeApiKey = "` + uuid + `";`
+	got := providersOf(scan(body, 16))
 	if v, ok := got["Pinecone"]; !ok || v != uuid {
-		t.Errorf("esperava Pinecone=%s com contexto, veio %v", uuid, got)
+		t.Errorf("UUID com 'pinecone' por perto deveria casar, got %v", got)
 	}
 }
 

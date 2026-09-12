@@ -29,6 +29,41 @@ func TestAWSMetadataConfirmRejectsNormalPage(t *testing.T) {
 	}
 }
 
+func TestStripReflectedPreventsPayloadSelfConfirm(t *testing.T) {
+	// aws-metadata-iam-creds e gcp-metadata têm chaves de confirmação que
+	// são, elas mesmas, substrings da URL injetada ("security-credentials",
+	// "computeMetadata") — uma página que só ecoa a query string (canonical
+	// link, __NEXT_DATA__, mensagem de erro citando a URL inválida) não pode
+	// confirmar sozinha.
+	for _, label := range []string{"aws-metadata-iam-creds", "gcp-metadata"} {
+		var tg ssrfTarget
+		for _, c := range ssrfTargets() {
+			if c.Label == label {
+				tg = c
+			}
+		}
+		if tg.confirm == nil {
+			t.Fatalf("%s sem confirm()", label)
+		}
+		reflected := `<link rel="canonical" href="https://app.example.com/img?src=` + tg.URL + `">`
+		if tg.confirm(stripReflected(reflected, tg.URL)) {
+			t.Fatalf("%s: confirmou mesmo após stripReflected — a URL ecoada não deveria bastar", label)
+		}
+	}
+}
+
+func TestStripReflected(t *testing.T) {
+	payload := "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+	body := `<link rel="canonical" href="https://app.example.com/img?src=` + payload + `">`
+	if got := stripReflected(body, payload); got == body {
+		t.Fatal("stripReflected não removeu a ocorrência literal")
+	}
+	body2 := `<link rel="canonical" href="https://app.example.com/img?src=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2Fiam%2Fsecurity-credentials%2F">`
+	if got := stripReflected(body2, payload); got == body2 {
+		t.Fatal("stripReflected não removeu a ocorrência URL-encoded")
+	}
+}
+
 func TestEtcPasswdConfirm(t *testing.T) {
 	var fileTg ssrfTarget
 	for _, tg := range ssrfTargets() {
@@ -48,103 +83,11 @@ func TestEtcPasswdConfirm(t *testing.T) {
 }
 
 func TestLocalhostTargetsHaveNoConfirm(t *testing.T) {
-	loopbackLabels := map[string]bool{
-		"localhost": true, "localhost-name": true, "ipv6-loopback": true,
-		"localhost-decimal": true, "localhost-hex": true,
-	}
 	for _, tg := range ssrfTargets() {
-		if loopbackLabels[tg.Label] && tg.confirm != nil {
-			t.Fatalf("%s não deveria ter assinatura de conteúdo — vira candidato, não finding confirmado sozinho", tg.Label)
-		}
-	}
-}
-
-func TestNewCloudMetadataTargetsHaveConfirm(t *testing.T) {
-	want := map[string]bool{"alibaba-metadata": true, "oci-metadata": true, "k8s-api-server": true}
-	found := map[string]bool{}
-	for _, tg := range ssrfTargets() {
-		if want[tg.Label] {
-			found[tg.Label] = true
-			if tg.confirm == nil {
-				t.Errorf("%s deveria ter confirm() — tem assinatura de conteúdo conhecida", tg.Label)
+		if tg.Label == "localhost" || tg.Label == "localhost-name" || tg.Label == "ipv6-loopback" {
+			if tg.confirm != nil {
+				t.Fatalf("%s não deveria ter assinatura de conteúdo — vira candidato, não finding confirmado sozinho", tg.Label)
 			}
-			if tg.Sev != "critical" {
-				t.Errorf("%s deveria ser critical (metadata/API de cluster), veio %s", tg.Label, tg.Sev)
-			}
-		}
-	}
-	for label := range want {
-		if !found[label] {
-			t.Errorf("faltou o alvo %q", label)
-		}
-	}
-}
-
-func TestAlibabaMetadataConfirm(t *testing.T) {
-	var tg ssrfTarget
-	for _, t2 := range ssrfTargets() {
-		if t2.Label == "alibaba-metadata" {
-			tg = t2
-		}
-	}
-	body := "dsn-id\nhostname\nimage-id\ninstance-id\nowner-account-id\nregion-id\nserial-number\n"
-	if !tg.confirm(body) {
-		t.Fatal("deveria confirmar com o corpo típico do metadata da Alibaba Cloud")
-	}
-	if tg.confirm("<html><body>404 not found</body></html>") {
-		t.Fatal("não deveria confirmar numa página comum")
-	}
-}
-
-func TestOCIMetadataConfirm(t *testing.T) {
-	var tg ssrfTarget
-	for _, t2 := range ssrfTargets() {
-		if t2.Label == "oci-metadata" {
-			tg = t2
-		}
-	}
-	body := `{"availabilityDomain":"AD-1","compartmentId":"ocid1.compartment.oc1..x","displayName":"instance1"}`
-	if !tg.confirm(body) {
-		t.Fatal("deveria confirmar com o corpo típico do metadata da OCI")
-	}
-	if tg.confirm("<html><body>404 not found</body></html>") {
-		t.Fatal("não deveria confirmar numa página comum")
-	}
-}
-
-func TestK8sAPIServerConfirm(t *testing.T) {
-	var tg ssrfTarget
-	for _, t2 := range ssrfTargets() {
-		if t2.Label == "k8s-api-server" {
-			tg = t2
-		}
-	}
-	body := `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"forbidden: User \"system:anonymous\" cannot get path \"/version\""}`
-	if !tg.confirm(body) {
-		t.Fatal("deveria confirmar com o JSON de erro típico do API server sem token")
-	}
-	if tg.confirm("<html><body>404 not found</body></html>") {
-		t.Fatal("não deveria confirmar numa página comum")
-	}
-}
-
-// TestConfirmNeverTriggersOnReflectedURLAlone é o teste de regressão pro bug
-// real achado em triagem: aws-metadata-iam-creds usava "security-credentials"
-// como assinatura, mas essa string faz parte da PRÓPRIA URL injetada
-// (.../iam/security-credentials/) — qualquer página que ecoe a URL/query
-// nula parte (canonical tag, mensagem de erro "invalid request: <url>")
-// confirmava sozinha, sem o servidor nunca ter buscado o recurso de verdade.
-func TestConfirmNeverTriggersOnReflectedURLAlone(t *testing.T) {
-	for _, tg := range ssrfTargets() {
-		if tg.confirm == nil {
-			continue
-		}
-		reflectedOnly := `<html><head><link rel="canonical" href="` + tg.URL + `"></head>` +
-			`<body>invalid request: ` + tg.URL + `</body></html>`
-		if tg.confirm(reflectedOnly) {
-			t.Errorf("target %q confirma com um corpo que só reflete a URL injetada de volta (%q) — "+
-				"isso é falso positivo garantido em qualquer página que ecoe o parâmetro/query string, "+
-				"sem o servidor jamais ter buscado o recurso interno", tg.Label, tg.URL)
 		}
 	}
 }

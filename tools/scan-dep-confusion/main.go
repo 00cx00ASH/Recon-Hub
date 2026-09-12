@@ -102,16 +102,14 @@ func main() {
 	target := firstNonEmpty(pl.Target, *flagTarget, os.Getenv("RECONHUB_TARGET"))
 	noDev := *flagNoDev || boolParam(pl.Params, "no_dev")
 
-	transport := &http.Transport{
-		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
-		DisableKeepAlives: false,
-		MaxIdleConns:      32,
-		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-	}
-	applyProxy(transport, timeout)
 	client = &http.Client{
-		Timeout:   timeout,
-		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+			DisableKeepAlives: false,
+			MaxIdleConns:      32,
+			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+		},
 	}
 
 	var deps []dep
@@ -150,18 +148,24 @@ func main() {
 			os.Exit(2)
 		}
 		seen := map[string]bool{}
+		okPages := 0
 		for _, p := range pages {
 			names, err := harvestSite(p)
 			if err != nil {
-				emit(ev{Type: "log", Level: "warn", Msg: "pulando " + p + " (não baixei): " + err.Error()})
+				emit(ev{Type: "log", Level: "warn", Msg: "pulei " + p + ": não baixei a página: " + err.Error()})
 				continue
 			}
+			okPages++
 			for _, n := range names {
 				if !seen[n] {
 					seen[n] = true
 					deps = append(deps, dep{Name: n, Ecosystem: "npm", Section: "site"})
 				}
 			}
+		}
+		if okPages == 0 {
+			emit(ev{Type: "error", Msg: fmt.Sprintf("nenhuma das %d página(s) respondeu", len(pages))})
+			os.Exit(2)
 		}
 		eco = "npm"
 		if len(pages) == 1 {
@@ -337,11 +341,12 @@ func npmScopeEmpty(scope string) bool {
 }
 
 // harvestSite baixa a página + os <script src> e extrai os module specifiers
-// bare (não relativos) importados. Devolve erro (em vez de matar o processo)
-// se a página não carregar — bug real corrigido aqui: no modo site-list/urls
-// (várias páginas), uma URL ruim isolada (DNS falhou, wildcard passado
-// literal por engano, timeout) não pode derrubar o job inteiro e perder o
-// resultado das outras páginas já coletadas.
+// bare (não relativos) importados. Erro de fetch é do HOST, não do job — o
+// modo site/site-list roda isto num loop sobre várias páginas (e sempre
+// inclui `target` como a primeira, que em varreduras de programa costuma ser
+// o padrão de escopo tipo "*.example.com", não uma URL de verdade); abortar
+// o processo inteiro no primeiro host que falhar (DNS quebrado, mx/mta sem
+// HTTP, etc.) jogava fora todos os outros hosts da lista sem sequer tentar.
 func harvestSite(pageURL string) ([]string, error) {
 	pageBody, err := fetch(pageURL)
 	if err != nil {
@@ -491,6 +496,12 @@ func collectURLs(target string, pl payload) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(s string) {
+		// um padrão de escopo tipo "*.example.com" (comum quando `target` vem
+		// de um programa de bug bounty) nunca é uma URL de verdade — pular
+		// aqui evita gastar uma tentativa de fetch fadada a falhar por DNS.
+		if strings.Contains(s, "*") {
+			return
+		}
 		if u := normURL(s); u != "" && !seen[u] {
 			seen[u] = true
 			out = append(out, u)

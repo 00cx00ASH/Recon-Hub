@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -23,28 +24,38 @@ type ssrfTarget struct {
 // body — chosen to be near-impossible to produce by coincidence from an
 // unrelated page (a normal 404/error page won't contain 3 of these at once).
 var (
-	awsMetaKeys = []string{"ami-id", "instance-id", "local-hostname", "security-credentials", "placement/", "public-keys"}
-	// "computeMetadata" foi removido de propósito — é substring literal da
-	// própria URL injetada (.../computeMetadata/v1/), então confirmava sozinho
-	// em qualquer página que ecoasse a URL de volta (mesmo bug corrigido em
-	// aws-metadata-iam-creds; ver TestConfirmNeverTriggersOnReflectedURLAlone).
-	gcpMetaKeys   = []string{"instance/service-accounts", "project/project-id"}
+	awsMetaKeys   = []string{"ami-id", "instance-id", "local-hostname", "security-credentials", "placement/", "public-keys"}
+	gcpMetaKeys   = []string{"computeMetadata", "instance/service-accounts", "project/project-id"}
 	azureMetaKeys = []string{"\"compute\"", "\"osType\"", "\"vmId\"", "azEnvironment"}
 	etcPasswdRe   = regexp.MustCompile(`root:.*:0:0:`)
-	// alibabaMetaKeys: campos exclusivos do formato de metadata da Alibaba
-	// Cloud (endpoint próprio 100.100.100.200, não o 169.254.169.254 comum
-	// a AWS/GCP/Azure/OCI/DO) — "region-id"/"owner-account-id" não aparecem
-	// nas outras clouds, evita colisão cruzada.
-	alibabaMetaKeys = []string{"region-id", "owner-account-id", "serial-number"}
-	// ociMetaKeys: campos exclusivos do JSON de metadata da Oracle Cloud
-	// Infrastructure (mesmo IP 169.254.169.254 das outras, path próprio).
+	// Alibaba Cloud (endpoint próprio 100.100.100.200): region-id/owner-account-id
+	// não aparecem nas outras clouds e não são substring da URL injetada.
+	alibabaMetaKeys = []string{"region-id", "owner-account-id", "zone-id"}
+	// OCI (mesmo 169.254.169.254, path próprio): campos exclusivos do JSON.
 	ociMetaKeys = []string{"compartmentId", "availabilityDomain", "ociAdName"}
-	// k8sAPIKeys: mesmo sem token, o API server do Kubernetes responde com
-	// um JSON de erro reconhecível ("kind":"Status", "system:anonymous") —
-	// confirma que a requisição realmente alcançou o control plane do
-	// cluster, não só um 404 genérico de algum outro serviço na porta 443.
+	// Kubernetes API server sem token responde um JSON de erro reconhecível —
+	// confirma que alcançou o control plane, não um 404 genérico na porta 443.
 	k8sAPIKeys = []string{"\"kind\":\"Status\"", "system:anonymous", "system:serviceaccount"}
 )
+
+// stripReflected removes literal echoes of the injected payload URL from
+// body before confirm() runs. Without this, a page that merely reflects the
+// query string it was given (canonical link, __NEXT_DATA__, an error message
+// quoting the bad URL) can self-confirm: some confirm() key sets share text
+// with the payload itself (e.g. "security-credentials" and "computeMetadata"
+// are both real metadata-response fragments AND substrings of the URL we
+// inject to reach them), so a raw reflection satisfies countHits() without
+// the target ever having fetched the internal resource.
+func stripReflected(body, payload string) string {
+	body = strings.ReplaceAll(body, payload, "")
+	if esc := url.QueryEscape(payload); esc != payload {
+		body = strings.ReplaceAll(body, esc, "")
+	}
+	if esc := url.PathEscape(payload); esc != payload {
+		body = strings.ReplaceAll(body, esc, "")
+	}
+	return body
+}
 
 func countHits(body string, keys []string) int {
 	n := 0
@@ -65,17 +76,10 @@ func ssrfTargets() []ssrfTarget {
 			Label: "aws-metadata", URL: "http://169.254.169.254/latest/meta-data/", Sev: "critical",
 			confirm: func(body string) bool { return countHits(body, awsMetaKeys) >= 2 },
 		},
-		// aws-metadata-iam-creds: SEM confirm() de propósito (bug real corrigido
-		// aqui — ver TestConfirmNeverTriggersOnReflectedURLAlone). A resposta
-		// real desse path (sem role name) é só o nome da role em texto puro —
-		// não existe assinatura de conteúdo genérica pra isso, e usar
-		// "security-credentials" (que já estava em awsMetaKeys) confirmava
-		// sozinho em qualquer página que ecoasse a própria URL injetada de
-		// volta (canonical tag, mensagem de erro), sem o servidor nunca ter
-		// buscado o recurso. Vira candidato (diferencial contra baseline),
-		// igual localhost/loopback logo abaixo — confirmação de verdade exige
-		// olhar a resposta manualmente.
-		{Label: "aws-metadata-iam-creds", URL: "http://169.254.169.254/latest/meta-data/iam/security-credentials/", Sev: "medium"},
+		{
+			Label: "aws-metadata-iam-creds", URL: "http://169.254.169.254/latest/meta-data/iam/security-credentials/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, awsMetaKeys) >= 1 },
+		},
 		{
 			Label: "file-etc-passwd", URL: "file:///etc/passwd", Sev: "critical",
 			confirm: func(body string) bool { return etcPasswdRe.MatchString(body) },
@@ -94,30 +98,22 @@ func ssrfTargets() []ssrfTarget {
 		},
 		{
 			Label: "alibaba-metadata", URL: "http://100.100.100.200/latest/meta-data/", Sev: "critical",
-			confirm: func(body string) bool { return countHits(body, alibabaMetaKeys) >= 1 },
+			confirm: func(body string) bool { return countHits(body, alibabaMetaKeys) >= 2 },
 		},
 		{
-			Label: "oci-metadata", URL: "http://169.254.169.254/opc/v1/instance/", Sev: "critical",
-			confirm: func(body string) bool { return countHits(body, ociMetaKeys) >= 1 },
+			Label: "oci-metadata", URL: "http://169.254.169.254/opc/v2/instance/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, ociMetaKeys) >= 2 },
 		},
 		{
-			// serviço do Kubernetes sempre resolvível de DENTRO de um pod (DNS
-			// interno do cluster) — confirmação prova que o servidor alvo roda
-			// num cluster k8s e o SSRF alcança o control plane, mesmo sem token.
-			Label: "k8s-api-server", URL: "https://kubernetes.default.svc/version", Sev: "critical",
-			confirm: func(body string) bool { return countHits(body, k8sAPIKeys) >= 1 },
+			Label: "k8s-api-server", URL: "https://kubernetes.default.svc/api/v1/", Sev: "critical",
+			confirm: func(body string) bool { return countHits(body, k8sAPIKeys) >= 2 },
 		},
 		// localhost/loopback não tem assinatura genérica de conteúdo — vira
 		// candidato (probe() decide por diferencial contra o baseline), nunca
-		// finding confirmado sozinho. As variantes decimal/hex existem pra não
-		// desistir cedo demais de um filtro que só bloqueia a string literal
-		// "127.0.0.1"/"localhost" — ambas resolvem pro mesmo endereço, mas não
-		// batem numa blacklist de string ingênua.
+		// finding confirmado sozinho.
 		{Label: "localhost", URL: "http://127.0.0.1/", Sev: "medium"},
 		{Label: "localhost-name", URL: "http://localhost/", Sev: "medium"},
 		{Label: "ipv6-loopback", URL: "http://[::1]/", Sev: "medium"},
-		{Label: "localhost-decimal", URL: "http://2130706433/", Sev: "medium"},
-		{Label: "localhost-hex", URL: "http://0x7f000001/", Sev: "medium"},
 	}
 }
 

@@ -322,3 +322,40 @@ sobre caçar bugs em programas de terceiros.
   multiplicaria o tráfego por N e feriria o "nunca DoS / pacing é padrão" da
   filosofia. Resumo: adicione variante de encoding onde ela de fato atravessa
   um filtro decodável, não como cargo cult em todo scanner.
+- **Confirmação de finding que só checa se um fragmento aparece no corpo,
+  sem provar que esse fragmento só poderia vir de exploração real, gera
+  falso positivo todo santo dia que o alvo ecoar o próprio payload de
+  volta.** Achado numa mesma sessão de triagem em três ferramentas
+  diferentes: `js-secret-hunter` (o regex de "Private Key (PEM)" só
+  conferia o cabeçalho `-----BEGIN...-----`, sem exigir corpo base64 real —
+  um shim WebCrypto que monta o PEM via template literal JS
+  `` `-----BEGIN PRIVATE KEY-----\n${key.toString("base64")}\n-----END...` ``
+  batia igual, porque `${...}` nunca vira segredo de verdade);
+  `scan-ssrf` (a lista de chaves que confirma `aws-metadata-iam-creds` e
+  `gcp-metadata` inclui `"security-credentials"` e `"computeMetadata"` —
+  que são, elas mesmas, substrings da URL injetada; se a página só
+  refletir a query string de volta — canonical link, `__NEXT_DATA__`,
+  mensagem de erro — o "achado" confirma sozinho sem o servidor nunca
+  ter buscado o metadata endpoint); e `js-ai-key-hunter` ("Pinecone" era
+  só o formato de qualquer UUID, sem exigir a palavra por perto; "Google
+  AI (Gemini)" rotulava qualquer chave `AIza...` — formato compartilhado
+  por Maps/Firebase/Identity Toolkit/etc — como Gemini especificamente,
+  sem confirmar isso via `validate=true`). Regra geral pra qualquer
+  `confirm()`/regex de secret novo: exigir corpo real (não só cabeçalho),
+  remover o payload refletido do corpo antes de comparar contra ele
+  mesmo, e exigir uma palavra de contexto por perto quando o formato do
+  segredo for genérico (UUID, prefixo curto reaproveitado por vários
+  produtos). Ver `tools/js-secret-hunter/patterns.go`,
+  `tools/scan-ssrf/targets.go` (`stripReflected`) e
+  `tools/js-ai-key-hunter/patterns.go`.
+- **`os.Exit()` dentro de uma função chamada em loop sobre uma lista de
+  hosts mata o job inteiro no primeiro host que falhar** — aconteceu no
+  `scan-dep-confusion` (modo `site`/`site-list`): `harvestSite()` chamava
+  `os.Exit(2)` no primeiro erro de fetch, e o primeiro "host" de uma
+  varredura de programa é sempre `target` (adicionado antes da lista de
+  `params.urls`), que numa esteira de bug bounty costuma ser o próprio
+  padrão de escopo (`*.exemplo.com`) — nunca uma URL de verdade, sempre
+  falha por DNS, sempre matava o job antes de tentar qualquer host real.
+  Erro de I/O por item de uma lista processada em loop devia sempre virar
+  `continue`/log — nunca `os.Exit` — e reservar `os.Exit` pra quando
+  *nenhum* item da lista deu certo.

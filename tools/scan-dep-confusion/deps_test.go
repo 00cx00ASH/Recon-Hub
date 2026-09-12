@@ -162,3 +162,38 @@ func TestPkgFromSpecifier(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectURLsSkipsScopeWildcard(t *testing.T) {
+	pl := payload{Params: map[string]any{"urls": "www.example.com\nblog.example.com"}}
+	got := collectURLs("*.example.com", pl)
+	for _, u := range got {
+		if u == "https://*.example.com" {
+			t.Fatalf("padrão de escopo com wildcard não deveria virar URL: %v", got)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("esperava só os 2 hosts reais, veio %v", got)
+	}
+}
+
+// TestHarvestSiteContinuesPastUnreachableHost é a regressão do bug que
+// derrubava o job inteiro: harvestSite não pode mais abortar o processo
+// (os.Exit) quando um host falha — só devolver o erro pro chamador decidir.
+func TestHarvestSiteContinuesPastUnreachableHost(t *testing.T) {
+	client = http.DefaultClient
+
+	if _, err := harvestSite("http://127.0.0.1:1/pagina-que-nao-existe"); err == nil {
+		t.Fatal("esperava erro de conexão recusada, veio nil")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><script src="/bundle.js"></script></html>`))
+	}))
+	defer srv.Close()
+
+	names, err := harvestSite(srv.URL)
+	if err != nil {
+		t.Fatalf("página válida não deveria falhar: %v", err)
+	}
+	_ = names // o handler não serve bundle.js real; só importa que não deu erro
+}

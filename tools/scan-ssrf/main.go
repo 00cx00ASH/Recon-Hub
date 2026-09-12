@@ -128,16 +128,14 @@ func main() {
 	}
 	targets := ssrfTargets()
 
-	transport := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
-		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
-	}
-	applyProxy(transport, timeout)
 	client := &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		Transport:     withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+			DisableKeepAlives: true,
+			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+		},
 	}
 
 	type task struct{ base, param string }
@@ -174,7 +172,7 @@ func main() {
 					continue
 				}
 				if tg.confirm != nil {
-					if tg.confirm(body) {
+					if tg.confirm(stripReflected(body, tg.URL)) {
 						reportConfirmed(t.base, t.param, tg, u)
 						mu2.Lock()
 						hit++

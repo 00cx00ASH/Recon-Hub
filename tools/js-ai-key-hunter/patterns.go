@@ -33,20 +33,22 @@ var patterns = []aiPattern{
 	{"Together AI", "high", regexp.MustCompile(`(?i)together[._-]?api[._-]?key["'\s:=]+([a-f0-9]{64})\b`), 1, 0, "openai-compat:https://api.together.xyz"},
 	{"Fireworks AI", "high", regexp.MustCompile(`\b(fw_[A-Za-z0-9]{24,})\b`), 1, 0, "openai-compat:https://api.fireworks.ai/inference"},
 	{"Cohere", "high", regexp.MustCompile(`(?i)cohere[._-]?api[._-]?key["'\s:=]+([A-Za-z0-9]{40})\b`), 1, 3.2, ""},
-	{"Google AI (Gemini)", "high", regexp.MustCompile(`\b(AIza[0-9A-Za-z_-]{35})\b`), 1, 0, "google-ai"},
+	// "AIza..." is the shared format for every Google Cloud API key (Maps,
+	// Firebase Web config, Identity Toolkit, YouTube Data API, Generative
+	// Language/Gemini...) — the format alone never proves it's a Gemini key,
+	// only Validate (a real GET against the Generative Language API) does.
+	// Labeled honestly as "unconfirmed product" until that check runs.
+	{"Google API Key (AIza, produto não confirmado)", "high", regexp.MustCompile(`\b(AIza[0-9A-Za-z_-]{35})\b`), 1, 0, "google-ai"},
 	{"Azure OpenAI endpoint", "medium", regexp.MustCompile(`\b(https://[a-z0-9-]+\.openai\.azure\.com)\b`), 1, 0, ""},
 	{"ElevenLabs", "high", regexp.MustCompile(`(?i)(?:elevenlabs|xi-api-key)["'\s:=]+([a-f0-9]{32})\b`), 1, 3.0, "elevenlabs"},
 	{"AssemblyAI", "high", regexp.MustCompile(`(?i)assemblyai["'\s:=]+([a-f0-9]{32})\b`), 1, 3.0, ""},
 	{"Deepgram", "high", regexp.MustCompile(`(?i)deepgram["'\s:=]+([a-f0-9]{40})\b`), 1, 3.0, "deepgram"},
 	{"LangSmith", "high", regexp.MustCompile(`\b(lsv2_(?:pt|sk)_[a-f0-9]{32}_[a-f0-9]{10})\b`), 1, 0, ""},
 	{"LangChain (legacy)", "high", regexp.MustCompile(`\b(ls__[a-f0-9]{32})\b`), 1, 0, ""},
-	// Pinecone key é um UUID v4 puro — sem prefixo/formato próprio, esse
-	// shape é indistinguível de QUALQUER outro UUID (session id, tracking id
-	// de analytics, id de feature flag, CMP de cookie consent…). Sem exigir
-	// "pinecone" por perto, isso confirma em praticamente qualquer bundle JS
-	// grande só por coincidência — bug real achado em triagem (2025-XX,
-	// hit confirmado num script de terceiro sem nada a ver com Pinecone).
-	{"Pinecone", "high", regexp.MustCompile(`(?i)pinecone[^\n]{0,50}?\b([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\b`), 1, 0, ""},
+	// A Pinecone key IS shaped like a bare UUID — but so is a session id, a
+	// tracking id, a build hash, a request id... anything. Without requiring
+	// "pinecone" nearby, this matches essentially any UUID in any bundle.
+	{"Pinecone", "high", regexp.MustCompile(`(?i)pinecone[\s\S]{0,60}?\b([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\b`), 1, 0, ""},
 	{"Weights & Biases", "medium", regexp.MustCompile(`(?i)wandb[._-]?api[._-]?key["'\s:=]+([a-f0-9]{40})\b`), 1, 3.2, ""},
 	{"Stability AI", "high", regexp.MustCompile(`\b(sk-[A-Za-z0-9]{48})\b`), 1, 3.2, ""},
 	{"Clarifai", "medium", regexp.MustCompile(`(?i)clarifai[._-]?pat["'\s:=]+([a-f0-9]{32})\b`), 1, 3.0, ""},
