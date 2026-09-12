@@ -1409,11 +1409,18 @@ async function loadJobNextSteps(jobId){
       if (step.time_minutes) {
         card.append(el('div', { className: 'ex', textContent: `⏱ ~${step.time_minutes}min` }));
       }
-      const btn = el('button', { textContent: '▶ executar' });
-      btn.addEventListener('click', async () => {
-        $('#tool').value = step.name;
-        renderToolMeta();
-        selectTab('left');
+      // O destino do botão depende do tipo: ferramenta vai pro formulário já
+      // selecionada, pipeline pra aba Pipelines pré-selecionada, e uma cadeia
+      // pra aba Findings (onde fica a seção de encadeamentos). Antes o botão
+      // sempre setava #tool — o que era inválido pra pipeline/chain.
+      const label = step.type === 'chain' ? '▶ ver encadeamentos'
+        : step.type === 'pipeline' ? '▶ abrir pipeline'
+        : '▶ executar';
+      const btn = el('button', { textContent: label });
+      btn.addEventListener('click', () => {
+        if (step.type === 'chain') selectTab('findings');
+        else if (step.type === 'pipeline') goPipeline(step.name);
+        else goTool(step.name);
       });
       card.append(btn);
       box.append(card);

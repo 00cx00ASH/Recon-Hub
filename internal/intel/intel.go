@@ -139,6 +139,15 @@ var knownRisk = map[string]risk{
 	"waf-detected":                      {0.05, "presença de WAF/CDN NÃO é vulnerabilidade — é contexto de metodologia (info). Serve pra explicar 403/429 que vêm da borda e não da aplicação: antes de concluir que um endpoint é seguro, lembre que o bloqueio pode ser o WAF, e ajuste encoding/rotação de circuito ao vendor identificado. Não reporte isto isolado; use pra calibrar os outros scanners."},
 }
 
+// IsKnownType reports whether ftype is in the built-in knowledge base
+// (knownRisk). Other packages (ex: guidance) usam isto pra garantir, em teste,
+// que só referenciam finding types que o hub de fato reconhece — evita o bug
+// de mapear uma chave inventada que nunca casa com o que as tools emitem.
+func IsKnownType(ftype string) bool {
+	_, ok := knownRisk[ftype]
+	return ok
+}
+
 // riskFor looks up knownRisk by exact type, falling back to a neutral prior
 // for anything not in the built-in knowledge base (same "unknown type, no
 // opinion yet" honesty report.Build already applies to its own templates).

@@ -1,6 +1,8 @@
 package guidance
 
 import (
+	"strconv"
+
 	"reconhub/internal/intel"
 	"reconhub/internal/store"
 )
@@ -17,201 +19,173 @@ type NextStep struct {
 	Tag         string `json:"tag,omitempty"`          // "retest", "urgent", etc
 }
 
-// SuggestNextSteps recomenda 2-3 próximos passos baseado em job/findings/assets.
+// findingConfirmation mapeia um finding_type REAL (que existe em
+// intel.knownRisk — garantido por TestFindingConfirmationKeysAreKnown) para a
+// ferramenta de confirmação/aprofundamento que faz sentido rodar depois. Só
+// entram transições que agregam de verdade: a ferramenta sugerida é DIFERENTE
+// da que achou o finding e leva a metodologia adiante (reflexo → execução,
+// segredo no JS → auditoria da origem).
+type findingConfirmation struct {
+	tool   string
+	reason string
+	phase  string
+	mins   int
+}
+
+var findingConfirmations = map[string]findingConfirmation{
+	"reflected-xss": {
+		tool:   "scan-xss-dom",
+		reason: "XSS refletido confirmado por texto (os caracteres voltaram sem escapar). O próximo passo é provar EXECUÇÃO real: scan-xss-dom dispara o payload num navegador headless e só confirma se o JS rodar de fato.",
+		phase:  "confirmação de XSS",
+		mins:   30,
+	},
+	"reflected-xss-attribute": {
+		tool:   "scan-xss-dom",
+		reason: "Só a aspa quebrou (contexto de atributo/string JS) — pode ou não executar. scan-xss-dom tenta a execução real num navegador pra tirar a dúvida sem achismo.",
+		phase:  "confirmação de XSS",
+		mins:   30,
+	},
+	"secret": {
+		tool:   "int-github-audit",
+		reason: "Segredo achado por padrão/entropia no JS do alvo. Vale auditar o GitHub da organização: o mesmo segredo (ou outros) costuma estar commitado em repo público — int-github-audit procura isso.",
+		phase:  "OSINT / expansão",
+		mins:   20,
+	},
+}
+
+// assetProgression mapeia um asset kind REAL (url, endpoint, subdomain, port,
+// package — os que as tools de fato emitem) para o próximo passo da esteira.
+type assetProgression struct {
+	minCount int
+	step     NextStep
+}
+
+var assetProgressions = []struct {
+	kind string
+	prog assetProgression
+}{
+	{"url", assetProgression{minCount: 3, step: NextStep{
+		Type: "tool", Name: "scan-xss", Category: "scanning", TimeMinutes: 20,
+		Phase: "vulnerability scanning",
+		Tag:   "novo",
+	}}},
+	{"endpoint", assetProgression{minCount: 5, step: NextStep{
+		Type: "tool", Name: "js-secret-hunter", Category: "scanning", TimeMinutes: 20,
+		Phase: "api/js analysis",
+	}}},
+	{"port", assetProgression{minCount: 1, step: NextStep{
+		Type: "tool", Name: "scan-mongodb", Category: "scanning", TimeMinutes: 15,
+		Phase: "infrastructure assessment",
+	}}},
+	{"package", assetProgression{minCount: 1, step: NextStep{
+		Type: "tool", Name: "scan-dep-confusion", Category: "scanning", TimeMinutes: 15,
+		Phase: "supply chain",
+	}}},
+}
+
+// SuggestNextSteps recomenda até 3 próximos passos baseado em job/findings/assets.
+// Ordem de prioridade: (1) encadeamentos detectados, (2) confirmação de findings
+// reais, (3) progressão da esteira por assets novos, (4) bootstrap pós-recon.
 func SuggestNextSteps(job *store.Job, findings []*store.Finding, assets []*store.Asset) []NextStep {
 	suggestions := []NextStep{}
 
-	// Mapa de que foi testado pra não repetir
-	testedTools := map[string]bool{}
-	testedTools[job.Tool] = true
+	testedTools := map[string]bool{job.Tool: true}
+	for _, f := range findings {
+		if f.Tool != "" {
+			testedTools[f.Tool] = true
+		}
+	}
 
-	// Analisa findings por tipo e recomenda confirmação/aprofundamento
 	findingsByType := groupFindingsByType(findings)
-
-	// Analisa assets por kind e recomenda próxima fase
 	assetsByKind := groupAssetsByKind(assets)
+	chains := intel.DetectChains(findings)
 
-	// Detecta chains e recomenda exploração delas
-	chains := detectChainsFromFindings(findings)
-
-	// Identifica ferramentas já testadas pra sugerir re-testing em novos alvos
-	testedByType := groupToolsByType(findings)
-
-	// Se tool anterior foi recon passivo, sugere recon ativo ou scanning
-	if isReconPassive(job.Tool) {
-		// Se tem subdomínios, fazer recon ativo + scanning básico
-		if assetsByKind["subdomain"] > 0 {
-			suggestions = append(suggestions, NextStep{
-				Type:        "pipeline",
-				Name:        "full-recon",
-				Reason:      "Você tem " + countStr(assetsByKind["subdomain"]) + " subdomínios. A pipeline full-recon enfileira recon ativo + 30+ scanners em paralelo.",
-				Category:    "automation",
-				TimeMinutes: 120,
-				Phase:       "enumeração + scanning",
-			})
-
-			// Ou rodar só recon ativo primeiro (se preferir algo mais rápido)
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "recon-subdomain-brute",
-				Reason:      "Recon ativo: descobre subdomínios não-públicos via brute force de DNS.",
-				Category:    "recon",
-				TimeMinutes: 30,
-				Phase:       "recon ativo",
-			})
-
-			// Ou começar scanning direto em um subdomain específico
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "recon-web-enum",
-				Reason:      "Content discovery + fingerprint de stack nos subdomínios encontrados.",
-				Category:    "recon",
-				TimeMinutes: 20,
-				Phase:       "enumeração",
-			})
+	add := func(s NextStep) {
+		if s.Type == "tool" && testedTools[s.Name] {
+			return // não sugere reexecutar o que já rodou
 		}
+		for _, existing := range suggestions {
+			if existing.Type == s.Type && existing.Name == s.Name {
+				return // dedup
+			}
+		}
+		suggestions = append(suggestions, s)
 	}
 
-	// Se encontrou XSS, sugere confirmar em mais contextos
-	if findingsByType["xss"] > 0 {
-		if !testedTools["scan-xss-dom"] {
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "scan-xss-dom",
-				Reason:      "Você tem XSS refletido. Agora testa XSS DOM-based via navegador headless.",
-				Category:    "scanning",
-				TimeMinutes: 30,
-				Phase:       "vulnerability scanning",
-			})
+	// (1) Encadeamentos detectados — sempre no topo: é onde a severidade escala.
+	if len(chains) > 0 {
+		c := chains[0]
+		reason := "Detectamos " + countStr(len(chains)) + " possível(is) cadeia(s) de vulnerabilidade"
+		if c.Title != "" {
+			reason += " (ex: " + c.Title + ")"
 		}
-	}
-
-	// Se encontrou SQLi (error-based), sugere blind SQLi
-	if findingsByType["sql_injection"] > 0 {
-		// scan-sqli-blind será adicionado depois (ainda não existe)
-		// Por enquanto: suggestion genérica
-		suggestions = append(suggestions, NextStep{
-			Type:        "tool",
-			Name:        "scan-sqli",
-			Reason:      "SQL Injection confirmada. Rodar novamente com diferentes payloads pra confirmar em mais parâmetros.",
-			Category:    "scanning",
-			TimeMinutes: 25,
-			Phase:       "vulnerability scanning",
+		reason += ". Investigar encadeia impacto e escala severidade — abra a aba Findings, seção 'encadeamentos'."
+		add(NextStep{
+			Type: "chain", Name: "explorar encadeamentos detectados",
+			Reason: reason, Category: "confirmation", TimeMinutes: 30,
+			Phase: "chain exploitation", Tag: "urgent",
 		})
 	}
 
-	// Se encontrou auth/bypass, sugere session/JWT
-	if findingsByType["auth_flow"] > 0 || findingsByType["weak_auth"] > 0 {
-		if !testedTools["js-jwt-finder"] {
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "js-jwt-finder",
-				Reason:      "Auth flow testada. Agora procura por JWT fraco ou alg=none.",
-				Category:    "scanning",
-				TimeMinutes: 15,
-				Phase:       "authentication testing",
-			})
+	// (2) Confirmação/aprofundamento de findings reais.
+	for ftype := range findingsByType {
+		fc, ok := findingConfirmations[ftype]
+		if !ok {
+			continue
 		}
-	}
-
-	// Se tem endpoints JS, sugere secret hunter
-	if assetsByKind["endpoint"] > 5 {
-		if !testedTools["js-secret-hunter"] {
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "js-secret-hunter",
-				Reason:      "Você descobriu " + countStr(assetsByKind["endpoint"]) + " endpoints. Varre o JS deles pra achar segredos/keys.",
-				Category:    "scanning",
-				TimeMinutes: 20,
-				Phase:       "api/js analysis",
-			})
-		}
-	}
-
-	// Se tem portas abertas, sugere MongoDB ou serviços
-	if assetsByKind["port"] > 0 {
-		if !testedTools["scan-mongodb"] {
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "scan-mongodb",
-				Reason:      "Portas abertas detectadas. Verifica MongoDB sem auth nas portas 27017/27018.",
-				Category:    "scanning",
-				TimeMinutes: 15,
-				Phase:       "infrastructure assessment",
-			})
-		}
-	}
-
-	// Se tem endpoints API/GraphQL, sugere GraphQL scan
-	if assetsByKind["graphql"] > 0 || containsStr(findingsByType, "graphql") {
-		if !testedTools["scan-graphql"] {
-			suggestions = append(suggestions, NextStep{
-				Type:        "tool",
-				Name:        "scan-graphql",
-				Reason:      "GraphQL endpoint encontrado. Testa introspection, campos sensíveis e misconfigs.",
-				Category:    "scanning",
-				TimeMinutes: 20,
-				Phase:       "api scanning",
-			})
-		}
-	}
-
-	// Se detectou chains, prioriza investigação delas no topo da lista
-	if len(chains) > 0 && len(suggestions) < 3 {
-		suggestions = append([]NextStep{NextStep{
-			Type:        "chain",
-			Name:        "explorar encadeamentos detectados",
-			Reason:      "Encontramos " + countStr(len(chains)) + " possível(is) cadeia(s) de vulnerabilidade. Investigar cada uma pode escalar severidade e impacto — abra a aba Findings, seção 'encadeamentos'.",
-			Category:    "confirmation",
-			TimeMinutes: 30,
-			Phase:       "chain exploitation",
-		}}, suggestions...)
-	}
-
-	// Se já testou recon passivo, sugere re-escanear com ativo em novos alvos
-	if len(testedByType["recon-passive"]) > 0 && assetsByKind["subdomain"] > 0 && !testedTools["recon-subdomain-brute"] {
-		suggestions = append(suggestions, NextStep{
-			Type:        "tool",
-			Name:        "recon-subdomain-brute",
-			Reason:      "Já foi feito recon passivo. Agora tenta brute force de DNS nos subdomínios descobertos pra achar os não-públicos.",
-			Category:    "recon",
-			TimeMinutes: 30,
-			Phase:       "recon ativo",
-			Tag:         "retest",
+		add(NextStep{
+			Type: "tool", Name: fc.tool, Reason: fc.reason,
+			Category: "confirmation", TimeMinutes: fc.mins, Phase: fc.phase,
 		})
 	}
 
-	// Se não testou scanning web ainda e tem endpoints, sugere começar
-	if assetsByKind["url"] > 3 && !testedTools["scan-xss"] {
-		suggestions = append(suggestions, NextStep{
-			Type:        "tool",
-			Name:        "scan-xss",
-			Reason:      "Você descobriu " + countStr(assetsByKind["url"]) + " URLs. Escaneia XSS refletido nelas — típica vulnerabilidade em endpoints públicos.",
-			Category:    "scanning",
-			TimeMinutes: 20,
-			Phase:       "vulnerability scanning",
-			Tag:         "novo",
+	// (3) Progressão da esteira: assets novos → próxima fase.
+	for _, ap := range assetProgressions {
+		if assetsByKind[ap.kind] < ap.prog.minCount {
+			continue
+		}
+		s := ap.prog.step
+		s.Reason = assetProgressionReason(ap.kind, assetsByKind[ap.kind])
+		add(s)
+	}
+
+	// (4) Bootstrap: acabou de rodar recon passivo e já tem subdomínios → a
+	// pipeline full-recon enfileira recon ativo + scanners em paralelo.
+	if isReconPassive(job.Tool) && assetsByKind["subdomain"] > 0 {
+		add(NextStep{
+			Type: "pipeline", Name: "full-recon",
+			Reason:   "Você tem " + countStr(assetsByKind["subdomain"]) + " subdomínio(s). A pipeline full-recon enfileira recon ativo + dezenas de scanners em paralelo sobre todos eles.",
+			Category: "automation", TimeMinutes: 120, Phase: "enumeração + scanning",
 		})
 	}
 
-	// Se nenhuma sugestão foi feita, dá uma genérica baseada na metodologia
+	// Fallback: nada específico casou — aponta o ponto de partida canônico.
 	if len(suggestions) == 0 {
-		suggestions = append(suggestions, NextStep{
-			Type:        "pipeline",
-			Name:        "full-recon",
-			Reason:      "Recon inicial completo: enumera subdomínios, endpoints, e roda 30+ scanners em paralelo.",
-			Category:    "automation",
-			TimeMinutes: 120,
-			Phase:       "full methodology",
+		add(NextStep{
+			Type: "pipeline", Name: "full-recon",
+			Reason:   "Ponto de partida: full-recon enumera subdomínios e endpoints e roda dezenas de scanners em paralelo, já respeitando o escopo do programa.",
+			Category: "automation", TimeMinutes: 120, Phase: "full methodology",
 		})
 	}
 
-	// Limita a top 3 sugestões (mais que isso é overwhelming)
 	if len(suggestions) > 3 {
 		suggestions = suggestions[:3]
 	}
-
 	return suggestions
+}
+
+func assetProgressionReason(kind string, n int) string {
+	switch kind {
+	case "url":
+		return "Você descobriu " + countStr(n) + " URL(s). scan-xss escaneia XSS refletido nelas — vulnerabilidade clássica em endpoint público (confirma só quando os caracteres voltam sem escapar)."
+	case "endpoint":
+		return "Você descobriu " + countStr(n) + " endpoint(s). js-secret-hunter varre o JS deles atrás de segredos/keys expostos."
+	case "port":
+		return countStr(n) + " porta(s) aberta(s) detectada(s). scan-mongodb checa MongoDB sem auth nas portas 27017/27018."
+	case "package":
+		return countStr(n) + " dependência(s) identificada(s). scan-dep-confusion checa se algum nome está livre no registro público (build sequestrável)."
+	}
+	return "Assets novos do tipo " + kind + " — vale avançar a esteira."
 }
 
 // Helpers
@@ -246,51 +220,5 @@ func countStr(n int) string {
 	if n == 0 {
 		return "nenhum"
 	}
-	if n == 1 {
-		return "1"
-	}
-	if n < 10 {
-		return string(rune('0' + n))
-	}
-	if n < 100 {
-		return string(rune('0'+n/10)) + string(rune('0'+n%10))
-	}
-	return "100+"
-}
-
-func containsStr(m map[string]int, key string) bool {
-	_, ok := m[key]
-	return ok
-}
-
-func detectChainsFromFindings(findings []*store.Finding) []intel.ChainCandidate {
-	return intel.DetectChains(findings)
-}
-
-func groupToolsByType(findings []*store.Finding) map[string][]*store.Finding {
-	m := make(map[string][]*store.Finding)
-	for _, f := range findings {
-		toolType := categorizeToolByName(f.Tool)
-		m[toolType] = append(m[toolType], f)
-	}
-	return m
-}
-
-func categorizeToolByName(tool string) string {
-	if isReconPassive(tool) {
-		return "recon-passive"
-	}
-	activeRecon := map[string]bool{"recon-subdomain-brute": true, "recon-web-enum": true, "recon-infra-enum": true}
-	if activeRecon[tool] {
-		return "recon-active"
-	}
-	vulnScan := map[string]bool{"scan-xss": true, "scan-sqli": true, "scan-ssti": true, "scan-open-redirect": true, "scan-ssrf": true}
-	if vulnScan[tool] {
-		return "vulnerability-scan"
-	}
-	logicScan := map[string]bool{"scan-auth-flow": true, "scan-cors": true, "scan-idor": true}
-	if logicScan[tool] {
-		return "logic-scan"
-	}
-	return "other"
+	return strconv.Itoa(n)
 }
