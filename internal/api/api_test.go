@@ -670,3 +670,22 @@ func TestReportMarkdownIncludesChainCandidates(t *testing.T) {
 		t.Fatalf("relatório sem seção de encadeamentos: %s", w.Body.String())
 	}
 }
+
+// Os encadeamentos do relatório/dashboard devem liderar pelo mais grave:
+// chainCandidatesWithAssets ordena por severidade (estável).
+func TestChainCandidatesOrderedBySeverity(t *testing.T) {
+	fs := []*store.Finding{
+		// vira open-redirect-oauth (high)
+		{ID: "r1", Type: "open-redirect", Tool: "scan-open-redirect", Asset: "https://login.acme.com/go?next=x"},
+		{ID: "a1", Type: "oauth-redirect-uri-bypass", Tool: "scan-auth-flow", Asset: "https://login.acme.com/authorize"},
+		// vira idor-credential-leak (critical) — URL sugere credencial
+		{ID: "i1", Type: "idor-horizontal", Tool: "scan-idor", Asset: "https://api.acme.com/users/1/token"},
+	}
+	chains := chainCandidatesWithAssets(fs)
+	if len(chains) < 2 {
+		t.Fatalf("esperava >=2 cadeias, veio %d: %+v", len(chains), chains)
+	}
+	if chains[0].Severity != "critical" {
+		t.Fatalf("cadeia mais grave deveria vir primeiro; 1ª = %q (%s)", chains[0].Severity, chains[0].Title)
+	}
+}

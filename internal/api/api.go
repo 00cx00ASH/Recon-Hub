@@ -722,6 +722,16 @@ func chainCandidatesWithAssets(fs []*store.Finding) []report.ChainCandidate {
 			FindingIDs: c.FindingIDs,
 		})
 	}
+	// lidera pelo caminho de ataque mais grave — no relatório e no dashboard.
+	// Estável: empata na ordem de detecção do DetectChains.
+	rank := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+	wt := func(s string) int {
+		if r, ok := rank[strings.ToLower(s)]; ok {
+			return r
+		}
+		return 5
+	}
+	sort.SliceStable(out, func(i, j int) bool { return wt(out[i].Severity) < wt(out[j].Severity) })
 	return out
 }
 
