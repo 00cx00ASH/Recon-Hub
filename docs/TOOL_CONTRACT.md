@@ -78,7 +78,7 @@ tem um client SOCKS5 mínimo escrito à mão ali, sem dependência externa).
 **Toda ferramenta nova que fala HTTP com o alvo deve chamar `applyProxy()` +
 envolver o `Transport` final do `http.Client` com `withBlockRotation()`** —
 copie `proxy.go`/`proxy_test.go` de `tools/recon-web-enum/` verbatim (é o
-padrão de referência, testado e replicado em 33 das 37 ferramentas atuais) e
+padrão de referência, testado e replicado em 34 das 38 ferramentas atuais) e
 veja `tools/recon-web-enum/main.go` como exemplo de integração. `withBlockRotation`
 conta respostas 403/429 consecutivas e, ao cruzar um limiar, pede um
 circuito Tor novo via `RECONHUB_PROXY_CONTROL_URL` (`SIGNAL NEWNYM`) — é um

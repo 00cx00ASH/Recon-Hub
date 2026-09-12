@@ -527,6 +527,16 @@ var extra = map[string]tmpl{
 			return steps
 		},
 	},
+	"waf-detected": {
+		Name: "WAF/CDN de proteção identificado (informativo)", CWE: "",
+		Description: "O alvo está atrás de um WAF/CDN identificado por assinatura de vendor (headers/cookies/corpo) ou por bloqueio comportamental (requisição benigna passa, payload malicioso é barrado com 403/429). Isto **não é uma vulnerabilidade** — é contexto de metodologia que explica respostas de borda e orienta a abordagem dos demais testes.",
+		Impact:      "Nenhum por si só. O valor é operacional: saber qual proteção está na frente evita interpretar um 403 do WAF como se fosse da aplicação, e indica que encoding/rotação de circuito/ajuste de payload podem ser necessários pra avaliar os endpoints de verdade.",
+		Remediation: "Não aplicável (achado informativo). Se for reportar algo relacionado, foque no que o WAF deixou passar, não na presença dele.",
+		Refs:        []string{"https://owasp.org/www-community/Web_Application_Firewall"},
+		Repro: func(f Item) []string {
+			return []string{"Alvo: `" + f.Asset + "`", "Sinal: " + f.Evidence, "Reforço: repita o GET benigno e o GET com payload malicioso em query string e compare os status — o contraste (ou a assinatura de vendor nos headers) é o que identifica a proteção."}
+		},
+	},
 	"missing-rate-limiting": {
 		Name: "Ausência de rate limiting / lockout em endpoint de autenticação", CWE: "CWE-307",
 		Description: "Um endpoint de login/OTP aceitou várias tentativas seguidas de credencial errada sem CAPTCHA, `429`, aumento de latência ou mensagem de bloqueio — nenhum sinal de proteção contra força bruta apareceu no número de tentativas testado.",
