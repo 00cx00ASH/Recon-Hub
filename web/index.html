@@ -217,9 +217,10 @@
   .mapchip.tab{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
   .mapdown{display:flex;justify-content:center;color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:16px;padding:.3rem 0;line-height:1}
   @media (max-width:820px){ .mapshortcut{flex-direction:column;align-items:flex-start} }
-  .chaincard{border:1px solid color-mix(in srgb,var(--crit) 45%,var(--border));border-radius:var(--radius);background:color-mix(in srgb,var(--crit) 6%,var(--surface));padding:.8rem 1rem;margin-bottom:.6rem}
+  .chaincard{border:2px solid color-mix(in srgb,var(--crit) 50%,var(--border));border-radius:var(--radius);background:color-mix(in srgb,var(--crit) 8%,var(--surface));padding:.8rem 1rem;margin-bottom:.6rem;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .15s,background .15s}
+  .chaincard:hover{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 12%,var(--surface));transform:translateY(-2px);box-shadow:0 4px 12px color-mix(in srgb,var(--crit) 20%,transparent)}
   .chaincard .chtitle{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px}
-  .chaincard p{margin:.4rem 0 0;font-size:12.5px;color:var(--dim)}
+  .chaincard p{margin:.4rem 0 0;font-size:12.5px;color:var(--dim);line-height:1.5}
   .chaincard .chassets{margin-top:.4rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);word-break:break-all}
 
   .md{max-width:78ch;font-size:13.5px;line-height:1.65}
@@ -1839,7 +1840,13 @@ let FINDINGS_FILTER = null; // { tool, type, host } | null
 function isPublicSource(row){ return !!(row && row.meta && row.meta.source === 'public'); }
 
 function matchesFindFilter(f){
-  if (FINDINGS_FILTER && !(f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host)) return false;
+  if (FINDINGS_FILTER) {
+    if (typeof FINDINGS_FILTER === 'function') {
+      if (!FINDINGS_FILTER(f)) return false;
+    } else if (!(f.tool === FINDINGS_FILTER.tool && f.type === FINDINGS_FILTER.type && hostOf(f.asset) === FINDINGS_FILTER.host)) {
+      return false;
+    }
+  }
   const bucket = $('#findHttpBucket').value;
   if (bucket && httpBucketOf(f) !== bucket) return false;
   if ($('#findHidePublic').checked && isPublicSource(f)) return false;
@@ -1851,21 +1858,32 @@ function renderChains(chains){
   box.innerHTML = '';
   if (!chains || !chains.length) return;
   const det = el('details', { open: true });
-  det.append(el('summary', {
-    style: "cursor:pointer;font-size:12px;color:var(--crit);font-family:'IBM Plex Mono',monospace;font-weight:600",
-    textContent: `⚠ possíveis encadeamentos (${chains.length}) — achado isolado pode mudar de categoria combinado com outro`,
-  }));
+  const summary = el('summary', {
+    style: "cursor:pointer;font-size:12px;color:var(--crit);font-family:'IBM Plex Mono',monospace;font-weight:600;display:flex;align-items:center;gap:.5rem",
+  });
+  summary.append(
+    el('span', { textContent: '⚠ possíveis encadeamentos' }),
+    el('span', { style:'background:var(--crit);color:#1a0a06;border-radius:999px;padding:.05rem .35rem;font-size:10px;font-weight:700', textContent: chains.length })
+  );
+  det.append(summary);
   const wrap = el('div', { style:'margin-top:.5rem' });
   for (const c of chains) {
-    const card = el('div', { className:'chaincard' });
+    const card = el('div', { className:'chaincard', style:'cursor:pointer', title:'clique pra filtrar findings desta chain' });
     card.append(el('div', { className:'chtitle' }, [
       el('span', { className:'sev ' + c.severity, textContent: c.severity }),
       el('span', { textContent: c.title }),
     ]));
     card.append(el('p', { textContent: c.explanation }));
     if (c.assets && c.assets.length) {
-      card.append(el('div', { className:'chassets', textContent: 'assets: ' + c.assets.join(', ') }));
+      card.append(el('div', { className:'chassets', textContent: 'assets envolvidos: ' + c.assets.join(', ') }));
     }
+    card.addEventListener('click', () => {
+      // filtrar findings que fazem parte dessa chain
+      const findingIds = new Set(c.finding_ids || []);
+      FINDINGS_FILTER = f => findingIds.has(f.id);
+      renderFindingsTable();
+      window.scrollTo(0, $('#findingsRows').offsetTop);
+    });
     wrap.append(card);
   }
   det.append(wrap);
@@ -1916,7 +1934,11 @@ function renderFindingsTable(){
   const chip = $('#findFilterChip');
   if (FINDINGS_FILTER) {
     chip.hidden = false;
-    chip.textContent = `filtrado: ${FINDINGS_FILTER.tool} · ${FINDINGS_FILTER.type} · ${FINDINGS_FILTER.host}  ✕`;
+    if (typeof FINDINGS_FILTER === 'function') {
+      chip.textContent = 'filtrado por encadeamento  ✕';
+    } else {
+      chip.textContent = `filtrado: ${FINDINGS_FILTER.tool} · ${FINDINGS_FILTER.type} · ${FINDINGS_FILTER.host}  ✕`;
+    }
   } else {
     chip.hidden = true;
   }

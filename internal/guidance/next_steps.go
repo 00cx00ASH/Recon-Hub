@@ -1,6 +1,7 @@
 package guidance
 
 import (
+	"reconhub/internal/intel"
 	"reconhub/internal/store"
 )
 
@@ -28,6 +29,9 @@ func SuggestNextSteps(job *store.Job, findings []*store.Finding, assets []*store
 
 	// Analisa assets por kind e recomenda próxima fase
 	assetsByKind := groupAssetsByKind(assets)
+
+	// Detecta chains e recomenda exploração delas
+	chains := detectChainsFromFindings(findings)
 
 	// Se tool anterior foi recon passivo, sugere recon ativo ou scanning
 	if isReconPassive(job.Tool) {
@@ -148,6 +152,18 @@ func SuggestNextSteps(job *store.Job, findings []*store.Finding, assets []*store
 		}
 	}
 
+	// Se detectou chains, prioriza investigação delas no topo da lista
+	if len(chains) > 0 && len(suggestions) < 3 {
+		suggestions = append([]NextStep{NextStep{
+			Type:        "chain",
+			Name:        "explorar encadeamentos detectados",
+			Reason:      "Encontramos " + countStr(len(chains)) + " possível(is) cadeia(s) de vulnerabilidade. Investigar cada uma pode escalar severidade e impacto — abra a aba Findings, seção 'encadeamentos'.",
+			Category:    "confirmation",
+			TimeMinutes: 30,
+			Phase:       "chain exploitation",
+		}}, suggestions...)
+	}
+
 	// Se nenhuma sugestão foi feita, dá uma genérica baseada na metodologia
 	if len(suggestions) == 0 {
 		suggestions = append(suggestions, NextStep{
@@ -215,4 +231,8 @@ func countStr(n int) string {
 func containsStr(m map[string]int, key string) bool {
 	_, ok := m[key]
 	return ok
+}
+
+func detectChainsFromFindings(findings []*store.Finding) []intel.ChainCandidate {
+	return intel.DetectChains(findings)
 }
