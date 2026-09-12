@@ -166,6 +166,21 @@
   .anom{color:var(--crit)}
   #findFilterChip{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--crit);border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);border-radius:999px;padding:.2rem .6rem}
 
+  .toolcontext{background:color-mix(in srgb,var(--accent-2) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent-2) 30%,transparent);border-radius:var(--radius);padding:.75rem;margin:.6rem 0;display:flex;flex-direction:column;gap:.4rem}
+  .toolcontext .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:12px}
+  .toolcontext .badge{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--text);background:var(--accent-2);border-radius:3px;padding:.1rem .4rem;flex:none}
+  .toolcontext .output{display:flex;gap:.3rem;flex-wrap:wrap;font-size:11px;color:var(--dim)}
+  .toolcontext .output-badge{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;padding:.1rem .45rem;font-family:"IBM Plex Mono",monospace}
+  .toolcontext .output-badge.findings{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+  .toolcontext .output-badge.assets{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+
+  .param-badge{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:.05rem .3rem;border-radius:2px;background:var(--surface-2);border:1px solid var(--border);margin-left:.2rem}
+  .param-badge.int{color:var(--info);border-color:color-mix(in srgb,var(--info) 45%,transparent)}
+  .param-badge.bool{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .param-badge.string{color:var(--dim);border-color:var(--border-strong)}
+  .param-badge.file{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+  .param-badge.wordlist{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+
   .plrun{max-width:520px;border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem;background:var(--surface);box-shadow:var(--shadow-card)}
   .plsteps{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim)}
   .plsteps .s{border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem}
@@ -343,6 +358,7 @@ docker compose exec reconhub cat /app/data/token</pre>
       <span class="help" id="toolHelp"></span>
       <span class="help" id="toolGuide" style="color:var(--dim);border-left:2px solid var(--border-strong);padding-left:.5rem;margin-top:.2rem"></span>
       <span class="help" id="toolValidation" style="color:var(--ok);border-left:2px solid color-mix(in srgb,var(--ok) 45%,transparent);padding-left:.5rem;margin-top:.2rem"></span>
+      <div id="toolContext" class="toolcontext" hidden></div>
       <details id="toolDoc" style="margin-top:.35rem">
         <summary style="cursor:pointer;font-size:11px;color:var(--accent-2);font-family:'IBM Plex Mono',monospace">ℹ ajuda completa</summary>
         <div class="md" id="toolDocBody" style="font-size:12px;max-width:none;margin-top:.4rem"><p class="muted" style="padding:.3rem 0">carregando…</p></div>
@@ -979,6 +995,32 @@ function renderToolMeta() {
   $('#toolValidation').textContent = (t && t.validation) ? ('✓ ' + t.validation) : '';
   $('#toolValidation').hidden = !(t && t.validation);
 
+  // contexto de uso da ferramenta
+  const ctx = $('#toolContext');
+  if (t) {
+    ctx.innerHTML = '';
+    const categoryLabels = { recon: 'Recon', js: 'JS · Cloud · Segredos', scan: 'Scan (vulnerabilidades)', int: 'Integrações' };
+    const catLabel = categoryLabels[t.category] || t.category;
+
+    const row1 = el('div', { className: 'row' });
+    row1.append(el('span', { className: 'badge', textContent: catLabel }));
+    row1.append(el('span', { className: 'faint', style: 'font-size:11px', textContent: t.language ? '· ' + t.language : '' }));
+    ctx.append(row1);
+
+    // tipo de output: findings vs assets
+    const outputRow = el('div', { className: 'output' });
+    outputRow.append(document.createTextNode('Output: '));
+    if (!t.guide || t.guide.toLowerCase().includes('asset')) {
+      outputRow.append(el('span', { className: 'output-badge assets', textContent: 'Assets' }));
+    } else if (!t.guide || t.guide.toLowerCase().includes('finding')) {
+      outputRow.append(el('span', { className: 'output-badge findings', textContent: 'Findings' }));
+    }
+    ctx.append(outputRow);
+    ctx.hidden = false;
+  } else {
+    ctx.hidden = true;
+  }
+
   // ajuda completa (README da ferramenta) — carrega ao abrir o <details>
   const doc = $('#toolDoc');
   doc.open = false;
@@ -1031,7 +1073,7 @@ function renderModeAndParams() {
     const labelEl = el('label', { htmlFor: id });
     labelEl.append(document.createTextNode(humanizeParamName(p.name)));
     labelEl.append(el('code', { className: 'pname', textContent: p.name }));
-    labelEl.append(el('span', { className: 'ptype', textContent: p.type }));
+    labelEl.append(el('span', { className: 'param-badge ' + p.type, textContent: p.type }));
     if (p.required) labelEl.append(el('span', { className: 'preq', textContent: 'obrigatório' }));
     f.append(labelEl);
     let input;
