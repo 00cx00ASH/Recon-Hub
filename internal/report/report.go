@@ -64,6 +64,11 @@ type ChainCandidate struct {
 	Severity    string   `json:"severity"`
 	Explanation string   `json:"explanation"`
 	Assets      []string `json:"assets,omitempty"`
+	// FindingIDs são os IDs de store dos findings que compõem a cadeia. NÃO
+	// são usados na renderização Markdown/HTML (lá o leitor se guia pelos
+	// Assets e pelos IDs sequenciais F-01/F-02 das seções) — existem só pro
+	// consumidor JSON (o dashboard), que filtra/resolve os findings por id.
+	FindingIDs []string `json:"finding_ids,omitempty"`
 }
 
 // Report is the assembled document.

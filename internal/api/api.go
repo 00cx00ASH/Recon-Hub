@@ -719,6 +719,7 @@ func chainCandidatesWithAssets(fs []*store.Finding) []report.ChainCandidate {
 		}
 		out = append(out, report.ChainCandidate{
 			ID: c.ID, Title: c.Title, Severity: c.Severity, Explanation: c.Explanation, Assets: assets,
+			FindingIDs: c.FindingIDs,
 		})
 	}
 	return out

@@ -222,6 +222,14 @@
   .chaincard .chtitle{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px}
   .chaincard p{margin:.4rem 0 0;font-size:12.5px;color:var(--dim);line-height:1.5}
   .chaincard .chassets{margin-top:.4rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);word-break:break-all}
+  /* caminho de ataque: nós = findings componentes reais (resolvidos por id),
+     nó final = o impacto da cadeia. flex-wrap pra não vazar em mobile. */
+  .chainpath{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin:.55rem 0 .1rem}
+  .chainnode{display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border-strong);border-radius:999px;background:var(--bg);padding:.1rem .5rem;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--text);max-width:100%}
+  .chainnode .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .chainnode .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:22ch}
+  .chainarrow{color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:12px;flex:0 0 auto}
+  .chaingoal{border-color:color-mix(in srgb,var(--crit) 55%,var(--border));background:color-mix(in srgb,var(--crit) 14%,var(--bg));font-weight:600}
 
   .md{max-width:78ch;font-size:13.5px;line-height:1.65}
   .md h1,.md h2,.md h3,.md h4{font-family:"IBM Plex Mono",monospace;line-height:1.25;margin:1.8em 0 .6em;color:var(--text);text-transform:none;letter-spacing:0}
@@ -2008,6 +2016,27 @@ function renderChains(chains){
       el('span', { className:'sev ' + c.severity, textContent: c.severity }),
       el('span', { textContent: c.title }),
     ]));
+    // caminho de ataque: resolve os finding_ids da chain contra os findings já
+    // carregados (FINDINGS_ALL) e desenha os nós componentes → o impacto. Só
+    // aparece quando dá pra resolver de verdade — nunca um grafo decorativo.
+    const parts = (c.finding_ids || []).map(id => FINDINGS_ALL.find(f => f.id === id)).filter(Boolean);
+    if (parts.length) {
+      const sevDot = { critical:'var(--crit)', high:'var(--crit)', medium:'var(--warn)', low:'var(--info)', info:'var(--faint)' };
+      const path = el('div', { className:'chainpath' });
+      parts.forEach((p, i) => {
+        if (i) path.append(el('span', { className:'chainarrow', textContent:'→' }));
+        const node = el('span', { className:'chainnode', title:(p.type || '') + (p.asset ? ' — ' + p.asset : '') });
+        node.append(el('span', { className:'dot', style:'background:' + (sevDot[p.severity] || 'var(--faint)') }));
+        node.append(el('span', { className:'lbl', textContent: p.type || p.title || 'finding' }));
+        path.append(node);
+      });
+      path.append(el('span', { className:'chainarrow', textContent:'⟶' }));
+      const goal = el('span', { className:'chainnode chaingoal', title: c.title });
+      goal.append(el('span', { className:'dot', style:'background:' + (sevDot[c.severity] || 'var(--crit)') }));
+      goal.append(el('span', { className:'lbl', textContent: '🎯 impacto ' + c.severity }));
+      path.append(goal);
+      card.append(path);
+    }
     card.append(el('p', { textContent: c.explanation }));
     if (c.assets && c.assets.length) {
       card.append(el('div', { className:'chassets', textContent: 'assets envolvidos: ' + c.assets.join(', ') }));
