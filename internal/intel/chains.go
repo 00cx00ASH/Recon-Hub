@@ -50,6 +50,7 @@ func DetectChains(findings []*store.Finding) []ChainCandidate {
 		out = append(out, detectSSRFCloudMetadata(fs)...)
 		out = append(out, detectIDORCredentialLeak(fs)...)
 		out = append(out, detectCORSCredentialsSensitive(byHost)...)
+		out = append(out, detectIDORWritableObject(byHost)...)
 		out = append(out, detectTakeoverTrustsAnySubdomain(fs)...)
 	}
 	return out
@@ -249,6 +250,41 @@ func detectCORSCredentialsSensitive(byHost map[string][]*store.Finding) []ChainC
 				"precisa mostrar as DUAS pontas juntas (origem maliciosa + o dado sendo lido), não cada achado " +
 				"isolado.",
 			FindingIDs: ids(append(creds, sensitive...)...),
+		})
+	}
+	return out
+}
+
+// detectIDORWritableObject: the same host has a confirmed idor-horizontal (a
+// low-priv session READS another user's object) AND a confirmed
+// mass-assignment (the client can WRITE a privileged field the server should
+// own). Each alone is high; together they're the read+write halves of taking
+// over arbitrary accounts — enumerate other users' objects via the IDOR, then
+// set a privileged field (role, is_admin, email, password-reset token) on them
+// via the mass-assignment bind. A hint to confirm the two hit the same object
+// type, not a claim they do: scan-idor never stores the body and
+// scan-mass-assignment only proved the field binds with a sentinel, so open
+// both findings and check they're the same resource before reporting the ATO.
+func detectIDORWritableObject(byHost map[string][]*store.Finding) []ChainCandidate {
+	var out []ChainCandidate
+	for host, fs := range byHost {
+		reads := byType(fs, "idor-horizontal")
+		writes := byType(fs, "mass-assignment")
+		if len(reads) == 0 || len(writes) == 0 {
+			continue
+		}
+		out = append(out, ChainCandidate{
+			ID:       "idor-writable-object",
+			Title:    "IDOR (leitura cruzada) + mass assignment (escrita privilegiada) no mesmo host — " + host,
+			Severity: "critical",
+			Explanation: "O mesmo host tem um IDOR horizontal confirmado (uma sessão alcança o objeto de OUTRO usuário) " +
+				"E um mass assignment confirmado (o cliente consegue setar um campo privilegiado que deveria ser só do " +
+				"servidor). São as duas metades — leitura e escrita — de um account takeover de conta arbitrária: enumere " +
+				"os objetos de outros usuários pelo IDOR e sete um campo privilegiado (role, is_admin, email, token de " +
+				"reset) neles pelo bind do mass assignment. Confirme manualmente que os dois achados batem no MESMO tipo " +
+				"de objeto antes de reportar (o scan-idor não guarda o corpo; o scan-mass-assignment só provou o bind com " +
+				"sentinela) — se baterem, é ATO em massa, não dois achados médios isolados.",
+			FindingIDs: ids(append(append([]*store.Finding{}, reads...), writes...)...),
 		})
 	}
 	return out
