@@ -1007,15 +1007,32 @@ function renderToolMeta() {
     row1.append(el('span', { className: 'faint', style: 'font-size:11px', textContent: t.language ? '· ' + t.language : '' }));
     ctx.append(row1);
 
+    const categoryDescriptions = {
+      recon: 'Descobre novos alvos, subdomínios e infraestrutura',
+      js: 'Analisa JavaScript, APIs e serviços em nuvem',
+      scan: 'Escaneia vulnerabilidades em alvos descobertos',
+      int: 'Integra com ferramentas e plataformas externas'
+    };
+    const catDesc = categoryDescriptions[t.category] || '';
+    if (catDesc) {
+      ctx.append(el('div', { style: 'font-size:11px;color:var(--dim);line-height:1.4', textContent: catDesc }));
+    }
+
     // tipo de output: findings vs assets
     const outputRow = el('div', { className: 'output' });
     outputRow.append(document.createTextNode('Output: '));
     if (!t.guide || t.guide.toLowerCase().includes('asset')) {
       outputRow.append(el('span', { className: 'output-badge assets', textContent: 'Assets' }));
-    } else if (!t.guide || t.guide.toLowerCase().includes('finding')) {
+    }
+    if (!t.guide || t.guide.toLowerCase().includes('finding')) {
       outputRow.append(el('span', { className: 'output-badge findings', textContent: 'Findings' }));
     }
     ctx.append(outputRow);
+
+    const mapBtn = el('a', { style: 'font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent-2);text-decoration:underline;cursor:pointer', textContent: '→ ver no Mapa' });
+    mapBtn.addEventListener('click', () => { selectTab('map'); });
+    ctx.append(mapBtn);
+
     ctx.hidden = false;
   } else {
     ctx.hidden = true;
@@ -1051,6 +1068,23 @@ function renderToolMeta() {
 function humanizeParamName(name){
   const s = name.replace(/_/g, ' ');
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function validateParams() {
+  const t = currentTool();
+  const target = $('#target').value.trim();
+  if (!t || !target) return false;
+  for (const p of (t.params || [])) {
+    if (p.required) {
+      const input = $('[data-pname="' + p.name + '"]');
+      if (!input || !input.value.trim()) return false;
+    }
+  }
+  return true;
+}
+
+function updateRunButton() {
+  $('#run').disabled = !validateParams();
 }
 
 function renderModeAndParams() {
@@ -1091,13 +1125,18 @@ function renderModeAndParams() {
       input = el('input', { id, type: p.type === 'int' ? 'number' : 'text', value: p.default ?? '' });
     }
     input.dataset.pname = p.name; input.dataset.ptype = p.type;
+    input.addEventListener('change', updateRunButton);
+    input.addEventListener('input', updateRunButton);
     f.append(input);
     if (p.help) f.append(el('span', { className: 'help', textContent: p.help }));
     box.append(f);
   }
+  updateRunButton();
 }
-$('#tool').addEventListener('change', renderToolMeta);
-$('#toolMode').addEventListener('change', renderModeAndParams);
+$('#tool').addEventListener('change', () => { renderToolMeta(); updateRunButton(); });
+$('#toolMode').addEventListener('change', () => { renderModeAndParams(); updateRunButton(); });
+$('#target').addEventListener('input', updateRunButton);
+$('#jobProgram').addEventListener('change', updateRunButton);
 $('#toolDoc').addEventListener('toggle', async () => {
   const t = currentTool();
   if (!$('#toolDoc').open || !t || toolDocLoadedFor === t.name) return;
