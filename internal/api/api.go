@@ -15,7 +15,6 @@ import (
 	"reconhub/internal/auth"
 	"reconhub/internal/copilot"
 	"reconhub/internal/engine"
-	"reconhub/internal/escalation"
 	"reconhub/internal/guidance"
 	"reconhub/internal/intel"
 	"reconhub/internal/monitor"
@@ -248,7 +247,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/pipeline-runs/{id}", s.auth(s.getPipelineRun))
 	mux.HandleFunc("GET /api/pipeline-runs/compare", s.auth(s.comparePipelineRuns))
 	mux.HandleFunc("POST /api/pipeline-runs/{id}/cancel", s.auth(s.cancelPipelineRun))
-	mux.HandleFunc("POST /api/pipeline-runs/{id}/escalate", s.auth(s.escalatePipelineRun))
 	mux.HandleFunc("GET /api/pipeline-runs/{id}/events", s.authSSE(s.pipelineRunEvents))
 
 	mux.HandleFunc("GET /api/docs", s.auth(s.docs))
@@ -1544,72 +1542,6 @@ func (s *Server) cancelPipelineRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, http.StatusConflict, "nenhum step em execução")
-}
-
-func (s *Server) escalatePipelineRun(w http.ResponseWriter, r *http.Request) {
-	runID := r.PathValue("id")
-	run, ok := s.Store.GetPipelineRun(runID)
-	if !ok {
-		writeErr(w, http.StatusNotFound, "run não encontrada")
-		return
-	}
-
-	// Coleta todos os findings dos jobs da run
-	var allFindings []*store.Finding
-	for _, step := range run.Steps {
-		if step.JobID == "" {
-			continue
-		}
-		findings, err := s.Store.ListFindings(store.FindingFilter{JobID: step.JobID})
-		if err != nil {
-			continue
-		}
-		allFindings = append(allFindings, findings...)
-	}
-
-	// Converte para o tipo esperado pelo escalation package
-	var findings []store.Finding
-	for _, f := range allFindings {
-		if f != nil {
-			findings = append(findings, *f)
-		}
-	}
-
-	// Detecta quais ferramentas devem rodar
-	toolsToRun := escalation.DetectEscalations(findings)
-	if len(toolsToRun) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"escalations": []string{},
-			"message":     "nenhuma escalation detectada para este run",
-		})
-		return
-	}
-
-	// Dispara jobs para cada ferramenta
-	var escalationJobs []map[string]any
-	for tool := range toolsToRun {
-		if _, ok := s.Reg.Get(tool); !ok {
-			continue // ferramenta não disponível
-		}
-		job, err := s.Engine.RunJobSync(tool, run.Target, run.Program, nil)
-		if err != nil {
-			continue
-		}
-		escalationJobs = append(escalationJobs, map[string]any{
-			"tool":     tool,
-			"job_id":   job.ID,
-			"findings": job.Findings,
-			"status":   job.Status,
-		})
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"pipeline_run_id": runID,
-		"target":          run.Target,
-		"escalations":     escalationJobs,
-		"count":           len(escalationJobs),
-		"message":         fmt.Sprintf("%d ferramenta(s) disparada(s) automaticamente", len(escalationJobs)),
-	})
 }
 
 func (s *Server) pipelineRunEvents(w http.ResponseWriter, r *http.Request) {
