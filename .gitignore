@@ -57,6 +57,7 @@ tools/scan-idor/scan-idor
 tools/scan-mass-assignment/scan-mass-assignment
 tools/scan-graphql/scan-graphql
 tools/scan-mongodb/scan-mongodb
+tools/scan-nosqli/scan-nosqli
 tools/scan-open-redirect/scan-open-redirect
 tools/scan-privesc/scan-privesc
 tools/scan-postman-audit/scan-postman-audit
@@ -70,3 +71,4 @@ tools/scan-ssti/scan-ssti
 tools/scan-waf-fingerprint/scan-waf-fingerprint
 tools/scan-xss/scan-xss
 tools/scan-xss-dom/scan-xss-dom
+tools/scan-xss-stored/scan-xss-stored

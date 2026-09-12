@@ -294,6 +294,28 @@ sobre caçar bugs em programas de terceiros.
   velho que a imagem que produção usa. Regra: `go-version` do CI == base do
   `Dockerfile`; a maior versão de `go` em qualquer `tools/*/go.mod` não pode
   passar disso.
+- **Um `tool.json` que é JSON VÁLIDO mas com o SCHEMA errado derruba o hub
+  inteiro no boot — e nem `go build` nem `go test` pegam isso, só o smoke
+  test do Docker (ou subir o binário de verdade).** O registry carrega
+  `tools/*/tool.json` no `store.Open()`/início do processo e trata erro de
+  unmarshal como FATAL (o processo sai). Achado ao adicionar `scan-nosqli`:
+  pus `modes[].params` como array de OBJETOS (copiando a forma do `params`
+  top-level), mas no struct `Mode` o campo `params` é `[]string` (só os
+  NOMES dos params a mostrar naquele modo, que já estão definidos no
+  `params` top-level) — `json: cannot unmarshal object into Go struct field
+  Mode.modes.params of type string`. O hub subia e saía na hora, e no CI
+  isso apareceu como o container `rh` "exited" fazendo o smoke test do
+  `docker build`/`docker build (tor sidecar)` falhar com `cannot join
+  network namespace of a non running container` — uma mensagem que NÃO
+  aponta pro tool.json, fácil de confundir com problema de infra/rede do
+  sidecar (não é: as duas imagens buildaram; o hub é que crashou no boot).
+  Regra: ao adicionar/editar um `tool.json`, SUBA o hub uma vez
+  (`go build -o /tmp/rh ./cmd/reconhub && cd num dir isolado com symlinks
+  pra tools/pipelines/wordlists/web && /tmp/rh -addr 127.0.0.1:PORTA`) e
+  confira o log `registry: N ferramenta(s)...` + `/api/health` 200 — é o
+  único jeito de validar o schema do manifesto sem o Docker. `modes[].params`
+  é `[]string` (nomes); param novo de modo tem que existir no `params`
+  top-level.
 - **O `FileStore` (backend padrão, JSON-lines) carrega tudo em memória no
   `store.Open()` e nunca relê o arquivo do disco depois — só o próprio
   processo que abriu o store vê o que ele mesmo escreve.** Popular dados

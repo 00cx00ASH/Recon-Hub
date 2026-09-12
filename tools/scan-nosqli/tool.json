@@ -1,0 +1,28 @@
+{
+  "name": "scan-nosqli",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "NoSQL injection (injeção de operador estilo MongoDB — $ne/$regex/$gt). Onde o scan-sqli prova vazamento de erro de banco SQL, este prova que um operador NoSQL injetado num parâmetro foi INTERPRETADO pelo servidor (não tratado como string). Confirma por diferencial booleano anti-FP: dois controles sempre-falsos têm que bater entre si (baseline estável) e o operador sempre-verdadeiro tem que divergir. Nunca extrai dado — só status+tamanho, e só prova que o operador passou (extração iterativa seria carga/DoS, fica de fora). Modo query (bracket p[$ne]= na querystring, estilo Express/qs) e modo json (objeto {\"$ne\":...} no corpo, incluindo o bypass de auth combinando os campos de login).",
+  "guide": "Modo query: aponte pra uma URL com querystring (ex: https://api.com/products?category=x) e a ferramenta testa cada parâmetro (ou os de params=). Modo json: passe body com o corpo legítimo (ex: login {\"username\":\"a\",\"password\":\"b\"}) e method; ela injeta operador nos campos (ou os de fields=), inclusive combinando todos pra bypass de auth. Passe cookie/bearer se o endpoint exigir sessão. Alvos típicos: APIs Node/Express + MongoDB, endpoints de login/busca/filtro que montam query a partir do input. Use uma conta/dados de TESTE — embora a ferramenta não extraia nada, ela exercita a query do alvo.",
+  "validation": "Exemplo confirmado (high, modo query): em ?category=shoes, injetar category[$ne]=<aleatório> devolve TODOS os produtos (corpo muito maior) enquanto category=<aleatório literal> devolve a lista vazia/pequena e um segundo literal devolve o mesmo pequeno — baseline falso estável + operador divergente = $ne interpretado. Exemplo crítico (modo json, auth bypass): POST de login com {\"username\":{\"$ne\":\"x\"},\"password\":{\"$ne\":\"x\"}} responde 302/200 com sessão, enquanto credenciais literais erradas respondem 401 — autenticou sem credencial. Contra-exemplo (sem finding): o operador responde IGUAL ao literal (tratado como string, não interpretado), ou o baseline é instável (página dinâmica cujos dois controles falsos já divergem) — a ferramenta não reporta. Nunca lista/extrai registros; só compara status+tamanho.",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "query", "label": "Querystring (GET)", "help": "URL com parâmetros; injeta p[$ne]= em cada um", "target_label": "URL com querystring" },
+    { "name": "json", "label": "Corpo JSON (login/filtro)", "help": "endpoint que recebe JSON; injeta {\"$ne\":...} nos campos (body/method/fields)", "target_label": "URL do endpoint JSON" }
+  ],
+  "params": [
+    { "name": "mode", "type": "string", "required": false, "help": "query ou json (default: json se body vier, senão query)" },
+    { "name": "params", "type": "string", "required": false, "help": "CSV de parâmetros da querystring a testar (modo query; default: os da URL)" },
+    { "name": "body", "type": "string", "required": false, "help": "corpo JSON base (modo json)" },
+    { "name": "method", "type": "string", "required": false, "default": "POST", "help": "método do modo json" },
+    { "name": "fields", "type": "string", "required": false, "help": "CSV de campos do corpo (modo json)" },
+    { "name": "content_type", "type": "string", "required": false, "default": "application/json", "help": "Content-Type do corpo (modo json)" },
+    { "name": "cookie", "type": "string", "required": false, "help": "Cookie da sessão de teste" },
+    { "name": "bearer", "type": "string", "required": false, "help": "Bearer token da sessão de teste" },
+    { "name": "tolerance_pct", "type": "int", "required": false, "default": 15, "help": "diferença de tamanho de corpo tolerada, em %, pra considerar 'a mesma resposta'" },
+    { "name": "pace_ms", "type": "int", "required": false, "default": 300, "help": "pausa entre requisições em ms (pacing)" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

@@ -586,6 +586,58 @@ var extra = map[string]tmpl{
 			return steps
 		},
 	},
+	"stored-xss": {
+		Name: "Stored / Persistent XSS", CWE: "CWE-79",
+		Description: "Um valor submetido num fluxo de escrita (comentário, perfil, nome) é ARMAZENADO e renderizado sem sanitização na página de leitura, executando como código JavaScript. Confirmado por execução real num navegador headless: o payload foi submetido numa requisição e, numa navegação SEPARADA até a página de leitura, o onerror de uma `<img>` injetada disparou (seta uma propriedade JS com token aleatório). Não é heurística de texto — o navegador executou o valor persistido como código.",
+		Impact:      "Todo visitante da página de leitura executa o payload do atacante — roubo de sessão (se o cookie não for HttpOnly), ações em nome da vítima, defacement, redirecionamento. Quando dispara numa sessão diferente da que submeteu (ex: um comentário de usuário comum executando no painel do admin que modera), é account takeover de privilégio alto sem nenhuma interação além de abrir a página.",
+		Remediation: "Escapar/sanitizar na SAÍDA, no ponto onde o valor é renderizado (contextual — HTML, atributo, JS), não só na entrada. Usar a auto-escapagem do template engine, uma allowlist de HTML (ex: DOMPurify) quando rich text for necessário, e um CSP restritivo como defesa em profundidade. Marcar o cookie de sessão como HttpOnly reduz o impacto (não o bug).",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/79.html", "https://owasp.org/www-community/attacks/xss/", "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"},
+		Repro: func(f Item) []string {
+			submitURL, _ := f.Meta["submit_url"].(string)
+			field, _ := f.Meta["submit_field"].(string)
+			viewURL, _ := f.Meta["view_url"].(string)
+			if viewURL == "" {
+				viewURL = f.Asset
+			}
+			steps := []string{
+				"Submeta no campo `" + field + "` de `" + submitURL + "` um payload que quebra tag (ex: `'\"><img src=x onerror=...>`).",
+				"Numa navegação SEPARADA (idealmente em outra sessão), abra `" + viewURL + "` num navegador de verdade.",
+				"Observe: " + f.Evidence,
+			}
+			if cs, ok := f.Meta["cross_session"].(bool); ok && cs {
+				steps = append(steps, "Confirmado em sessão DIFERENTE da que submeteu — o impacto inclui executar na sessão de quem visualiza (ex: admin).")
+			}
+			return steps
+		},
+	},
+	"nosql-injection": {
+		Name: "NoSQL injection (injeção de operador)", CWE: "CWE-943",
+		Description: "Um parâmetro que alimenta uma query NoSQL (ex: MongoDB) aceita um operador de consulta ($ne/$regex/$gt) vindo do cliente, em vez de tratar o valor como string literal. Confirmado por diferencial booleano: o operador sempre-verdadeiro produziu uma resposta que diverge de DOIS controles literais sempre-falsos estáveis — prova que o operador foi interpretado, não refletido nem tratado como texto. A ferramenta não extrai dados, só confirma a interpretação do operador.",
+		Impact:      "Depende do ponto de injeção: num login (vector=auth-bypass), `{\"$ne\":null}` em usuário+senha autentica sem credencial válida — account takeover direto (critical). Num filtro/busca, o operador deixa manipular a query: ler registros fora do filtro pretendido (dados de outros usuários via `$ne`), ou extrair valores char-a-char via `$regex` — isso é o passo manual seguinte, não feito por esta ferramenta.",
+		Remediation: "Validar o TIPO do input no servidor antes de montar a query: onde se espera uma string, rejeitar objeto/array (é assim que `$ne`/`$regex` chegam). Fazer cast explícito pra string, usar query builders que separam operador de dado, e nunca passar o objeto do body/query direto pro driver do banco. Em Express, sanitizar contra chaves que começam com `$` (ex: express-mongo-sanitize).",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/943.html", "https://owasp.org/www-community/Injection_Flaws", "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint: `" + f.Asset + "`"}
+			op, _ := f.Meta["operator"].(string)
+			if op == "" {
+				op = "$ne"
+			}
+			if v, _ := f.Meta["vector"].(string); v == "auth-bypass" {
+				fields, _ := f.Meta["fields"].(string)
+				steps = append(steps, "Baseline: POST com credenciais literais erradas nos campos "+fields+" → falha (anote status/tamanho).", "Injeção: troque cada campo por `{\""+op+"\":\"<aleatório>\"}` (sempre-verdadeiro) no MESMO corpo.", "Observe: "+f.Evidence, "Confirme abrindo a sessão retornada — autenticou sem credencial válida.")
+			} else {
+				key, _ := f.Meta["param"].(string)
+				if key == "" {
+					key, _ = f.Meta["field"].(string)
+				}
+				if key == "" {
+					key = "o parâmetro"
+				}
+				steps = append(steps, "Baseline: dois valores literais aleatórios DIFERENTES em `"+key+"` → respostas iguais e pequenas (baseline falso estável).", "Injeção: `"+key+"` como operador `"+op+"` sempre-verdadeiro (query: `"+key+"["+op+"]=`; JSON: `{\""+op+"\":...}`).", "Observe: "+f.Evidence, "A divergência só contra o baseline estável prova que o operador foi interpretado, não refletido.")
+			}
+			return steps
+		},
+	},
 	"waf-detected": {
 		Name: "WAF/CDN de proteção identificado (informativo)", CWE: "",
 		Description: "O alvo está atrás de um WAF/CDN identificado por assinatura de vendor (headers/cookies/corpo) ou por bloqueio comportamental (requisição benigna passa, payload malicioso é barrado com 403/429). Isto **não é uma vulnerabilidade** — é contexto de metodologia que explica respostas de borda e orienta a abordagem dos demais testes.",

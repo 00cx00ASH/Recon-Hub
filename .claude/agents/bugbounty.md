@@ -342,13 +342,31 @@ ainda falta rodar num programa.
   de `scan-xss` num alvo que já demonstrou renderizar JS no cliente
   (SPA, dashboard); mais caro (cada candidato abre uma aba), por isso
   fica de fora do `full-recon` e tem pipeline próprio, `dom-xss-sweep`,
-  com `max_params`/`concurrency` bem menores que `xss-sweep`. Ainda NÃO
-  é XSS armazenado — ver gap abaixo.
+  com `max_params`/`concurrency` bem menores que `xss-sweep`. Não é XSS
+  armazenado — pra isso use `scan-xss-stored`.
+- XSS armazenado: `scan-xss-stored` — duas fases. Submete um payload único
+  num fluxo de ESCRITA (form/API: comentário, bio, nome) e depois abre a
+  página de LEITURA num navegador headless (chromedp) e confirma por
+  EXECUÇÃO real (o onerror da `<img>` persistida dispara numa navegação
+  separada). Passe submit_url, view_url e submit_field; opcional view_cookie
+  pra confirmar execução numa sessão DIFERENTE da que submeteu (ex: o
+  payload de um usuário comum executando no painel do admin que modera =
+  critical na prática). É alvo único/guiado pelo operador (você sabe o fluxo
+  de escrita e onde ele aparece) — fica de fora do full-recon, como o
+  scan-idor/scan-privesc.
 - SQL injection: `scan-sqli` — aspa/aspa-dupla anexada ao valor de
   parâmetros clássicos (id, page, sort, category…), confirma só com
   assinatura real de erro de banco (MySQL/Postgres/MSSQL/Oracle/SQLite/
   ORMs) ausente no baseline sem payload. Nunca time-based — SQLi cega
   sem erro visível fica pra teste manual.
+- NoSQL injection: `scan-nosqli` — par do scan-sqli pra bancos NoSQL
+  (Mongo). Injeta operador (`$ne`/`$regex`/`$gt`) via bracket na
+  querystring (`p[$ne]=`, estilo Express/qs) ou objeto no corpo JSON, e
+  confirma por diferencial booleano: dois controles literais sempre-falsos
+  têm que bater entre si (baseline estável) e o operador sempre-verdadeiro
+  tem que divergir. No modo json combina os campos de login pra testar
+  bypass de auth (critical). Nunca extrai registro — só prova que o
+  operador foi interpretado; o alcance (listar/extrair) é o passo manual.
 - Server-Side Template Injection: `scan-ssti` — expressão matemática em
   7 sintaxes de engine (Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB,
   Smarty, Razor .NET, Pug/Jade Node.js) em parâmetros renderizados de
@@ -615,21 +633,24 @@ sessão autenticada real ou julgamento de lógica de negócio:
   (setar o campo pra um valor de privilégio de verdade e confirmar o impacto)
   é o passo manual seguinte, e descobrir SOZINHO o corpo legítimo que cada
   endpoint espera (você cola o body base).
-- **XSS armazenado** — `scan-xss-dom` cobre o DOM-based (payload no hash
-  ou query, executa na MESMA navegação, via navegador headless real).
-  Armazenado de verdade (valor persiste no servidor — comentário, bio,
-  nome de perfil — e executa depois em OUTRA página/sessão, às vezes de
-  OUTRO usuário) ainda não tem ferramenta: exigiria submeter o payload
-  num fluxo (form/API), depois abrir uma segunda página/sessão pra
-  confirmar a execução — um teste de duas fases que nenhum scanner do
-  hub faz hoje.
-- **SQLi cega (booleana/time-based), NoSQLi** — `scan-sqli` só confirma
+- **XSS armazenado** — **já tem** (`scan-xss-stored`): submete o payload
+  num fluxo de escrita e confirma por EXECUÇÃO real numa navegação separada
+  até a página de leitura (navegador headless), com suporte a sessão de
+  visualização diferente da que submeteu. O que fica de fora: DESCOBRIR
+  sozinho quais fluxos de escrita existem e onde cada valor aparece (você
+  aponta submit_url + view_url + submit_field) — a ferramenta confirma o
+  par que você indica, não mapeia o app. (`scan-xss-dom` segue sendo o
+  DOM-based, que executa na mesma navegação.)
+- **SQLi cega (booleana/time-based)** — `scan-sqli` só confirma
   quando o banco vaza um erro de verdade na resposta. Sem erro visível
   (SQLi cega) precisaria de requisições booleanas (1=1 vs 1=2) ou
   SLEEP() — a 2ª adiciona carga real no alvo, então fica de fora de
   propósito, igual ao scan-smuggling nunca confirmar com uma 2ª
-  requisição de verdade. NoSQLi (injeção de operador Mongo/etc.) não tem
-  ferramenta dedicada ainda. **SSTI já tem** (`scan-ssti`) — confirma a
+  requisição de verdade. **NoSQLi já tem** (`scan-nosqli`) — confirma por
+  diferencial booleano que o operador ($ne/$regex/$gt) foi interpretado,
+  inclusive bypass de auth; o que fica de fora é a EXTRAÇÃO iterativa de
+  dados (listar registros via $ne, char-a-char via $regex), que é carga e
+  passo manual. **SSTI já tem** (`scan-ssti`) — confirma a
   avaliação da expressão, mas não confirma RCE (o passo seguinte é
   manual, específico do engine identificado no finding).
 - **Lógica de negócio** (ex: burlar fluxo de checkout, cupom, limite de
