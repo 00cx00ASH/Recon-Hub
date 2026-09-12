@@ -6,12 +6,12 @@ import (
 
 // NextStep recomenda uma ferramenta ou pipeline pra executar depois.
 type NextStep struct {
-	Type        string `json:"type"`                  // "tool" | "pipeline"
-	Name        string `json:"name"`                  // nome da ferramenta ou pipeline
-	Reason      string `json:"reason"`                // por que recomendar isto
-	Category    string `json:"category"`              // "recon", "scanning", "confirmation", "analysis"
-	TimeMinutes int    `json:"time_minutes"`          // tempo estimado
-	Phase       string `json:"phase"`                 // fase metodológica (recon ativo, scanning, etc)
+	Type        string `json:"type"`                   // "tool" | "pipeline"
+	Name        string `json:"name"`                   // nome da ferramenta ou pipeline
+	Reason      string `json:"reason"`                 // por que recomendar isto
+	Category    string `json:"category"`               // "recon", "scanning", "confirmation", "analysis"
+	TimeMinutes int    `json:"time_minutes"`           // tempo estimado
+	Phase       string `json:"phase"`                  // fase metodológica (recon ativo, scanning, etc)
 	SuggestedAt string `json:"suggested_at,omitempty"` // timestamp
 }
 
@@ -172,10 +172,10 @@ func SuggestNextSteps(job *store.Job, findings []*store.Finding, assets []*store
 
 func isReconPassive(tool string) bool {
 	passiveTools := map[string]bool{
-		"recon-crtsh":          true,
-		"recon-passive-enum":   true,
-		"recon-tech-cve":       true,
-		"int-github-audit":     true,
+		"recon-crtsh":        true,
+		"recon-passive-enum": true,
+		"recon-tech-cve":     true,
+		"int-github-audit":   true,
 	}
 	return passiveTools[tool]
 }
@@ -207,7 +207,7 @@ func countStr(n int) string {
 		return string(rune('0' + n))
 	}
 	if n < 100 {
-		return string(rune('0' + n/10)) + string(rune('0' + n%10))
+		return string(rune('0'+n/10)) + string(rune('0'+n%10))
 	}
 	return "100+"
 }
