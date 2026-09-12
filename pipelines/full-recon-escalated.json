@@ -1,0 +1,41 @@
+{
+  "name": "full-recon-escalated",
+  "description": "Pipeline de recon com auto-escalation inteligente em 4 ondas: (1) enumeração passiva; (2) scanning paralelo completo (31 ferramentas); (3) detecção de proteção (WAF, rate-limit, race-condition, cloud-config) e análise JWT; (4) port scan e MongoDB. Cada onda aproveita os resultados da anterior para refinar o scanning.",
+  "steps": [
+    { "id": "recon", "tool": "recon-passive-enum", "params": { "max": 3000, "resolve": true } },
+
+    { "id": "takeover", "tool": "scan-subdomain-takeover", "params": { "concurrency": 25 }, "feed": { "param": "subdomains", "from": "recon", "kind": "subdomain", "as": "csv" } },
+    { "id": "content", "tool": "scan-fuzz", "params": { "wordlist": "builtin/web-content-common", "concurrency": 25 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "actuator", "tool": "scan-actuator", "feed": { "param": "hosts", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "redirect", "tool": "scan-open-redirect", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cors", "tool": "scan-cors", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "graphql", "tool": "scan-graphql", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "blh", "tool": "scan-broken-link-hijack", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cognito", "tool": "scan-cognito", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "depconf", "tool": "scan-dep-confusion", "params": { "mode": "site", "ecosystem": "npm" }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "gtm", "tool": "js-gtm-osint", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "firebase", "tool": "js-firebase-enum", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "supabase", "tool": "js-supabase-probe", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "secrets", "tool": "js-secret-hunter", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "aikeys", "tool": "js-ai-key-hunter", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "buckets", "tool": "js-bucket-scanner", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "jwt", "tool": "js-jwt-finder", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "jsendpoints", "tool": "js-hunter", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "webenum", "tool": "recon-web-enum", "params": { "depth": 1, "max_pages": 20 }, "feed": { "param": "target", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cve", "tool": "recon-tech-cve", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cachepoison", "tool": "scan-cache-poisoning", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "smuggling", "tool": "scan-smuggling", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "ssrf", "tool": "scan-ssrf", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "xss", "tool": "scan-xss", "params": { "max_params": 44 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "sqli", "tool": "scan-sqli", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "ssti", "tool": "scan-ssti", "params": { "max_params": 30 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+
+    { "id": "waf", "tool": "scan-waf-fingerprint", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "ratelimit", "tool": "scan-rate-limit", "params": { "requests": 10, "timeout_ms": 2000 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "race", "tool": "scan-race-condition", "params": { "concurrency": 15 }, "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "cloudenum", "tool": "scan-cloud-enum", "feed": { "param": "urls", "from": "recon", "kind": "subdomain", "as": "lines" } },
+
+    { "id": "ports", "tool": "recon-infra-enum", "params": { "ports": "top100", "timeout_ms": 1200 }, "feed": { "param": "hosts", "from": "recon", "kind": "subdomain", "as": "lines" } },
+    { "id": "mongo", "tool": "scan-mongodb", "params": { "ports": "27017,27018" }, "feed": { "param": "hosts", "from": "ports", "source": "assets", "kind": "port", "as": "lines" } }
+  ]
+}
