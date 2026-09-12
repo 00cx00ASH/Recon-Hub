@@ -417,6 +417,10 @@ docker compose exec reconhub cat /app/data/token</pre>
           <button class="cancel" id="jCancel" hidden>cancelar</button>
         </div>
         <div class="bar"><i id="jBar"></i></div>
+        <div id="jNextSteps" hidden style="margin-bottom:1.2rem">
+          <h2 style="margin-bottom:.7rem">Próximos passos sugeridos</h2>
+          <div id="jNextStepsBox"></div>
+        </div>
         <h2>Stream</h2>
         <div class="log" id="log"></div>
         <h2 style="margin-top:1.1rem">Findings deste job (<span id="jFCount">0</span>)</h2>
@@ -1119,6 +1123,40 @@ function setBar(ev){
   if (ev.type === 'done') $('#jBar').style.width = '100%';
 }
 
+async function loadJobNextSteps(jobId){
+  try {
+    const { next_steps } = await api('/jobs/' + jobId + '/next-steps');
+    const box = $('#jNextStepsBox');
+    box.innerHTML = '';
+    if (!next_steps || !next_steps.length) {
+      $('#jNextSteps').hidden = true;
+      return;
+    }
+    for (const step of next_steps) {
+      const card = el('div', { className: 'suggcard' });
+      const top = el('div', { className: 'top' });
+      top.append(el('span', { className: 'tool', textContent: step.name }));
+      if (step.phase) top.append(el('span', { className: 'ex', textContent: step.phase }));
+      card.append(top);
+      card.append(el('div', { className: 'reason', textContent: step.reason }));
+      if (step.time_minutes) {
+        card.append(el('div', { className: 'ex', textContent: `⏱ ~${step.time_minutes}min` }));
+      }
+      const btn = el('button', { textContent: '▶ executar' });
+      btn.addEventListener('click', async () => {
+        $('#tool').value = step.name;
+        renderToolMeta();
+        selectTab('left');
+      });
+      card.append(btn);
+      box.append(card);
+    }
+    $('#jNextSteps').hidden = false;
+  } catch (e) {
+    $('#jNextSteps').hidden = true;
+  }
+}
+
 async function attachJob(id){
   if (es) { es.close(); es = null; }
   currentJob = id;
@@ -1138,6 +1176,7 @@ async function attachJob(id){
   $('#jCancel').hidden = terminal.has(job.status);
   if (terminal.has(job.status)) {
     try { const r = await api('/jobs/' + id); (r.events||[]).forEach(ev => { logLine(ev); setBar(ev); }); } catch {}
+    loadJobNextSteps(id);
     return;
   }
 
@@ -1154,6 +1193,7 @@ async function attachJob(id){
       api('/jobs/' + id).then(r => { pill(r.job.status); $('#jCancel').hidden = true; }).catch(()=>{});
       refreshJobFindings(id); refreshJobAssets(id);
       loadJobs();
+      loadJobNextSteps(id);
     }
   };
   es.onerror = () => { /* EventSource reconecta sozinho; Last-Event-ID evita duplicatas */ };

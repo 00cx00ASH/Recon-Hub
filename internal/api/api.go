@@ -15,6 +15,7 @@ import (
 	"reconhub/internal/auth"
 	"reconhub/internal/copilot"
 	"reconhub/internal/engine"
+	"reconhub/internal/guidance"
 	"reconhub/internal/intel"
 	"reconhub/internal/monitor"
 	"reconhub/internal/pipeline"
@@ -181,6 +182,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/jobs", s.auth(s.createJob))
 	mux.HandleFunc("GET /api/jobs", s.auth(s.listJobs))
 	mux.HandleFunc("GET /api/jobs/{id}", s.auth(s.getJob))
+	mux.HandleFunc("GET /api/jobs/{id}/next-steps", s.auth(s.getJobNextSteps))
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", s.auth(s.cancelJob))
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.authSSE(s.jobEvents))
 	mux.HandleFunc("GET /api/findings", s.auth(s.listFindings))
@@ -381,6 +383,28 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 	}
 	events, _ := s.Store.ListEvents(job.ID, 0)
 	writeJSON(w, http.StatusOK, map[string]any{"job": job, "events": events})
+}
+
+func (s *Server) getJobNextSteps(w http.ResponseWriter, r *http.Request) {
+	job, ok := s.Store.GetJob(r.PathValue("id"))
+	if !ok {
+		writeErr(w, http.StatusNotFound, "job não encontrado")
+		return
+	}
+
+	// Só sugere se job terminou (succeeded ou failed)
+	if job.Status != "succeeded" && job.Status != "failed" {
+		writeJSON(w, http.StatusOK, map[string]any{"next_steps": []any{}})
+		return
+	}
+
+	// Puxa findings e assets deste job
+	findings, _ := s.Store.ListFindings(store.FindingFilter{JobID: job.ID, Limit: 1000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{JobID: job.ID, Limit: 1000})
+
+	// Gera sugestões
+	steps := guidance.SuggestNextSteps(job, findings, assets)
+	writeJSON(w, http.StatusOK, map[string]any{"next_steps": steps})
 }
 
 func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
