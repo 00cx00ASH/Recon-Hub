@@ -56,6 +56,7 @@ tools/scan-smuggling/scan-smuggling
 tools/scan-ssrf/scan-ssrf
 tools/scan-subdomain-takeover/scan-subdomain-takeover
 tools/scan-sqli/scan-sqli
+tools/scan-path-traversal/scan-path-traversal
 tools/scan-ssti/scan-ssti
 tools/scan-waf-fingerprint/scan-waf-fingerprint
 tools/scan-xss/scan-xss
