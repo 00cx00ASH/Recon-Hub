@@ -54,6 +54,7 @@ tools/scan-cors/scan-cors
 tools/scan-dep-confusion/scan-dep-confusion
 tools/scan-fuzz/scan-fuzz
 tools/scan-idor/scan-idor
+tools/scan-mass-assignment/scan-mass-assignment
 tools/scan-graphql/scan-graphql
 tools/scan-mongodb/scan-mongodb
 tools/scan-open-redirect/scan-open-redirect

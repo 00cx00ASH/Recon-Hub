@@ -264,6 +264,23 @@ sobre caçar bugs em programas de terceiros.
   motivos independentes. Confira os dois: numerador == `proxy.go` real,
   e a enumeração == o conjunto de tools SEM `proxy.go` (`for d in
   tools/*/; do [ -f "$d/proxy.go" ] || basename "$d"; done`).
+- **O matrix de CI (`.github/workflows/ci.yml`, job `go`) é HARDCODED,
+  tool por tool — adicionar `tools/<nova>/` não a coloca no CI, e o
+  `docker build` (que faz `for d in tools/*/ … go build`) NÃO salva: ele
+  só compila, não roda `gofmt -l`/`go vet`/`go test` por-tool.** Resultado:
+  uma tool nova (ou uma antiga que ninguém registrou) fica com formatação,
+  vet e testes SEM checagem no CI, passando "verde" por pura omissão — o
+  gap não grita, some. Achado ao adicionar `scan-mass-assignment`: o matrix
+  tinha 25 entradas de tool pra 40 tools reais; 14 tools (incluindo
+  `scan-privesc`/`scan-path-traversal`/`scan-waf-fingerprint`, adicionadas
+  em sessões anteriores) nunca foram registradas. Sempre que adicionar uma
+  tool, some a linha `- "tools/<nome>"` no matrix, e confira o conjunto
+  inteiro com `comm -23 <(for d in tools/*/; do n=$(basename "$d"); [ "$n"
+  = example-echo ] || echo "tools/$n"; done | sort) <(grep -oE
+  '"tools/[^"]+"' .github/workflows/ci.yml | tr -d '"' | sort)` — tem que
+  vir vazio. Antes de registrar várias de uma vez, valide cada uma local
+  (`gofmt -l . && go vet ./... && go build ./... && go test ./...`) pra não
+  empurrar um CI vermelho por uma tool que o CI nunca tinha olhado.
 - **O `FileStore` (backend padrão, JSON-lines) carrega tudo em memória no
   `store.Open()` e nunca relê o arquivo do disco depois — só o próprio
   processo que abriu o store vê o que ele mesmo escreve.** Popular dados

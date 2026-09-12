@@ -562,6 +562,30 @@ var extra = map[string]tmpl{
 			return steps
 		},
 	},
+	"mass-assignment": {
+		Name: "Mass assignment / over-posting (Broken Object Property Level Authorization)", CWE: "CWE-915",
+		Description: "Um endpoint que aceita corpo JSON liga ('binda') automaticamente um campo privilegiado vindo do cliente — role, is_admin, verified, balance — que não deveria ser settable por ele. Confirmado enviando o campo extra com um valor SENTINELA aleatório e vendo o servidor devolvê-lo ligado à chave no objeto que serializou, enquanto um campo de controle bogus no mesmo corpo NÃO volta (descarta eco cego do corpo). A ferramenta não escala de verdade — só prova que o campo é bindável.",
+		Impact:      "Dependendo do campo, o cliente controla propriedade que deveria ser do servidor: role/is_admin/permissions → escalada de privilégio (virar admin); verified/approved/kyc_verified → burlar verificação/moderação; balance/credit/discount → fraude financeira. A exploração real (setar o campo pra um valor de privilégio de verdade) é o passo seguinte — aqui está provado que o bind aceita o campo.",
+		Remediation: "Nunca fazer bind automático do corpo inteiro pro modelo. Usar uma allowlist explícita de campos que aquele ator pode setar (DTO/serializer por role), e tratar campos sensíveis (role, flags de privilégio, saldo) como somente-servidor — settáveis só por fluxo autorizado dedicado, nunca pelo update genérico do objeto.",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/915.html", "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint: `" + f.Asset + "`"}
+			method, _ := f.Meta["method"].(string)
+			field, _ := f.Meta["field"].(string)
+			if method == "" {
+				method = "POST/PUT/PATCH"
+			}
+			if field != "" {
+				steps = append(steps, "Faça um "+method+" com o corpo legítimo MAIS o campo extra `"+field+"` setado pra um valor sentinela único.")
+				steps = append(steps, "Inclua no MESMO corpo um campo de nome bogus (controle) com outro valor único.")
+				steps = append(steps, "Observe: "+f.Evidence)
+				steps = append(steps, "Confirme o impacto: repita com `"+field+"` setado pra um valor de privilégio REAL (ex: role=admin, is_admin=true) usando uma conta de TESTE e veja se persiste/eleva — isto NÃO foi feito pela ferramenta.")
+			} else {
+				steps = append(steps, "Observe: "+f.Evidence)
+			}
+			return steps
+		},
+	},
 	"waf-detected": {
 		Name: "WAF/CDN de proteção identificado (informativo)", CWE: "",
 		Description: "O alvo está atrás de um WAF/CDN identificado por assinatura de vendor (headers/cookies/corpo) ou por bloqueio comportamental (requisição benigna passa, payload malicioso é barrado com 403/429). Isto **não é uma vulnerabilidade** — é contexto de metodologia que explica respostas de borda e orienta a abordagem dos demais testes.",

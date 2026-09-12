@@ -309,6 +309,16 @@ ainda falta rodar num programa.
   status+tamanho, nunca o corpo. Sugira quando o recon achou um painel/rota
   admin E o operador tem uma conta comum de teste (nunca a principal);
   acesso anônimo confirmado é `critical`.
+- Mass assignment / over-posting (BOPLA, API3:2023): `scan-mass-assignment` —
+  o par de ESCRITA do scan-privesc. Num endpoint que aceita corpo JSON
+  (POST/PUT/PATCH), manda campos privilegiados extras (role, is_admin,
+  verified, balance…) com valor sentinela aleatório e confirma que o servidor
+  os BINDOU (o sentinela voltou ligado à chave) enquanto IGNOROU um campo de
+  controle bogus no mesmo corpo — descarta endpoint que só ecoa o corpo
+  (FP de reflexo). Nunca escala de verdade (sentinela, nunca role=admin):
+  a escalada real é o passo manual seguinte. Sugira quando o recon/`scan-graphql`
+  acharam um endpoint de API que cria/atualiza objeto E o operador tem uma
+  conta de teste descartável + o corpo legítimo que o endpoint espera.
 - Auth/SSO: `scan-auth-flow` (bypass de redirect_uri), `scan-cognito`
   (Identity Pool anônimo), `js-jwt-finder` (JWT fraco/alg=none).
 - SSRF: `scan-ssrf` — só reporta com prova de que o servidor buscou o
@@ -596,9 +606,15 @@ sessão autenticada real ou julgamento de lógica de negócio:
   confirma quando uma sessão de menor privilégio (ou anônima, com
   `test_anon`) acessa uma função que deveria ser só-admin, comparando
   contra o baseline da sessão admin. O que fica de fora: descobrir SOZINHO
-  quais rotas são privilegiadas (você aponta a função a testar) e mass
-  assignment (enviar campos extras que elevam privilégio) — esse último
-  ainda não tem ferramenta.
+  quais rotas são privilegiadas (você aponta a função a testar).
+- **Mass assignment / over-posting (BOPLA, API3:2023)** — **já tem**
+  (`scan-mass-assignment`): confirma que o servidor binda um campo
+  privilegiado do corpo JSON (role/is_admin/verified/balance) usando valor
+  sentinela aleatório, sem nunca escalar de verdade, e descartando endpoints
+  que só ecoam o corpo (FP de reflexo). O que fica de fora: a escalada real
+  (setar o campo pra um valor de privilégio de verdade e confirmar o impacto)
+  é o passo manual seguinte, e descobrir SOZINHO o corpo legítimo que cada
+  endpoint espera (você cola o body base).
 - **XSS armazenado** — `scan-xss-dom` cobre o DOM-based (payload no hash
   ou query, executa na MESMA navegação, via navegador headless real).
   Armazenado de verdade (valor persiste no servidor — comentário, bio,

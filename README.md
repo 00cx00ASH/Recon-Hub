@@ -371,7 +371,7 @@ rotação a qualquer momento:
 docker compose exec tor sh -c 'printf "AUTHENTICATE \"\"\r\nSIGNAL NEWNYM\r\nQUIT\r\n" | nc localhost 9051'
 ```
 
-Hoje isso está implementado em 35 das 40 ferramentas (todas as que falam
+Hoje isso está implementado em 36 das 41 ferramentas (todas as que falam
 HTTP com o alvo). As 5 que ficam de fora, de propósito, porque não usam
 `http.Client` — falam TCP cru, resolvem DNS ou dirigem um navegador:
 `scan-mongodb` (wire protocol do MongoDB), `recon-infra-enum` (port
@@ -843,7 +843,7 @@ fan-out que combina as ferramentas · **`coberta`** = a função existe em outra
 ferramenta(s) da lista · **`fora de escopo`** = extensão de navegador / plugin de
 Burp, não encaixa no contrato de ferramenta CLI.
 
-Hoje: **40 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
+Hoje: **41 ferramentas prontas**; as 5 restantes do catálogo estão cobertas
 pelas categorias acima (nada ficou de fora).
 
 ### recon — Plataformas de Recon
@@ -907,6 +907,7 @@ pelas categorias acima (nada ficou de fora).
 | `scan-privesc`               | — (nova)         | Broken Function Level Authorization (access control vertical) — o par do scan-idor. Dá uma função só-admin + credencial admin (baseline) + conta de menor privilégio; confirma escalada quando a sessão baixa (ou anônima, com `test_anon`) recebe a MESMA resposta (2xx + tamanho na tolerância) que a admin. Só status+tamanho, nunca o corpo. Acesso anônimo = `critical` | **pronta** |
 | `scan-path-traversal`        | — (nova)         | Path traversal / LFI: injeta `../../etc/passwd` com 11 variantes de bypass (profundidade, `....//`, `%2e%2e%2f` simples e duplo, null byte, absoluto, Windows `win.ini`) em parâmetros que carregam arquivo (wordlist `builtin/lfi-params`) e confirma só quando a assinatura do arquivo de sistema aparece na resposta e some no baseline. Payload vai verbatim (sem re-encoding). Só lê como prova | **pronta** |
 | `scan-waf-fingerprint`       | — (nova)         | Identifica o WAF/CDN na frente do alvo por assinatura de vendor (cf-ray, x-sucuri-id, incap_ses, "Support ID:" do F5, ModSecurity… — 14 vendors) ou por bloqueio comportamental (GET benigno passa, payload malicioso vira 403/429). É contexto de metodologia (info), nunca vulnerabilidade — um 400 solto jamais conta como WAF | **pronta** |
+| `scan-mass-assignment`       | — (nova)         | Mass assignment / over-posting (OWASP API3:2023, BOPLA): manda campos privilegiados extras (role, is_admin, verified, balance…) num corpo JSON via POST/PUT/PATCH, cada um com valor SENTINELA aleatório (nunca escala de verdade). Confirma só quando o sentinela volta ligado à chave no objeto serializado pelo servidor E um campo de controle bogus NÃO volta (descarta eco cego do corpo). Par de escrita do scan-privesc | **pronta** |
 
 ### int — Integrações
 

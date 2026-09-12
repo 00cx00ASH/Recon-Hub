@@ -46,6 +46,21 @@ jobs:
           - "tools/scan-cors"
           - "tools/scan-graphql"
           - "tools/scan-postman-audit"
+          - "tools/scan-idor"
+          - "tools/scan-bruteforce-check"
+          - "tools/scan-auth-flow"
+          - "tools/scan-privesc"
+          - "tools/scan-mass-assignment"
+          - "tools/scan-path-traversal"
+          - "tools/scan-waf-fingerprint"
+          - "tools/scan-sqli"
+          - "tools/scan-ssti"
+          - "tools/scan-ssrf"
+          - "tools/scan-xss"
+          - "tools/scan-xss-dom"
+          - "tools/scan-smuggling"
+          - "tools/recon-subdomain-brute"
+          - "tools/recon-tech-cve"
     defaults:
       run:
         working-directory: ${{ matrix.module }}

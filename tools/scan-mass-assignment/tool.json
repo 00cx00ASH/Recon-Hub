@@ -1,0 +1,24 @@
+{
+  "name": "scan-mass-assignment",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Mass assignment / over-posting (OWASP API3:2023, Broken Object Property Level Authorization): testa se um endpoint que aceita corpo JSON liga ('binda') campos privilegiados que o cliente não deveria poder setar — role, is_admin, verified, balance, etc. — só por mandá-los como campos extras. Cada sonda vai com um valor SENTINELA aleatório (nunca 'admin'/'true'), então prova que o campo é BINDÁVEL sem NUNCA escalar privilégio de verdade (PoC-only). Confirma de forma rigorosa: o sentinela tem que voltar ligado à chave no objeto que o servidor serializou E um campo de controle bogus no mesmo corpo NÃO pode voltar (senão é eco cego do corpo, não bind). É o par de escrita do scan-privesc.",
+  "guide": "Alvo = a URL de um endpoint que aceita um corpo JSON e atualiza/cria um objeto (ex: POST /api/users, PATCH /api/account, PUT /api/profile). Escolha method (POST/PUT/PATCH) e cole em body o corpo JSON LEGÍTIMO que o endpoint espera (ex: {\"name\":\"teste\",\"email\":\"t@t.com\"}) — os campos privilegiados são somados a ele. Passe cookie/bearer de uma conta de TESTE (comum, descartável — NUNCA admin nem produção). Prefira endpoints de criação ou um recurso de teste seu: a ferramenta só escreve valores sentinela aleatórios (não escala nada), mas ainda assim faz uma escrita. Rode depois do recon-web-enum/scan-graphql mapearem endpoints de API que aceitam corpo. Use fields pra restringir a sonda a campos específicos do domínio do alvo.",
+  "validation": "Exemplo confirmado (high): você faz PATCH /api/account com body {\"name\":\"teste\"} mais o campo extra `role` setado pra um valor sentinela aleatório; a resposta 200 volta com {\"...\",\"role\":\"<seu-sentinela>\"} — o servidor ligou `role` ao objeto a partir do seu input, enquanto um campo de controle bogus no MESMO corpo não voltou. Prova que o cliente consegue setar `role` (mass assignment); a escalada real (role=admin) é o passo manual seguinte. Contra-exemplo 1 (sem finding): o endpoint devolve o corpo inteiro de volta (eco) — o campo de controle bogus também volta, então a ferramenta NÃO reporta (seria FP de reflexo). Contra-exemplo 2: a app usa schema fixo e ignora o campo extra — `role` volta com o valor REAL (não o sentinela) ou não volta; sem confirmação. A ferramenta nunca manda valores de privilégio de verdade.",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "o endpoint de API (que aceita corpo JSON) a testar", "target_label": "URL do endpoint" }
+  ],
+  "params": [
+    { "name": "method", "type": "string", "required": false, "default": "POST", "help": "método HTTP do endpoint: POST (criação) / PUT / PATCH (atualização)" },
+    { "name": "body", "type": "string", "required": false, "help": "corpo JSON legítimo base (objeto) ao qual os campos privilegiados são somados — ex: {\"name\":\"teste\"}" },
+    { "name": "content_type", "type": "string", "required": false, "default": "application/json", "help": "Content-Type do corpo" },
+    { "name": "cookie", "type": "string", "required": false, "help": "Cookie da sessão de TESTE (conta comum/descartável, nunca admin/produção)" },
+    { "name": "bearer", "type": "string", "required": false, "help": "Bearer token da sessão de teste" },
+    { "name": "fields", "type": "string", "required": false, "help": "lista CSV de campos privilegiados a testar (default: lista embutida role/is_admin/verified/balance/…)" },
+    { "name": "pace_ms", "type": "int", "required": false, "default": 300, "help": "pausa entre requisições em ms (pacing — respeita o alvo)" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 10000, "help": "timeout por requisição" }
+  ]
+}

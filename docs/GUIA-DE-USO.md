@@ -27,7 +27,7 @@ ferramenta) e o [`README.md`](../README.md) (instalação, auth, catálogo compl
 └───────────────────────────┬───────────────────────────────┘
                             │  stdin JSON + env  →  NDJSON stdout
 ┌─ FERRAMENTAS (tools/<nome>/) ─────────────────────────────┐
-│  37 processos externos, cada um módulo Go isolado.         │
+│  41 processos externos, cada um módulo Go isolado.         │
 │  O hub NÃO depende delas; elas não incham o hub.           │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -105,7 +105,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ## 4. O que temos hoje
 
-### 40 ferramentas, por grupo
+### 41 ferramentas, por grupo
 
 **recon — achar superfície**
 
@@ -144,6 +144,10 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-ssti`               | Server-Side Template Injection — resultado calculado aparece e o payload cru NÃO, prova avaliação real (7 sintaxes de engine) |
 | `scan-ssrf`               | injeta URLs internas/metadata cloud em params buscados pelo servidor, só confirma pelo CONTEÚDO da resposta |
 | `scan-smuggling`          | request smuggling (CL.TE/TE.CL) por timing oracle — nunca encadeia 2ª requisição real pra confirmar |
+| `scan-privesc`            | access control VERTICAL (BFLA) — função só-admin + baseline admin + conta de menor privilégio; confirma escalada quando a baixa/anônima recebe a MESMA resposta que a admin. Par do scan-idor |
+| `scan-path-traversal`     | path traversal / LFI — `../../etc/passwd` com 11 variantes de bypass, confirma só quando a assinatura do arquivo de sistema aparece e some no baseline |
+| `scan-waf-fingerprint`    | identifica WAF/CDN por assinatura de vendor (14) ou bloqueio comportamental — contexto de metodologia (info), nunca vulnerabilidade |
+| `scan-mass-assignment`    | mass assignment / over-posting (API3:2023) — campos privilegiados extras no corpo JSON com valor sentinela; confirma bind só quando o sentinela volta ligado à chave e um campo de controle bogus NÃO volta (descarta eco). Par de escrita do scan-privesc |
 
 **js — JavaScript, cloud, segredos** (todas baixam página + `<script src>` + source maps)
 
@@ -195,7 +199,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
   mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
   só roteia tráfego se o operador configurar explicitamente pra aquele
-  programa (opt-in — alguns programas proíbem IP anonimizado). 35 das 40
+  programa (opt-in — alguns programas proíbem IP anonimizado). 36 das 41
   ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
   (429/403 repetido). Ver README > Docker > Proxy/Tor.
 - **Chrome headless** — sidecar próprio (`docker/chrome/`), também sempre
