@@ -10,11 +10,57 @@ import (
 	"time"
 )
 
-func TestWithBlockRotationNoopWithoutControlURL(t *testing.T) {
+func TestWithBlockRotationWrapsEvenWithoutControlURL(t *testing.T) {
+	// Sem RECONHUB_PROXY_CONTROL_URL ainda embrulha — pra RESPEITAR o rate
+	// limit (backoff no 429/503) mesmo sem Tor. Só não rotaciona circuito.
+	t.Setenv("RECONHUB_PROXY_CONTROL_URL", "")
 	base := http.DefaultTransport
 	got := withBlockRotation(base, nil)
-	if got != http.RoundTripper(base) {
-		t.Fatal("sem RECONHUB_PROXY_CONTROL_URL deveria devolver o RoundTripper original, sem envolver")
+	br, ok := got.(*blockRotator)
+	if !ok {
+		t.Fatal("deveria embrulhar num *blockRotator pra respeitar rate limit, com ou sem Tor")
+	}
+	if br.controlAddr != "" {
+		t.Fatalf("sem control URL, controlAddr deveria ser vazio (sem rotação); veio %q", br.controlAddr)
+	}
+	if br.maxBackoff <= 0 {
+		t.Fatal("maxBackoff deveria ter default > 0 (respeito a rate limit ligado por padrão)")
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	if d := parseRetryAfter("5"); d != 5*time.Second {
+		t.Errorf("Retry-After: 5 → %s, quer 5s", d)
+	}
+	if d := parseRetryAfter(""); d != 0 {
+		t.Errorf("vazio → %s, quer 0", d)
+	}
+	if d := parseRetryAfter("-3"); d != 0 {
+		t.Errorf("negativo → %s, quer 0", d)
+	}
+	if d := parseRetryAfter("lixo"); d != 0 {
+		t.Errorf("inválido → %s, quer 0", d)
+	}
+	// data no passado → 0
+	if d := parseRetryAfter("Mon, 02 Jan 2006 15:04:05 GMT"); d != 0 {
+		t.Errorf("data no passado → %s, quer 0", d)
+	}
+}
+
+func TestBackoffForCapsAtMax(t *testing.T) {
+	b := &blockRotator{maxBackoff: 3 * time.Second}
+	resp := &http.Response{StatusCode: 429, Header: http.Header{"Retry-After": []string{"9999"}}}
+	if d := b.backoffFor(resp); d != 3*time.Second {
+		t.Fatalf("Retry-After hostil deveria ser limitado a maxBackoff (3s); veio %s", d)
+	}
+	// 200 nunca gera backoff
+	if d := b.backoffFor(&http.Response{StatusCode: 200, Header: http.Header{}}); d != 0 {
+		t.Fatalf("200 não deveria gerar backoff; veio %s", d)
+	}
+	// maxBackoff 0 = respeito desligado (opt-out)
+	b0 := &blockRotator{maxBackoff: 0}
+	if d := b0.backoffFor(resp); d != 0 {
+		t.Fatalf("maxBackoff=0 deveria desligar o backoff; veio %s", d)
 	}
 }
 
