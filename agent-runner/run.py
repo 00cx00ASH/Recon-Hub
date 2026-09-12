@@ -129,7 +129,7 @@ def load_config() -> Config:
         max_rounds=int(env("AGENT_MAX_ROUNDS", "20")),
         max_runtime_min=float(env("AGENT_MAX_RUNTIME_MIN", "180")),
         max_cost_usd=float(env("AGENT_MAX_COST_USD", "5.0")),
-        max_turns_per_round=int(env("AGENT_MAX_TURNS_PER_ROUND", "40")),
+        max_turns_per_round=int(env("AGENT_MAX_TURNS_PER_ROUND", "80")),
         reconhub_url=env("RECONHUB_URL", "http://127.0.0.1:7878"),
         reconhub_token=token,
         log_dir=Path(env("AGENT_LOG_DIR", str(Path(__file__).resolve().parent / "logs"))),
@@ -321,7 +321,18 @@ async def main() -> None:
                         f"(max_turns_per_round={cfg.max_turns_per_round}) — "
                         f"seguindo pra próxima rodada (relendo estado do hub do zero)")
                 session_id = None
-                prompt = "continue"
+                # A sessão morreu sem resume=, então a próxima rodada começa
+                # LIMPA — um "continue" seco não teria contexto nenhum. Reemite
+                # uma instrução explícita de reler o estado já salvo no hub
+                # (jobs/findings/assets) e seguir de onde parou, em vez de
+                # contar com o modelo adivinhar que perdeu o histórico.
+                prompt = (
+                    f"Continuando a exploração autônoma do programa {cfg.program} "
+                    f"(a rodada anterior esgotou o teto de turns no meio, então você "
+                    f"perdeu o histórico). Releia o estado atual via hub_list_jobs/"
+                    f"hub_list_findings/hub_list_assets e siga de onde o trabalho já "
+                    f"salvo no hub parou — não repita jobs que já rodaram."
+                )
                 continue
             log(fh, f"erro de SDK/CLI: {e} — parando")
             break

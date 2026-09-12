@@ -121,7 +121,11 @@ sobre caçar bugs em programas de terceiros.
   `ClaudeSDKError` continua fatal, de propósito. Também subimos o
   default de `AGENT_MAX_TURNS_PER_ROUND` de 40 pra 80 no
   `.env.example`, já que 40 se mostrou baixo demais num caso de uso
-  real. Lição maior: um teto por-rodada estourado no meio do trabalho
+  real — **e o fallback no `load_config()` do `run.py` foi alinhado pra
+  80 junto** (tinha ficado em 40: quem rodasse SEM a env var setada pegava
+  de novo o valor que a lição diz ser baixo demais; um default
+  documentado num `.env.example`/lição tem que bater com o fallback no
+  código). Lição maior: um teto por-rodada estourado no meio do trabalho
   não é o mesmo tipo de erro que uma falha de auth/config/rede — tratar
   os dois com o mesmo `except` genérico joga fora trabalho útil.
 - **CI falha se `gofmt -l .` não estiver limpo, mesmo com build/vet/test
