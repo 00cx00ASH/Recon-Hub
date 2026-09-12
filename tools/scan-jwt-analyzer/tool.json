@@ -1,0 +1,26 @@
+{
+  "name": "scan-jwt-analyzer",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "JWT Analyzer: Decodifica e testa vulnerabilidades em JSON Web Tokens (algoritmo fraco, alg=none, secret fraco, expiração longa, JWKS poisoning, kid injection, null signature). Reporta cada vulnerabilidade encontrada com severidade correspondente.",
+  "guide": "Forneça um JWT válido (token de autenticação, refresh token, etc). A ferramenta decodifica o header/payload, verifica algoritmo, expiração, e tenta técnicas de exploração (brute force de secret com wordlist comum, alg=none bypass, etc). Retorna findings por vulnerabilidade encontrada.",
+  "validation": "Exemplo confirmado: JWT com alg=none não verificado (header aponta 'none', ferramenta testa removendo signature) permite falsificação completa — crítico. Exemplo 2: secret 'secret' ou 'password' descoberto via brute force permite re-assinar claims — high.",
+  "exec": ["go", "run", "."],
+  "timeout": "5m",
+  "modes": [
+    { "name": "single", "label": "JWT único", "help": "analisa um token", "params": ["token"] },
+    { "name": "list", "label": "Lista colada", "help": "vários tokens, um por linha", "params": ["tokens"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com tokens, um por linha", "params": ["tokens_file"] }
+  ],
+  "params": [
+    { "name": "token", "type": "string", "required": false, "help": "JWT para analisar (modo single)" },
+    { "name": "tokens", "type": "string", "required": false, "help": "JWTs por nova linha (modo lista)" },
+    { "name": "tokens_file", "type": "string", "required": false, "help": "arquivo com JWTs, um por linha" },
+    { "name": "brute_force", "type": "bool", "required": false, "default": true, "help": "tentar brute force de secret com wordlist comum" },
+    { "name": "check_expiry", "type": "bool", "required": false, "default": true, "help": "alertar sobre expiração longa (>30 dias)" },
+    { "name": "check_alg_none", "type": "bool", "required": false, "default": true, "help": "verificar vulnerabilidade alg=none" },
+    { "name": "check_weak_alg", "type": "bool", "required": false, "default": true, "help": "alertar sobre HS256 (assinado com secret vs chave pública)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 5, "help": "tokens processados simultaneamente (para lista/arquivo)" }
+  ]
+}

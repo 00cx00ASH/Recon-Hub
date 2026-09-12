@@ -1,0 +1,27 @@
+{
+  "name": "scan-cloud-enum",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "Cloud Enumeration: Tenta listar arquivos sensíveis (`.env`, `docker-compose.yml`, `.terraform/terraform.tfstate`, Dockerfile, `.git/config`, etc) em diretórios comuns (raiz, /.env, /config/, /src/, /.aws/, /.gcp/). Também testa endpoints de metadata de cloud (AWS 169.254.169.254, GCP metadata.google.internal, Azure 169.254.169.254:80/metadata). Reporta qualquer arquivo/endpoint acessível e seu conteúdo (ou primeira linha de conteúdo sensível).",
+  "guide": "Alvo = URL raiz de um serviço web (http://target.com). A ferramenta tenta GET em padrões comuns de arquivo de config (/Dockerfile, /.env, /.git/config, /docker-compose.yml, /.env.example, /terraform.tfstate, /package.json, etc). Não é invasivo — só GET, sem POST/PUT/DELETE. Modos lista/arquivo para testar múltiplos alvos. IMPORTANTE: use com escopo permitido; procurar .env numa raiz não-autorizada é violação de escopo.",
+  "validation": "Exemplo crítico: GET /docker-compose.yml retorna 200 com conteúdo visível (postgres user=admin, password=secret123) — expõe credenciais de banco. Exemplo 2: GET /.env retorna API_KEY=abc123def — expõe credencial. Exemplo 3: GET /.git/config retorna [remote 'origin'] url=... — expõe repo privado do desenvolvedor.",
+  "exec": ["go", "run", "."],
+  "timeout": "5m",
+  "modes": [
+    { "name": "single", "label": "Alvo único", "help": "testa uma URL", "target_label": "URL" },
+    { "name": "list", "label": "Lista colada", "help": "múltiplas URLs, uma por linha", "params": ["urls"] },
+    { "name": "file", "label": "De arquivo", "help": "arquivo com URLs, uma por linha", "params": ["urls_file"] }
+  ],
+  "params": [
+    { "name": "urls", "type": "string", "required": false, "help": "URLs por nova linha (modo lista)" },
+    { "name": "urls_file", "type": "string", "required": false, "help": "arquivo com URLs, uma por linha" },
+    { "name": "check_env_files", "type": "bool", "required": false, "default": true, "help": "procurar por .env, .env.local, .env.*.local" },
+    { "name": "check_docker", "type": "bool", "required": false, "default": true, "help": "procurar por Dockerfile, docker-compose.yml, .dockerignore" },
+    { "name": "check_git", "type": "bool", "required": false, "default": true, "help": "procurar por .git/config, .git/HEAD, .gitignore" },
+    { "name": "check_terraform", "type": "bool", "required": false, "default": true, "help": "procurar por terraform.tfstate, .terraform.lock.hcl" },
+    { "name": "check_metadata", "type": "bool", "required": false, "default": false, "help": "testar endpoints de metadata de cloud (169.254.169.254, metadata.google.internal, etc)" },
+    { "name": "concurrency", "type": "int", "required": false, "default": 10, "help": "requisições simultâneas" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 3000, "help": "timeout por requisição" }
+  ]
+}
