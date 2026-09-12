@@ -1029,6 +1029,21 @@ function renderToolMeta() {
     }
     ctx.append(outputRow);
 
+    // extrair exemplo de alvo do guide e usar como placeholder
+    let examplePlaceholder = 'exemplo.com';
+    if (t.guide) {
+      const match = t.guide.match(/ex(?:emplo)?:?\s+([^\s,.)]+)/i);
+      if (match) examplePlaceholder = match[1];
+    }
+    const categoryPlaceholders = {
+      recon: 'exemplo.com',
+      js: 'https://site.com/js-endpoint',
+      scan: 'https://site.com/alvo',
+      int: 'token-ou-id-da-api'
+    };
+    examplePlaceholder = categoryPlaceholders[t.category] || examplePlaceholder;
+    $('#target').placeholder = examplePlaceholder;
+
     const mapBtn = el('a', { style: 'font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent-2);text-decoration:underline;cursor:pointer', textContent: '→ ver no Mapa' });
     mapBtn.addEventListener('click', () => { selectTab('map'); });
     ctx.append(mapBtn);
