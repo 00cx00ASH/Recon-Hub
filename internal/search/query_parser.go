@@ -7,23 +7,23 @@ import (
 )
 
 type FindingFilter struct {
-	Type          []string // type:xss
-	Severity      []string // severity:critical
-	Tool          []string // tool:scan-xss
-	Confirmed     *bool    // confirmed:true
-	Host          []string // host:acme.com
-	SearchText    string   // full-text search
-	ExcludeType   []string // -type:info
+	Type            []string // type:xss
+	Severity        []string // severity:critical
+	Tool            []string // tool:scan-xss
+	Confirmed       *bool    // confirmed:true
+	Host            []string // host:acme.com
+	SearchText      string   // full-text search
+	ExcludeType     []string // -type:info
 	ExcludeSeverity []string
 }
 
 // ParseQuery analisa string tipo "type:xss AND severity:critical NOT confirmed"
 func ParseQuery(query string) *FindingFilter {
 	filter := &FindingFilter{
-		Type:           []string{},
-		Severity:       []string{},
-		Tool:           []string{},
-		ExcludeType:    []string{},
+		Type:            []string{},
+		Severity:        []string{},
+		Tool:            []string{},
+		ExcludeType:     []string{},
 		ExcludeSeverity: []string{},
 	}
 

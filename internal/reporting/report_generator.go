@@ -11,24 +11,24 @@ import (
 )
 
 type ReportData struct {
-	Program           string                `json:"program"`
-	GeneratedAt       time.Time             `json:"generated_at"`
-	Summary           ReportSummary         `json:"summary"`
-	FindingsByType    map[string]int        `json:"findings_by_type"`
-	FindingsBySeverity map[string]int       `json:"findings_by_severity"`
-	ConfirmedFindings int                   `json:"confirmed_findings"`
-	RejectedFindings  int                   `json:"rejected_findings"`
-	AssetsDiscovered  int                   `json:"assets_discovered"`
-	Findings          []FindingSummary      `json:"findings"`
+	Program            string           `json:"program"`
+	GeneratedAt        time.Time        `json:"generated_at"`
+	Summary            ReportSummary    `json:"summary"`
+	FindingsByType     map[string]int   `json:"findings_by_type"`
+	FindingsBySeverity map[string]int   `json:"findings_by_severity"`
+	ConfirmedFindings  int              `json:"confirmed_findings"`
+	RejectedFindings   int              `json:"rejected_findings"`
+	AssetsDiscovered   int              `json:"assets_discovered"`
+	Findings           []FindingSummary `json:"findings"`
 }
 
 type ReportSummary struct {
-	TotalFindings int    `json:"total_findings"`
-	CriticalCount int    `json:"critical_count"`
-	HighCount     int    `json:"high_count"`
-	MediumCount   int    `json:"medium_count"`
-	LowCount      int    `json:"low_count"`
-	InfoCount     int    `json:"info_count"`
+	TotalFindings int `json:"total_findings"`
+	CriticalCount int `json:"critical_count"`
+	HighCount     int `json:"high_count"`
+	MediumCount   int `json:"medium_count"`
+	LowCount      int `json:"low_count"`
+	InfoCount     int `json:"info_count"`
 }
 
 type FindingSummary struct {

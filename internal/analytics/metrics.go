@@ -7,16 +7,16 @@ import (
 )
 
 type MetricsSummary struct {
-	TotalFindings      int                       `json:"total_findings"`
-	CriticalCount      int                       `json:"critical_count"`
-	HighCount          int                       `json:"high_count"`
-	MediumCount        int                       `json:"medium_count"`
-	ConfirmedCount     int                       `json:"confirmed_count"`
-	FindingsByType     map[string]int            `json:"findings_by_type"`
-	ToolProductivity   []ToolMetric              `json:"tool_productivity"`
-	TrendByDay         []DailyTrend              `json:"trend_by_day"`
-	AverageJobTime     float64                   `json:"average_job_time_minutes"`
-	MostUsedTool       string                    `json:"most_used_tool"`
+	TotalFindings    int            `json:"total_findings"`
+	CriticalCount    int            `json:"critical_count"`
+	HighCount        int            `json:"high_count"`
+	MediumCount      int            `json:"medium_count"`
+	ConfirmedCount   int            `json:"confirmed_count"`
+	FindingsByType   map[string]int `json:"findings_by_type"`
+	ToolProductivity []ToolMetric   `json:"tool_productivity"`
+	TrendByDay       []DailyTrend   `json:"trend_by_day"`
+	AverageJobTime   float64        `json:"average_job_time_minutes"`
+	MostUsedTool     string         `json:"most_used_tool"`
 }
 
 type ToolMetric struct {
@@ -29,11 +29,11 @@ type ToolMetric struct {
 }
 
 type DailyTrend struct {
-	Date         string `json:"date"`       // YYYY-MM-DD
-	FindingsNew  int    `json:"findings_new"`
-	Confirmed    int    `json:"confirmed"`
-	Rejected     int    `json:"rejected"`
-	JobsRun      int    `json:"jobs_run"`
+	Date        string `json:"date"` // YYYY-MM-DD
+	FindingsNew int    `json:"findings_new"`
+	Confirmed   int    `json:"confirmed"`
+	Rejected    int    `json:"rejected"`
+	JobsRun     int    `json:"jobs_run"`
 }
 
 // CalculateMetrics agrega estatísticas de findings, jobs e assets de um programa

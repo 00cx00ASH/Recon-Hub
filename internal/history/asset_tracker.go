@@ -7,14 +7,14 @@ import (
 )
 
 type AssetHistory struct {
-	Asset        string              `json:"asset"`
-	Kind         string              `json:"kind"`
-	FirstSeen    time.Time           `json:"first_seen"`
-	LastSeen     time.Time           `json:"last_seen"`
-	TotalRuns    int                 `json:"total_runs"`
-	DetectionRate float64            `json:"detection_rate"` // % de vezes que foi encontrado
-	Detections   []DetectionRecord   `json:"detections"`
-	Status       string              `json:"status"`         // "active", "inactive", "unstable"
+	Asset         string            `json:"asset"`
+	Kind          string            `json:"kind"`
+	FirstSeen     time.Time         `json:"first_seen"`
+	LastSeen      time.Time         `json:"last_seen"`
+	TotalRuns     int               `json:"total_runs"`
+	DetectionRate float64           `json:"detection_rate"` // % de vezes que foi encontrado
+	Detections    []DetectionRecord `json:"detections"`
+	Status        string            `json:"status"` // "active", "inactive", "unstable"
 }
 
 type DetectionRecord struct {
@@ -25,19 +25,19 @@ type DetectionRecord struct {
 }
 
 type RunComparison struct {
-	OldRunID         string           `json:"old_run_id"`
-	NewRunID         string           `json:"new_run_id"`
-	NewAssets        []*store.Asset   `json:"new_assets"`
-	RemovedAssets    []*store.Asset   `json:"removed_assets"`
-	NewFindings      []*store.Finding `json:"new_findings"`
-	ResolvedFindings []*store.Finding `json:"resolved_findings"`
+	OldRunID         string            `json:"old_run_id"`
+	NewRunID         string            `json:"new_run_id"`
+	NewAssets        []*store.Asset    `json:"new_assets"`
+	RemovedAssets    []*store.Asset    `json:"removed_assets"`
+	NewFindings      []*store.Finding  `json:"new_findings"`
+	ResolvedFindings []*store.Finding  `json:"resolved_findings"`
 	Summary          ComparisonSummary `json:"summary"`
 }
 
 type ComparisonSummary struct {
-	NewAssetsCount      int `json:"new_assets_count"`
-	RemovedAssetsCount  int `json:"removed_assets_count"`
-	NewFindingsCount    int `json:"new_findings_count"`
+	NewAssetsCount        int `json:"new_assets_count"`
+	RemovedAssetsCount    int `json:"removed_assets_count"`
+	NewFindingsCount      int `json:"new_findings_count"`
 	ResolvedFindingsCount int `json:"resolved_findings_count"`
 }
 
@@ -145,10 +145,10 @@ func ComparePipelineRuns(oldAssets []*store.Asset, newAssets []*store.Asset,
 
 // CacheableReconTools lista ferramentas de recon passivo que beneficiam de cache (não mudam frequente)
 var CacheableReconTools = map[string]bool{
-	"recon-crtsh":        true,  // Certificate transparency — muda pouco
-	"recon-passive-enum": true,  // Passive — muda pouco
-	"recon-tech-cve":     true,  // Tech scan — muda pouco
-	"int-github-audit":   true,  // GitHub audit — muda pouco
+	"recon-crtsh":        true, // Certificate transparency — muda pouco
+	"recon-passive-enum": true, // Passive — muda pouco
+	"recon-tech-cve":     true, // Tech scan — muda pouco
+	"int-github-audit":   true, // GitHub audit — muda pouco
 }
 
 // ShouldCacheResult verifica se um resultado de ferramenta deve ser cacheado
@@ -161,7 +161,7 @@ func CacheTTL(tool string) int {
 	ttls := map[string]int{
 		"recon-crtsh":        168, // 1 semana
 		"recon-passive-enum": 168,
-		"recon-tech-cve":     72,  // 3 dias
+		"recon-tech-cve":     72, // 3 dias
 		"int-github-audit":   168,
 	}
 	if ttl, ok := ttls[tool]; ok {
@@ -173,12 +173,12 @@ func CacheTTL(tool string) int {
 // DetectionTrend mostra se um asset é estável (encontrado sempre) ou intermitente
 func DetectionTrend(history *AssetHistory) string {
 	if history.DetectionRate >= 90 {
-		return "rock-solid"     // Sempre encontrado
+		return "rock-solid" // Sempre encontrado
 	} else if history.DetectionRate >= 70 {
-		return "stable"         // Quase sempre
+		return "stable" // Quase sempre
 	} else if history.DetectionRate >= 50 {
-		return "intermittent"   // De vez em quando
+		return "intermittent" // De vez em quando
 	} else {
-		return "rare"           // Raramente
+		return "rare" // Raramente
 	}
 }

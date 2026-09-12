@@ -1662,10 +1662,10 @@ func (s *Server) getTriageSuggestion(w http.ResponseWriter, r *http.Request) {
 
 	// Gerar sugestão
 	suggestion := map[string]interface{}{
-		"finding_id":  finding.ID,
-		"action":      "investigate",
-		"confidence":  50,
-		"reason":      "Análise de triage automático",
+		"finding_id": finding.ID,
+		"action":     "investigate",
+		"confidence": 50,
+		"reason":     "Análise de triage automático",
 	}
 
 	// Heurística simples: se já tem muitos do mesmo tipo, sugerir confirmar
@@ -1703,17 +1703,17 @@ func (s *Server) getReportJSON(w http.ResponseWriter, r *http.Request) {
 
 	// Retornar JSON estruturado
 	result := map[string]interface{}{
-		"program": name,
+		"program":      name,
 		"generated_at": time.Now(),
 		"summary": map[string]interface{}{
-			"total_findings": len(findings),
-			"confirmed": len(findings), // Simplificado
+			"total_findings":    len(findings),
+			"confirmed":         len(findings), // Simplificado
 			"assets_discovered": len(assets),
 		},
 		"findings_count_by_severity": map[string]int{
 			"critical": countBySeverity(findings, "critical"),
-			"high": countBySeverity(findings, "high"),
-			"medium": countBySeverity(findings, "medium"),
+			"high":     countBySeverity(findings, "high"),
+			"medium":   countBySeverity(findings, "medium"),
 		},
 	}
 
@@ -1773,11 +1773,11 @@ func (s *Server) getAssetHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := map[string]interface{}{
-		"asset": assetValue,
+		"asset":      assetValue,
 		"detections": detections,
 		"first_seen": firstSeen,
-		"last_seen": lastSeen,
-		"status": "active",
+		"last_seen":  lastSeen,
+		"status":     "active",
 	}
 
 	if detections == 0 {

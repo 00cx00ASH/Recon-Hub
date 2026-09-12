@@ -8,19 +8,19 @@ import (
 )
 
 type TriageSuggestion struct {
-	FindingID      string  `json:"finding_id"`
-	Action         string  `json:"action"`           // "confirm" | "likely_false_positive" | "investigate"
-	Confidence     int     `json:"confidence"`       // 0-100
-	Reason         string  `json:"reason"`
+	FindingID         string `json:"finding_id"`
+	Action            string `json:"action"`     // "confirm" | "likely_false_positive" | "investigate"
+	Confidence        int    `json:"confidence"` // 0-100
+	Reason            string `json:"reason"`
 	SuggestedSeverity string `json:"suggested_severity,omitempty"` // se diferente da atual
-	HistoricalMatch string  `json:"historical_match,omitempty"`    // "mesmo type foi confirmado 7x antes"
+	HistoricalMatch   string `json:"historical_match,omitempty"`   // "mesmo type foi confirmado 7x antes"
 }
 
 // SuggestTriage analisa um finding e sugere confirmação/rejeição
 func SuggestTriage(finding *store.Finding, allFindings []*store.Finding) *TriageSuggestion {
 	suggestion := &TriageSuggestion{
-		FindingID: finding.ID,
-		Action:    "investigate",
+		FindingID:  finding.ID,
+		Action:     "investigate",
 		Confidence: 50,
 	}
 
