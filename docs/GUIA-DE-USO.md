@@ -27,7 +27,7 @@ ferramenta) e o [`README.md`](../README.md) (instalação, auth, catálogo compl
 └───────────────────────────┬───────────────────────────────┘
                             │  stdin JSON + env  →  NDJSON stdout
 ┌─ FERRAMENTAS (tools/<nome>/) ─────────────────────────────┐
-│  41 processos externos, cada um módulo Go isolado.         │
+│  42 processos externos, cada um módulo Go isolado.         │
 │  O hub NÃO depende delas; elas não incham o hub.           │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -105,7 +105,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 
 ## 4. O que temos hoje
 
-### 41 ferramentas, por grupo
+### 42 ferramentas, por grupo
 
 **recon — achar superfície**
 
@@ -148,6 +148,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 | `scan-path-traversal`     | path traversal / LFI — `../../etc/passwd` com 11 variantes de bypass, confirma só quando a assinatura do arquivo de sistema aparece e some no baseline |
 | `scan-waf-fingerprint`    | identifica WAF/CDN por assinatura de vendor (14) ou bloqueio comportamental — contexto de metodologia (info), nunca vulnerabilidade |
 | `scan-mass-assignment`    | mass assignment / over-posting (API3:2023) — campos privilegiados extras no corpo JSON com valor sentinela; confirma bind só quando o sentinela volta ligado à chave e um campo de controle bogus NÃO volta (descarta eco). Par de escrita do scan-privesc |
+| `scan-nosqli`             | NoSQL injection (operador $ne/$regex/$gt) — par do scan-sqli; modo query (bracket `p[$ne]=`) e json (inclui bypass de auth); confirma por diferencial booleano (baseline falso estável + operador divergente), nunca extrai dado |
 
 **js — JavaScript, cloud, segredos** (todas baixam página + `<script src>` + source maps)
 
@@ -199,7 +200,7 @@ você compilar com `-tags sqlite`. Mesma interface, os dois.
 - **Proxy/Tor** — campo Proxy por programa (Cookie/Bearer/Headers/Proxy na
   mesma aba); o sidecar de Tor sobe sempre junto do `docker compose`, mas
   só roteia tráfego se o operador configurar explicitamente pra aquele
-  programa (opt-in — alguns programas proíbem IP anonimizado). 36 das 41
+  programa (opt-in — alguns programas proíbem IP anonimizado). 37 das 42
   ferramentas rotacionam de circuito sozinhas ao detectar bloqueio
   (429/403 repetido). Ver README > Docker > Proxy/Tor.
 - **Chrome headless** — sidecar próprio (`docker/chrome/`), também sempre

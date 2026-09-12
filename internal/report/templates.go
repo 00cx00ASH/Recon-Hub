@@ -586,6 +586,34 @@ var extra = map[string]tmpl{
 			return steps
 		},
 	},
+	"nosql-injection": {
+		Name: "NoSQL injection (injeção de operador)", CWE: "CWE-943",
+		Description: "Um parâmetro que alimenta uma query NoSQL (ex: MongoDB) aceita um operador de consulta ($ne/$regex/$gt) vindo do cliente, em vez de tratar o valor como string literal. Confirmado por diferencial booleano: o operador sempre-verdadeiro produziu uma resposta que diverge de DOIS controles literais sempre-falsos estáveis — prova que o operador foi interpretado, não refletido nem tratado como texto. A ferramenta não extrai dados, só confirma a interpretação do operador.",
+		Impact:      "Depende do ponto de injeção: num login (vector=auth-bypass), `{\"$ne\":null}` em usuário+senha autentica sem credencial válida — account takeover direto (critical). Num filtro/busca, o operador deixa manipular a query: ler registros fora do filtro pretendido (dados de outros usuários via `$ne`), ou extrair valores char-a-char via `$regex` — isso é o passo manual seguinte, não feito por esta ferramenta.",
+		Remediation: "Validar o TIPO do input no servidor antes de montar a query: onde se espera uma string, rejeitar objeto/array (é assim que `$ne`/`$regex` chegam). Fazer cast explícito pra string, usar query builders que separam operador de dado, e nunca passar o objeto do body/query direto pro driver do banco. Em Express, sanitizar contra chaves que começam com `$` (ex: express-mongo-sanitize).",
+		Refs:        []string{"https://cwe.mitre.org/data/definitions/943.html", "https://owasp.org/www-community/Injection_Flaws", "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection"},
+		Repro: func(f Item) []string {
+			steps := []string{"Endpoint: `" + f.Asset + "`"}
+			op, _ := f.Meta["operator"].(string)
+			if op == "" {
+				op = "$ne"
+			}
+			if v, _ := f.Meta["vector"].(string); v == "auth-bypass" {
+				fields, _ := f.Meta["fields"].(string)
+				steps = append(steps, "Baseline: POST com credenciais literais erradas nos campos "+fields+" → falha (anote status/tamanho).", "Injeção: troque cada campo por `{\""+op+"\":\"<aleatório>\"}` (sempre-verdadeiro) no MESMO corpo.", "Observe: "+f.Evidence, "Confirme abrindo a sessão retornada — autenticou sem credencial válida.")
+			} else {
+				key, _ := f.Meta["param"].(string)
+				if key == "" {
+					key, _ = f.Meta["field"].(string)
+				}
+				if key == "" {
+					key = "o parâmetro"
+				}
+				steps = append(steps, "Baseline: dois valores literais aleatórios DIFERENTES em `"+key+"` → respostas iguais e pequenas (baseline falso estável).", "Injeção: `"+key+"` como operador `"+op+"` sempre-verdadeiro (query: `"+key+"["+op+"]=`; JSON: `{\""+op+"\":...}`).", "Observe: "+f.Evidence, "A divergência só contra o baseline estável prova que o operador foi interpretado, não refletido.")
+			}
+			return steps
+		},
+	},
 	"waf-detected": {
 		Name: "WAF/CDN de proteção identificado (informativo)", CWE: "",
 		Description: "O alvo está atrás de um WAF/CDN identificado por assinatura de vendor (headers/cookies/corpo) ou por bloqueio comportamental (requisição benigna passa, payload malicioso é barrado com 403/429). Isto **não é uma vulnerabilidade** — é contexto de metodologia que explica respostas de borda e orienta a abordagem dos demais testes.",

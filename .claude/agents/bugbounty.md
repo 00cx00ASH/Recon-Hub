@@ -349,6 +349,14 @@ ainda falta rodar num programa.
   assinatura real de erro de banco (MySQL/Postgres/MSSQL/Oracle/SQLite/
   ORMs) ausente no baseline sem payload. Nunca time-based — SQLi cega
   sem erro visível fica pra teste manual.
+- NoSQL injection: `scan-nosqli` — par do scan-sqli pra bancos NoSQL
+  (Mongo). Injeta operador (`$ne`/`$regex`/`$gt`) via bracket na
+  querystring (`p[$ne]=`, estilo Express/qs) ou objeto no corpo JSON, e
+  confirma por diferencial booleano: dois controles literais sempre-falsos
+  têm que bater entre si (baseline estável) e o operador sempre-verdadeiro
+  tem que divergir. No modo json combina os campos de login pra testar
+  bypass de auth (critical). Nunca extrai registro — só prova que o
+  operador foi interpretado; o alcance (listar/extrair) é o passo manual.
 - Server-Side Template Injection: `scan-ssti` — expressão matemática em
   7 sintaxes de engine (Jinja2/Twig, FreeMarker/Thymeleaf, Velocity, ERB,
   Smarty, Razor .NET, Pug/Jade Node.js) em parâmetros renderizados de
@@ -623,13 +631,16 @@ sessão autenticada real ou julgamento de lógica de negócio:
   num fluxo (form/API), depois abrir uma segunda página/sessão pra
   confirmar a execução — um teste de duas fases que nenhum scanner do
   hub faz hoje.
-- **SQLi cega (booleana/time-based), NoSQLi** — `scan-sqli` só confirma
+- **SQLi cega (booleana/time-based)** — `scan-sqli` só confirma
   quando o banco vaza um erro de verdade na resposta. Sem erro visível
   (SQLi cega) precisaria de requisições booleanas (1=1 vs 1=2) ou
   SLEEP() — a 2ª adiciona carga real no alvo, então fica de fora de
   propósito, igual ao scan-smuggling nunca confirmar com uma 2ª
-  requisição de verdade. NoSQLi (injeção de operador Mongo/etc.) não tem
-  ferramenta dedicada ainda. **SSTI já tem** (`scan-ssti`) — confirma a
+  requisição de verdade. **NoSQLi já tem** (`scan-nosqli`) — confirma por
+  diferencial booleano que o operador ($ne/$regex/$gt) foi interpretado,
+  inclusive bypass de auth; o que fica de fora é a EXTRAÇÃO iterativa de
+  dados (listar registros via $ne, char-a-char via $regex), que é carga e
+  passo manual. **SSTI já tem** (`scan-ssti`) — confirma a
   avaliação da expressão, mas não confirma RCE (o passo seguinte é
   manual, específico do engine identificado no finding).
 - **Lógica de negócio** (ex: burlar fluxo de checkout, cupom, limite de

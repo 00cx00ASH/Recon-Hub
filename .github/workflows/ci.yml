@@ -51,6 +51,7 @@ jobs:
           - "tools/scan-auth-flow"
           - "tools/scan-privesc"
           - "tools/scan-mass-assignment"
+          - "tools/scan-nosqli"
           - "tools/scan-path-traversal"
           - "tools/scan-waf-fingerprint"
           - "tools/scan-sqli"
