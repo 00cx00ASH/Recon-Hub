@@ -59,6 +59,7 @@ jobs:
           - "tools/scan-ssrf"
           - "tools/scan-xss"
           - "tools/scan-xss-dom"
+          - "tools/scan-xss-stored"
           - "tools/scan-smuggling"
           - "tools/recon-subdomain-brute"
           - "tools/recon-tech-cve"

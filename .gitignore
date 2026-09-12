@@ -71,3 +71,4 @@ tools/scan-ssti/scan-ssti
 tools/scan-waf-fingerprint/scan-waf-fingerprint
 tools/scan-xss/scan-xss
 tools/scan-xss-dom/scan-xss-dom
+tools/scan-xss-stored/scan-xss-stored

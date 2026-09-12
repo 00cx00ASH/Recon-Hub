@@ -342,8 +342,18 @@ ainda falta rodar num programa.
   de `scan-xss` num alvo que já demonstrou renderizar JS no cliente
   (SPA, dashboard); mais caro (cada candidato abre uma aba), por isso
   fica de fora do `full-recon` e tem pipeline próprio, `dom-xss-sweep`,
-  com `max_params`/`concurrency` bem menores que `xss-sweep`. Ainda NÃO
-  é XSS armazenado — ver gap abaixo.
+  com `max_params`/`concurrency` bem menores que `xss-sweep`. Não é XSS
+  armazenado — pra isso use `scan-xss-stored`.
+- XSS armazenado: `scan-xss-stored` — duas fases. Submete um payload único
+  num fluxo de ESCRITA (form/API: comentário, bio, nome) e depois abre a
+  página de LEITURA num navegador headless (chromedp) e confirma por
+  EXECUÇÃO real (o onerror da `<img>` persistida dispara numa navegação
+  separada). Passe submit_url, view_url e submit_field; opcional view_cookie
+  pra confirmar execução numa sessão DIFERENTE da que submeteu (ex: o
+  payload de um usuário comum executando no painel do admin que modera =
+  critical na prática). É alvo único/guiado pelo operador (você sabe o fluxo
+  de escrita e onde ele aparece) — fica de fora do full-recon, como o
+  scan-idor/scan-privesc.
 - SQL injection: `scan-sqli` — aspa/aspa-dupla anexada ao valor de
   parâmetros clássicos (id, page, sort, category…), confirma só com
   assinatura real de erro de banco (MySQL/Postgres/MSSQL/Oracle/SQLite/
@@ -623,14 +633,14 @@ sessão autenticada real ou julgamento de lógica de negócio:
   (setar o campo pra um valor de privilégio de verdade e confirmar o impacto)
   é o passo manual seguinte, e descobrir SOZINHO o corpo legítimo que cada
   endpoint espera (você cola o body base).
-- **XSS armazenado** — `scan-xss-dom` cobre o DOM-based (payload no hash
-  ou query, executa na MESMA navegação, via navegador headless real).
-  Armazenado de verdade (valor persiste no servidor — comentário, bio,
-  nome de perfil — e executa depois em OUTRA página/sessão, às vezes de
-  OUTRO usuário) ainda não tem ferramenta: exigiria submeter o payload
-  num fluxo (form/API), depois abrir uma segunda página/sessão pra
-  confirmar a execução — um teste de duas fases que nenhum scanner do
-  hub faz hoje.
+- **XSS armazenado** — **já tem** (`scan-xss-stored`): submete o payload
+  num fluxo de escrita e confirma por EXECUÇÃO real numa navegação separada
+  até a página de leitura (navegador headless), com suporte a sessão de
+  visualização diferente da que submeteu. O que fica de fora: DESCOBRIR
+  sozinho quais fluxos de escrita existem e onde cada valor aparece (você
+  aponta submit_url + view_url + submit_field) — a ferramenta confirma o
+  par que você indica, não mapeia o app. (`scan-xss-dom` segue sendo o
+  DOM-based, que executa na mesma navegação.)
 - **SQLi cega (booleana/time-based)** — `scan-sqli` só confirma
   quando o banco vaza um erro de verdade na resposta. Sem erro visível
   (SQLi cega) precisaria de requisições booleanas (1=1 vs 1=2) ou

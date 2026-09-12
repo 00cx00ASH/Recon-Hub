@@ -1,0 +1,29 @@
+{
+  "name": "scan-xss-stored",
+  "version": "0.1.0",
+  "language": "Go",
+  "category": "scan",
+  "summary": "XSS armazenado (stored/persistent) confirmado por EXECUÇÃO real, em duas fases: (1) submete um payload único num fluxo de escrita (form/API) via HTTP; (2) abre a página de leitura num navegador headless (chromedp/CDP, o mesmo do scan-xss-dom) e confirma que o payload PERSISTIDO executou — o onerror de uma <img> seta window.__rhxss_<token>=true numa navegação SEPARADA. É o que diferencia stored de reflected/DOM e o que nenhum scanner de requisição crua consegue ver. Suporta sessão de visualização diferente da de submit (ex: payload de usuário comum executando no painel do admin). Nunca heurística de texto; a flag é inofensiva (não exfiltra nem age).",
+  "guide": "Passe submit_url (o endpoint de escrita — ex: POST /api/comments), submit_field (o campo que carrega o payload — ex: comment, bio, name) e view_url (a página onde esse valor é renderizado depois). Opcional submit_body com os outros campos do corpo (ex: {\"postId\":1}), submit_content_type (application/json default, ou application/x-www-form-urlencoded), e cookie/bearer da sessão que submete. Pra confirmar execução numa sessão DIFERENTE (o caso mais grave), passe view_cookie/view_bearer da conta que visualiza (ex: admin). Use dados/contas de TESTE — a ferramenta escreve de verdade no alvo (um comentário com o payload). Precisa de um navegador: sidecar via RECONHUB_CHROME_URL, ou chrome_path local.",
+  "validation": "Exemplo confirmado (high): submete `'\"><img src=x onerror=...>` no campo comment de POST /api/comments, depois abre /post/123 num navegador e a propriedade window.__rhxss_<token> vira true — o payload foi PERSISTIDO e executou como código numa navegação separada. Se view_cookie for de outra conta (admin) e executar lá, é account takeover de privilégio alto sem interação. Contra-exemplo (sem finding): a página de leitura escapa o valor (`&lt;img...`) — o onerror nunca dispara, window.prop fica false, nada é reportado. A confirmação é por execução no navegador, nunca por o texto aparecer na resposta.",
+  "exec": ["go", "run", "."],
+  "timeout": "3m",
+  "modes": [
+    { "name": "single", "label": "Fluxo de escrita → leitura", "help": "submit_url escreve, view_url lê", "target_label": "submit_url (endpoint de escrita)" }
+  ],
+  "params": [
+    { "name": "view_url", "type": "string", "required": true, "help": "URL da página de leitura onde o payload deve aparecer/executar" },
+    { "name": "submit_field", "type": "string", "required": true, "help": "nome do campo que carrega o payload (ex: comment, bio, name)" },
+    { "name": "submit_method", "type": "string", "required": false, "default": "POST", "help": "método do submit: POST/PUT/PATCH" },
+    { "name": "submit_body", "type": "string", "required": false, "help": "corpo JSON base com os outros campos (ex: {\"postId\":1}) — o campo do payload é somado" },
+    { "name": "submit_content_type", "type": "string", "required": false, "default": "application/json", "help": "application/json ou application/x-www-form-urlencoded" },
+    { "name": "cookie", "type": "string", "required": false, "help": "Cookie da sessão que submete" },
+    { "name": "bearer", "type": "string", "required": false, "help": "Bearer da sessão que submete" },
+    { "name": "view_cookie", "type": "string", "required": false, "help": "Cookie da sessão que visualiza (default: a de submit) — use a de outra conta (ex: admin) pra confirmar execução cruzada" },
+    { "name": "view_bearer", "type": "string", "required": false, "help": "Bearer da sessão que visualiza (default: a de submit)" },
+    { "name": "chrome_url", "type": "string", "required": false, "help": "endpoint CDP remoto (default RECONHUB_CHROME_URL); sem ele, navegador local" },
+    { "name": "chrome_path", "type": "string", "required": false, "help": "caminho do Chrome/Chromium local (só sem chrome_url)" },
+    { "name": "settle_ms", "type": "int", "required": false, "default": 1200, "help": "espera após navegar na página de leitura, pro JS assíncrono rodar" },
+    { "name": "timeout_ms", "type": "int", "required": false, "default": 15000, "help": "timeout por requisição/navegação" }
+  ]
+}
