@@ -108,3 +108,13 @@ significa que, no modo assinatura, o teto de custo pode não ser um
 enforcement real (o teto de rodadas/tempo continua valendo sempre). Se
 isso importa pro seu caso, prefira confiar em `AGENT_MAX_ROUNDS`/
 `AGENT_MAX_RUNTIME_MIN` como os limites de verdade.
+
+Bater o teto `AGENT_MAX_TURNS_PER_ROUND` no meio de uma rodada é
+recuperável: o script detecta esse erro específico do SDK e segue pra
+próxima rodada (sem `resume=`, relendo `hub_list_jobs`/`hub_list_findings`
+do zero) em vez de encerrar o runner inteiro — um programa com muita
+superfície (vários jobs + polling de status na mesma rodada) esgota esse
+teto rápido, e isso não é motivo pra jogar fora rodadas ainda disponíveis.
+Qualquer outro `ClaudeSDKError` continua fatal (para o runner de
+verdade) — só esse caso específico é tratado como "a rodada ficou sem
+fôlego", não como falha real.

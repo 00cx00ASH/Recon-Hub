@@ -105,6 +105,25 @@ sobre caçar bugs em programas de terceiros.
 
 ## Lições aprendidas
 
+- **`agent-runner/run.py` tratava QUALQUER `ClaudeSDKError` como fatal —
+  inclusive bater o teto `AGENT_MAX_TURNS_PER_ROUND` no meio de uma
+  rodada, que não é uma falha real, é só a rodada ficando sem fôlego.**
+  Um programa com superfície razoável (vários `hub_run_job` +
+  `hub_get_job` de polling na mesma rodada) esgota 40 turns fácil antes
+  de terminar de narrar — e como o loop principal fazia `break`
+  incondicional em qualquer `except ClaudeSDKError`, isso encerrava o
+  runner inteiro mesmo com 19 de 20 rodadas ainda disponíveis e todo o
+  trabalho (jobs/findings) já salvo no hub. Corrigido: o loop agora
+  detecta especificamente a mensagem "maximum number of turns" e segue
+  pra próxima rodada (sem `resume=`, já que a sessão morreu sem
+  terminar limpo — a próxima relê `hub_list_jobs`/`hub_list_findings`
+  do zero, do mesmo jeito que já faz por não ter `Read`); qualquer outro
+  `ClaudeSDKError` continua fatal, de propósito. Também subimos o
+  default de `AGENT_MAX_TURNS_PER_ROUND` de 40 pra 80 no
+  `.env.example`, já que 40 se mostrou baixo demais num caso de uso
+  real. Lição maior: um teto por-rodada estourado no meio do trabalho
+  não é o mesmo tipo de erro que uma falha de auth/config/rede — tratar
+  os dois com o mesmo `except` genérico joga fora trabalho útil.
 - **CI falha se `gofmt -l .` não estiver limpo, mesmo com build/vet/test
   passando localmente.** O job `go (.)` roda isso como primeiro passo,
   antes de qualquer compilação. Rode `gofmt -l .` explicitamente depois de

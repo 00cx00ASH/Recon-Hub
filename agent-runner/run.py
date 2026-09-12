@@ -293,6 +293,25 @@ async def main() -> None:
         try:
             result = await run_round(cfg, prompt, session_id, budget_left)
         except ClaudeSDKError as e:
+            if "maximum number of turns" in str(e).lower():
+                # A rodada bateu o teto de max_turns_per_round no meio da
+                # narrativa (comum quando ela dispara muitos jobs/consultas
+                # de status) — é só o orçamento de turns por rodada que
+                # esgotou, não o modelo travado. Continuar pra próxima
+                # rodada (sem resume= — a sessão morreu sem terminar limpo)
+                # é seguro porque o estado real (jobs/findings já
+                # disparados) já está salvo no hub; a próxima rodada relê
+                # isso via hub_list_jobs/hub_list_findings, do mesmo jeito
+                # que faria sem Read algum. Tratar isso como fatal jogava
+                # fora até 19 rodadas ainda disponíveis por um teto
+                # por-rodada baixo demais, não por falta de trabalho útil
+                # a fazer.
+                log(fh, f"  ⚠ rodada {round_no} bateu o teto de turns por rodada "
+                        f"(max_turns_per_round={cfg.max_turns_per_round}) — "
+                        f"seguindo pra próxima rodada (relendo estado do hub do zero)")
+                session_id = None
+                prompt = "continue"
+                continue
             log(fh, f"erro de SDK/CLI: {e} — parando")
             break
 
