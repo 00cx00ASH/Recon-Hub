@@ -161,6 +161,39 @@ func TestDetectChainsNeverCrossesPrograms(t *testing.T) {
 	}
 }
 
+func TestDetectChainsIDORWritableObject(t *testing.T) {
+	fs := []*store.Finding{
+		{ID: "1", Program: "acme", Tool: "scan-idor", Type: "idor-horizontal", Asset: "https://api.acme.com/users/42"},
+		{ID: "2", Program: "acme", Tool: "scan-mass-assignment", Type: "mass-assignment", Asset: "https://api.acme.com/users/42",
+			Meta: []byte(`{"field":"role"}`)},
+	}
+	chains := DetectChains(fs)
+	if !hasChain(chains, "idor-writable-object") {
+		t.Fatalf("IDOR (leitura) + mass assignment (escrita) no mesmo host deveria disparar a chain; veio %+v", chains)
+	}
+}
+
+func TestDetectChainsIDORWritableObjectDifferentHostNoChain(t *testing.T) {
+	fs := []*store.Finding{
+		{ID: "1", Program: "acme", Tool: "scan-idor", Type: "idor-horizontal", Asset: "https://api.acme.com/users/42"},
+		{ID: "2", Program: "acme", Tool: "scan-mass-assignment", Type: "mass-assignment", Asset: "https://admin.acme.com/users/42"},
+	}
+	chains := DetectChains(fs)
+	if hasChain(chains, "idor-writable-object") {
+		t.Fatal("IDOR e mass assignment em hosts diferentes não deveriam combinar")
+	}
+}
+
+func TestDetectChainsIDORAloneNoChain(t *testing.T) {
+	fs := []*store.Finding{
+		{ID: "1", Program: "acme", Tool: "scan-idor", Type: "idor-horizontal", Asset: "https://api.acme.com/users/42"},
+	}
+	chains := DetectChains(fs)
+	if hasChain(chains, "idor-writable-object") {
+		t.Fatal("IDOR sozinho (sem mass assignment) não é a chain de escrita")
+	}
+}
+
 func TestDetectChainsEmptyInput(t *testing.T) {
 	if chains := DetectChains(nil); len(chains) != 0 {
 		t.Fatalf("esperava nenhuma chain pra input vazio, veio %+v", chains)

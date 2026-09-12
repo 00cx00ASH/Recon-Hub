@@ -566,7 +566,7 @@ e por quê".
 ### Playbook de encadeamento (achado isolado "meh" → alto impacto combinado)
 Um achado sozinho às vezes é descartável, mas dois achados do hub juntos
 mudam de categoria — sempre pergunte "o que isso alcança SE combinado com
-outro achado que já tenho nesse programa?". Os 5 padrões abaixo já são
+outro achado que já tenho nesse programa?". Os 6 padrões abaixo já são
 detectados automaticamente por `hub_list_chain_candidates` (cross-referencia
 findings CONFIRMADOS do programa, nunca escaneia nada novo, nunca confirma
 sozinho — cada resultado é um candidato pra você abrir os findings
@@ -587,6 +587,13 @@ raciocínio por trás de cada padrão, não uma checklist manual:
   de conta, não vazamento de dado — muda a severidade de medium pra
   critical na hora de triar (`hub_triage_finding`), não é a mesma
   categoria só porque a técnica é a mesma.
+- IDOR horizontal (`scan-idor`, leitura cruzada) + mass assignment
+  (`scan-mass-assignment`, escrita de campo privilegiado) no MESMO host →
+  as duas metades de um account takeover de conta arbitrária: enumere os
+  objetos de outros usuários pelo IDOR e sete role/is_admin/token de reset
+  neles pelo bind do mass assignment. Candidato `idor-writable-object`.
+  Confirme que batem no mesmo tipo de objeto (o scan-idor não guarda o
+  corpo; o scan-mass-assignment só provou o bind com sentinela).
 - CORS mal configurado refletindo origem + credentials (`scan-cors`) num
   endpoint autenticado que devolve dado sensível em GET → vira
   exfiltração via site malicioso de terceiro, não é "só um header
