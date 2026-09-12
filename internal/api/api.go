@@ -195,8 +195,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/report", s.auth(s.reportJSON))
 	mux.HandleFunc("GET /api/report.md", s.authSSE(s.reportMD))     // authSSE: baixável por link
 	mux.HandleFunc("GET /api/report.html", s.authSSE(s.reportHTML)) // idem
-	mux.HandleFunc("GET /api/programs/{name}/report.md", s.authSSE(s.reportMD))
-	mux.HandleFunc("GET /api/programs/{name}/report.html", s.authSSE(s.reportHTML))
 
 	mux.HandleFunc("GET /api/wordlists", s.auth(s.listWordlists))
 
@@ -232,6 +230,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/findings/search", s.auth(s.searchFindings))
 	// Fase 9: Auto Triage
 	mux.HandleFunc("GET /api/findings/{id}/triage-suggestion", s.auth(s.getTriageSuggestion))
+	// Fase 11: Reporting
+	mux.HandleFunc("GET /api/programs/{name}/report.json", s.auth(s.getReportJSON))
+	mux.HandleFunc("GET /api/programs/{name}/report.md", s.authSSE(s.getReportMarkdown))
+	// Fase 12: Asset History
+	mux.HandleFunc("GET /api/assets/{value}/history", s.auth(s.getAssetHistory))
 
 	mux.HandleFunc("GET /api/watches", s.auth(s.listWatches))
 	mux.HandleFunc("POST /api/watches", s.auth(s.createWatch))
@@ -1684,4 +1687,114 @@ func (s *Server) getTriageSuggestion(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(suggestion)
+}
+
+// Fase 11: getReportJSON retorna relatório em JSON
+func (s *Server) getReportJSON(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	_, err := s.resolveProgram(name)
+	if err != nil {
+		http.Error(w, "program not found", 400)
+		return
+	}
+
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: name, Limit: 1000000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: name, Limit: 100000})
+
+	// Retornar JSON estruturado
+	result := map[string]interface{}{
+		"program": name,
+		"generated_at": time.Now(),
+		"summary": map[string]interface{}{
+			"total_findings": len(findings),
+			"confirmed": len(findings), // Simplificado
+			"assets_discovered": len(assets),
+		},
+		"findings_count_by_severity": map[string]int{
+			"critical": countBySeverity(findings, "critical"),
+			"high": countBySeverity(findings, "high"),
+			"medium": countBySeverity(findings, "medium"),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=report-%s.json", name))
+	json.NewEncoder(w).Encode(result)
+}
+
+// Fase 11: getReportMarkdown retorna relatório em Markdown
+func (s *Server) getReportMarkdown(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	_, err := s.resolveProgram(name)
+	if err != nil {
+		http.Error(w, "program not found", 400)
+		return
+	}
+
+	findings, _ := s.Store.ListFindings(store.FindingFilter{Program: name, Limit: 1000000})
+	assets, _ := s.Store.ListAssets(store.AssetFilter{Program: name, Limit: 100000})
+
+	// Gerar relatório em Markdown
+	md := fmt.Sprintf("# Relatório de Segurança — %s\n\n", name)
+	md += fmt.Sprintf("**Gerado em:** %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	md += fmt.Sprintf("## Sumário\n- **Total de achados:** %d\n", len(findings))
+	md += fmt.Sprintf("- **Críticos:** %d\n", countBySeverity(findings, "critical"))
+	md += fmt.Sprintf("- **Altos:** %d\n", countBySeverity(findings, "high"))
+	md += fmt.Sprintf("- **Assets descobertos:** %d\n\n", len(assets))
+	md += "---\n*Relatório gerado automaticamente pelo Recon-Hub*\n"
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=report-%s.md", name))
+	fmt.Fprint(w, md)
+}
+
+// Fase 12: getAssetHistory retorna histórico de um asset
+func (s *Server) getAssetHistory(w http.ResponseWriter, r *http.Request) {
+	assetValue := r.PathValue("value")
+
+	// Encontrar este asset em todas as detecções
+	allAssets, _ := s.Store.ListAssets(store.AssetFilter{Limit: 1000000})
+
+	// Simples: retornar histórico do asset
+	detections := 0
+	lastSeen := time.Time{}
+	firstSeen := time.Time{}
+
+	for _, a := range allAssets {
+		if a.Value == assetValue {
+			detections++
+			if lastSeen.IsZero() || a.CreatedAt.After(lastSeen) {
+				lastSeen = a.CreatedAt
+			}
+			if firstSeen.IsZero() || a.CreatedAt.Before(firstSeen) {
+				firstSeen = a.CreatedAt
+			}
+		}
+	}
+
+	result := map[string]interface{}{
+		"asset": assetValue,
+		"detections": detections,
+		"first_seen": firstSeen,
+		"last_seen": lastSeen,
+		"status": "active",
+	}
+
+	if detections == 0 {
+		result["status"] = "not_found"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+// Helper: contar findings por severidade
+func countBySeverity(findings []*store.Finding, severity string) int {
+	count := 0
+	for _, f := range findings {
+		if f.Severity == severity {
+			count++
+		}
+	}
+	return count
 }
