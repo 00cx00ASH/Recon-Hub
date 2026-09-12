@@ -1,3 +1,3 @@
 module scan-waf-fingerprint
 
-go 1.24
+go 1.23
