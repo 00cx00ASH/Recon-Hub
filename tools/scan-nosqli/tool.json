@@ -10,11 +10,7 @@
   "timeout": "3m",
   "modes": [
     { "name": "query", "label": "Querystring (GET)", "help": "URL com parâmetros; injeta p[$ne]= em cada um", "target_label": "URL com querystring" },
-    { "name": "json", "label": "Corpo JSON (login/filtro)", "help": "endpoint que recebe JSON; injeta {\"$ne\":...} nos campos", "target_label": "URL do endpoint JSON", "params": [
-      { "name": "body", "type": "string", "required": false, "help": "corpo JSON legítimo base — ex: {\"username\":\"a\",\"password\":\"b\"}" },
-      { "name": "method", "type": "string", "required": false, "default": "POST", "help": "POST/PUT/PATCH" },
-      { "name": "fields", "type": "string", "required": false, "help": "CSV de campos a testar (default: campos string do body)" }
-    ] }
+    { "name": "json", "label": "Corpo JSON (login/filtro)", "help": "endpoint que recebe JSON; injeta {\"$ne\":...} nos campos (body/method/fields)", "target_label": "URL do endpoint JSON" }
   ],
   "params": [
     { "name": "mode", "type": "string", "required": false, "help": "query ou json (default: json se body vier, senão query)" },
