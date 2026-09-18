@@ -206,6 +206,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/programs/{name}", s.auth(s.deleteProgram))
 	mux.HandleFunc("GET /api/programs/{name}/export", s.authSSE(s.exportProgram)) // authSSE: aceita ?access_token= (download via link)
 
+	// Backup do instância inteiro (todos os programas de uma vez) + restore.
+	// GET usa authSSE pra baixar por link; ?secrets=1 inclui auth por-programa.
+	mux.HandleFunc("GET /api/backup", s.authSSE(s.exportBackup))
+	mux.HandleFunc("POST /api/backup/import", s.auth(s.importBackup))
+
 	mux.HandleFunc("GET /api/lessons", s.auth(s.getLessons))
 	mux.HandleFunc("POST /api/lessons", s.auth(s.appendLesson))
 	mux.HandleFunc("PUT /api/lessons", s.auth(s.putLessons))

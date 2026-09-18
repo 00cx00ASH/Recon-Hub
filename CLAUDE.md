@@ -440,3 +440,26 @@ sobre caçar bugs em programas de terceiros.
   Erro de I/O por item de uma lista processada em loop devia sempre virar
   `continue`/log — nunca `os.Exit` — e reservar `os.Exit` pra quando
   *nenhum* item da lista deu certo.
+- **Backup/restore do instância inteiro (`internal/api/backup.go`) é
+  ADITIVO por princípio, não por conveniência — e isso não é opcional.**
+  `GET /api/backup` junta tudo (programas, templates, watches, findings,
+  assets, jobs, runs, notas por-programa, lições) num JSON; `POST
+  /api/backup/import` restaura. A regra dura do restore: **nunca
+  sobrescreve nem apaga**. Programa/template/watch que já existe é PULADO
+  (não sobrescrito — senão um restore acidental num instância vivo apaga
+  scope real); findings/assets deduplicam pela chave de conteúdo já
+  existente do store (`AddFinding`/`AddAsset` — reimportar vira no-op, não
+  duplica); notas/lições/auth só são escritas se o destino estiver VAZIO
+  (`strings.TrimSpace(cur) != ""` → pula), então texto que alguém está
+  editando nunca é clobrado. Isso é o que torna seguro rodar import contra
+  um hub no ar (só adiciona o que falta) e rodar duas vezes (idempotente).
+  Testes: `TestBackupRoundTrip` (round-trip + idempotência) e
+  `TestRestoreNeverClobbersLiveText` em `internal/api/backup_test.go`.
+  **Auth por-programa (`auth.json`: cookie/bearer/proxy de terceiros) fica
+  FORA do backup por padrão** — é gitignored/0600 e já é mantido fora de
+  todo snapshot de propósito (`SyncFromStore` nunca toca). Só entra com
+  `?secrets=1`, e aí o arquivo é tão sensível quanto o token de acesso.
+  Qualquer entidade nova que passe a ser persistida (um novo registry, um
+  novo arquivo em `data/projects/<name>/`) precisa entrar nos DOIS lados
+  (`collectBackup` + `restoreBackup`) seguindo a mesma regra aditiva —
+  senão o backup silenciosamente deixa de ser "tudo".
