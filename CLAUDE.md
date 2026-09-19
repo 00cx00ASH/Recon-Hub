@@ -25,9 +25,14 @@ PR do fix. Não deixe pra depois — a lição só vale enquanto está fresca.
   real, nunca escala privilégio de verdade, nunca é destrutivo, nunca faz
   DoS. Isso é o que mantém o hub dentro do que bug bounty autoriza. Uma
   ferramenta nova que não seguir isso não deveria existir aqui.
-- **Escopo é enforced no servidor**, não só sugerido na UI: um job/pipeline
-  com `program` setado é rejeitado se o alvo não bater no `in_scope` do
-  programa (`internal/scope`). Nunca contorne isso "pra funcionar".
+- **Escopo é ORGANIZACIONAL, não mais enforced** (mudou por decisão do dono
+  — ver lição abaixo). O programa marca job/asset/finding e agrupa relatório/
+  notas, e `in_scope` continua sendo um campo do programa, mas é **apenas
+  informativo**: o servidor NÃO bloqueia mais um job/pipeline/watch cujo alvo
+  não bate no `in_scope`, nem filtra assets fora do escopo no feed de
+  pipeline. A responsabilidade de só apontar o hub pra alvos autorizados é do
+  operador. (A biblioteca `internal/scope` — `Contains`, CIDR — segue existindo
+  e testada, só não é mais chamada pra impor nada.)
 - **Contrato NDJSON é sagrado** — ver `docs/TOOL_CONTRACT.md`. Toda
   ferramenta nova segue o mesmo formato de evento, os mesmos nomes de env
   var, a mesma convenção de severidade/confirmed.
@@ -206,7 +211,10 @@ sobre caçar bugs em programas de terceiros.
   mensagem de investigação) ou `claude --agent bugbounty` pra garantir
   que é o agente restrito quem age — ver aviso em
   `docs/GUIA-DE-USO.md` seção g.1.
-- **`createJob` só checava `req.Target` contra o escopo — `req.Params`
+- **[OBSOLETO — o enforcement de escopo inteiro foi removido depois; ver a
+  lição "Enforcement de escopo REMOVIDO" no fim do arquivo. Esta entrada fica
+  como histórico do porquê `paramsOutOfScope` existiu.]** **`createJob` só
+  checava `req.Target` contra o escopo — `req.Params`
   nunca era olhado, e é exatamente ali que os alvos DE VERDADE viajam em
   todo tool com modo "lista colada"/"arquivo"** (`urls`/`urls_file`,
   `hosts`/`hosts_file`, `subdomains`/`subdomains_file`, mais alvos extra
@@ -440,6 +448,42 @@ sobre caçar bugs em programas de terceiros.
   Erro de I/O por item de uma lista processada em loop devia sempre virar
   `continue`/log — nunca `os.Exit` — e reservar `os.Exit` pra quando
   *nenhum* item da lista deu certo.
+- **Enforcement de escopo REMOVIDO por decisão do dono — o programa virou
+  rótulo organizacional, não uma trava.** Até então o hub rejeitava com 403
+  todo job/pipeline/watch cujo alvo (Target OU params de lista/arquivo) não
+  batesse no `in_scope`, e o feed de pipeline descartava assets fora do
+  escopo (`filterScope`). O dono pediu explicitamente pra eliminar essa
+  regra — e o argumento que fez aceitar: a checagem já era **opt-in** (job
+  sem programa nunca era checado), então nunca impediu de fato apontar o hub
+  pra qualquer host; só atrapalhava quando um programa estava selecionado.
+  Removido: os três 403 em `internal/api/api.go` (createJob/createPipelineRun/
+  createWatch), todos os helpers (`inScope`/`paramsOutOfScope`/`outOfScopeMsg`
+  + os mapas `scopeListParams`/`scopeFileParams`/`scopeSingleParams`/
+  `scopeExempt`) e o `filterScope` de `internal/engine/pipeline.go`. O que
+  FICOU: o pacote `internal/scope` inteiro (Contains/CIDR, ainda testado), o
+  campo `in_scope` do programa (agora só informativo), o `resolveProgram`
+  (valida que o programa existe e marca job/asset/finding com ele) e todo o
+  resto do conceito de programa (relatório, notas, backup por-programa).
+  Testes atualizados pra afirmar o oposto do que afirmavam
+  (`TestCreateJobNoScopeEnforcement`, `TestCreatePipelineRunNoScopeEnforcement`,
+  `TestCreateWatchNoScopeEnforcement`). **Consequência a lembrar:** um
+  `full-recon` agora encadeia pros steps seguintes QUALQUER host descoberto,
+  inclusive fora do programa — a responsabilidade de só rodar contra alvo
+  autorizado passou a ser 100% do operador. Se um dia quiser reintroduzir a
+  trava, o histórico está nas lições marcadas [OBSOLETO] acima.
+- **`Engine.Submit` copiava o job DEPOIS de lançar a goroutine de execução —
+  data race real, latente há tempo.** `Submit` faz `go e.execute(job)` e
+  devolve uma cópia `jc := *job` pro caller (que serializa na resposta do
+  `POST /api/jobs`); mas `execute()` escreve `job.Status`/`StartedAt` na sua
+  própria goroutine. Copiar DEPOIS do `go` corre com essa escrita. Nunca foi
+  pego porque nenhum teste de API rodava uma ferramenta REAL pelo caminho
+  assíncrono sob `-race` (os testes de escopo usavam tool inexistente, que
+  falha em `create()` antes da goroutine) — só apareceu ao trocar esses testes
+  por um que dispara `recon-web-enum` de verdade. Corrigido invertendo a ordem:
+  `jc := *job` ANTES do `go e.execute(job)` (snapshot limpo do job em `queued`;
+  a goroutine passa a ser dona exclusiva do `job` original). Regra: quando uma
+  função devolve uma cópia de algo que ela também entrega a uma goroutine,
+  tire a cópia ANTES de lançar a goroutine.
 - **Backup/restore do instância inteiro (`internal/api/backup.go`) é
   ADITIVO por princípio, não por conveniência — e isso não é opcional.**
   `GET /api/backup` junta tudo (programas, templates, watches, findings,

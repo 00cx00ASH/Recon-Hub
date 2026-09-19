@@ -137,86 +137,24 @@ func TestPrograms(t *testing.T) {
 	}
 }
 
-func TestCreateJobRejectsOutOfScope(t *testing.T) {
-	h := newTestServer(t, auth.Token{Source: "disabled"})
+// TestCreateJobNoScopeEnforcement documenta a remoção do enforcement de
+// escopo: um alvo fora do in_scope do programa NÃO é mais bloqueado — nem no
+// target, nem nos params de lista/arquivo. O programa segue como rótulo
+// (o job é marcado com ele), mas não impõe nada.
+func TestCreateJobNoScopeEnforcement(t *testing.T) {
+	h := newScopeAwareServer(t, auth.Token{Source: "disabled"}).Handler()
 
-	// alvo fora do escopo do programa "acme" (só *.acme.com) -> 403
-	w := doBody(h, "POST", "/api/jobs", `{"tool":"x","target":"evil.example.com","program":"acme"}`, nil)
-	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
-		t.Fatalf("alvo fora do escopo: got %d %s, want 403 com \"fora do escopo\"", w.Code, w.Body.String())
+	// alvo fora do escopo do programa "acme" (só *.acme.com) -> aceito (202)
+	w := doBody(h, "POST", "/api/jobs", `{"tool":"recon-web-enum","target":"evil.example.com","program":"acme"}`, nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("alvo fora do escopo deveria ser aceito agora: got %d %s", w.Code, w.Body.String())
 	}
 
-	// mesma ferramenta desconhecida, mas alvo em escopo -> passa da checagem de escopo,
-	// falha só por causa da tool inexistente (sem menção a escopo/programa)
-	w = doBody(h, "POST", "/api/jobs", `{"tool":"x","target":"a.acme.com","program":"acme"}`, nil)
-	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
-		t.Fatalf("alvo em escopo: got %d %s", w.Code, w.Body.String())
-	}
-
-	// ferramentas cujo alvo não é um host do programa (org/repo, ID de coleção)
-	// ficam isentas mesmo com um programa restrito selecionado
-	w = doBody(h, "POST", "/api/jobs", `{"tool":"int-github-audit","target":"octocat/Hello-World","program":"acme"}`, nil)
-	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
-		t.Fatalf("tool isenta (target sem host): got %d %s", w.Code, w.Body.String())
-	}
-	w = doBody(h, "POST", "/api/jobs", `{"tool":"int-github-audit","target":"github.com/octocat/Hello-World","program":"acme"}`, nil)
-	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
-		t.Fatalf("tool isenta (target com host de terceiro): got %d %s", w.Code, w.Body.String())
-	}
-
-	// sem programa selecionado, nada é bloqueado por escopo
-	w = doBody(h, "POST", "/api/jobs", `{"tool":"x","target":"evil.example.com"}`, nil)
-	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
-		t.Fatalf("sem programa: got %d %s", w.Code, w.Body.String())
-	}
-}
-
-// TestCreateJobRejectsOutOfScopeInParams é o teste de regressão pro bug real:
-// inScope() só olhava req.Target — mas todo tool com modo "lista"/"arquivo"
-// (urls, hosts, subdomains + seus companheiros _file, e alvos extra de
-// endpoint único como url_b) recebe os alvos DE VERDADE por Params, não por
-// Target. Um job com target=a.acme.com (em escopo) e urls contendo um host
-// fora do programa passava batido — escopo "enforced no servidor" era só
-// decorativo pra qualquer ferramenta com lista colada.
-func TestCreateJobRejectsOutOfScopeInParams(t *testing.T) {
-	h := newTestServer(t, auth.Token{Source: "disabled"})
-
-	// target em escopo, mas um host da lista "urls" não está -> 403
-	w := doBody(h, "POST", "/api/jobs",
-		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"urls":"https://a.acme.com/x, https://evil.example.com/y"}}`, nil)
-	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
-		t.Fatalf("host fora do escopo dentro de params.urls: got %d %s, want 403", w.Code, w.Body.String())
-	}
-
-	// mesma coisa pro companheiro de arquivo (hosts_file) — lê o arquivo e
-	// confere cada linha
-	f := filepath.Join(t.TempDir(), "hosts.txt")
-	_ = os.WriteFile(f, []byte("a.acme.com\nevil.example.com\n"), 0o644)
+	// hosts fora do escopo em params.urls -> também aceito
 	w = doBody(h, "POST", "/api/jobs",
-		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"hosts_file":"`+f+`"}}`, nil)
-	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
-		t.Fatalf("host fora do escopo dentro de hosts_file: got %d %s, want 403", w.Code, w.Body.String())
-	}
-
-	// url_b (segundo endpoint de comparação, ex: scan-idor) também é checado
-	w = doBody(h, "POST", "/api/jobs",
-		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"url_b":"https://evil.example.com/resource/1"}}`, nil)
-	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
-		t.Fatalf("url_b fora do escopo: got %d %s, want 403", w.Code, w.Body.String())
-	}
-
-	// tudo em escopo -> passa da checagem de escopo (falha só por tool inexistente)
-	w = doBody(h, "POST", "/api/jobs",
-		`{"tool":"x","target":"a.acme.com","program":"acme","params":{"urls":"https://a.acme.com/x, https://b.acme.com/y","url_b":"https://c.acme.com/z"}}`, nil)
-	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
-		t.Fatalf("tudo em escopo: got %d %s", w.Code, w.Body.String())
-	}
-
-	// ferramenta isenta (scopeExempt) não tem os params checados mesmo com host de fora
-	w = doBody(h, "POST", "/api/jobs",
-		`{"tool":"int-github-audit","target":"octocat/Hello-World","program":"acme","params":{"urls":"https://evil.example.com/x"}}`, nil)
-	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "escopo") {
-		t.Fatalf("tool isenta com params: got %d %s", w.Code, w.Body.String())
+		`{"tool":"recon-web-enum","target":"a.acme.com","program":"acme","params":{"urls":"https://evil.example.com/y"}}`, nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("host fora do escopo em params deveria ser aceito agora: got %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -269,33 +207,24 @@ func newScopeAwareServer(t *testing.T, tok auth.Token) *Server {
 	return &Server{Store: st, Reg: reg, Engine: eng, Pipelines: pipes, Programs: progs, Watches: watches, Token: tok, DataDir: t.TempDir()}
 }
 
-func TestCreatePipelineRunRejectsOutOfScope(t *testing.T) {
+func TestCreatePipelineRunNoScopeEnforcement(t *testing.T) {
 	h := newScopeAwareServer(t, auth.Token{Source: "disabled"}).Handler()
 
+	// alvo fora do in_scope do programa -> aceito (202), não mais 403
 	w := doBody(h, "POST", "/api/pipeline-runs", `{"pipeline":"basic","target":"evil.example.com","program":"acme"}`, nil)
-	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
-		t.Fatalf("alvo fora do escopo: got %d %s, want 403 com \"fora do escopo\"", w.Code, w.Body.String())
-	}
-
-	w = doBody(h, "POST", "/api/pipeline-runs", `{"pipeline":"basic","target":"a.acme.com","program":"acme"}`, nil)
 	if w.Code != http.StatusAccepted {
-		t.Fatalf("alvo em escopo: got %d %s, want 202", w.Code, w.Body.String())
+		t.Fatalf("pipeline fora do escopo deveria ser aceita agora: got %d %s, want 202", w.Code, w.Body.String())
 	}
 }
 
-func TestCreateWatchRejectsOutOfScope(t *testing.T) {
+func TestCreateWatchNoScopeEnforcement(t *testing.T) {
 	h := newScopeAwareServer(t, auth.Token{Source: "disabled"}).Handler()
 
+	// watch com alvo fora do in_scope -> criado (201), não mais 403
 	w := doBody(h, "POST", "/api/watches",
 		`{"name":"w1","pipeline":"basic","target":"evil.example.com","program":"acme","every":"1h"}`, nil)
-	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "fora do escopo") {
-		t.Fatalf("alvo fora do escopo: got %d %s, want 403 com \"fora do escopo\"", w.Code, w.Body.String())
-	}
-
-	w = doBody(h, "POST", "/api/watches",
-		`{"name":"w2","pipeline":"basic","target":"a.acme.com","program":"acme","every":"1h"}`, nil)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("alvo em escopo: got %d %s, want 201", w.Code, w.Body.String())
+		t.Fatalf("watch fora do escopo deveria ser criado agora: got %d %s, want 201", w.Code, w.Body.String())
 	}
 }
 

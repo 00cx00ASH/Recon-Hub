@@ -270,7 +270,7 @@ func buildTools(h *hubClient) map[string]mcpTool {
 		})
 
 	add("hub_create_program",
-		"Cria um programa (escopo de bug bounty) — precisa existir antes de rodar qualquer job/pipeline com enforcement de escopo nesse alvo. in_scope aceita padrões: \"example.com\" (exato), \"*.example.com\" (subdomínios), CIDR.",
+		"Cria um programa (escopo de bug bounty) — marca job/asset/finding e agrupa relatório/notas do alvo. in_scope é informativo (o hub não bloqueia mais alvo fora dele) e aceita padrões: \"example.com\" (exato), \"*.example.com\" (subdomínios), CIDR.",
 		obj(map[string]any{
 			"name":         str("nome do programa (a-z, 0-9, . _ -, até 63 chars — vira o nome do arquivo em programs/)"),
 			"in_scope":     strArray("padrões em escopo — obrigatório, pelo menos 1"),

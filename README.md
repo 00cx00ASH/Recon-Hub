@@ -611,11 +611,15 @@ Passe `"program": "acme"` ao criar um job ou uma pipeline-run. Efeitos:
 
 - **tag** — todo job/asset/finding da execução leva `program: "acme"`; filtre com
   `?program=acme` em `/api/jobs`, `/api/findings`, `/api/assets`, `/api/pipeline-runs`.
-- **escopo no feed** — numa pipeline, o feed entre steps só passa hosts
-  in-scope (kinds `subdomain`/`url`); os de fora são descartados com um aviso no
-  stream. crt.sh devolve muita coisa; você só escaneia o que o programa cobre.
 - **dedup por programa** — a chave de dedup do finding inclui o programa, então
   re-rodar o recon de um programa é idempotente (sobe `count`, não duplica).
+
+> **`in_scope`/`out_of_scope` são informativos, não impostos.** O hub **não**
+> bloqueia mais um job/pipeline/watch cujo alvo esteja fora do `in_scope`, nem
+> filtra hosts fora do escopo no feed de pipeline (isso foi removido). Os
+> campos ficam como documentação do escopo do programa e alimentam o
+> relatório; **garantir que você só aponta o hub pra alvos autorizados é sua
+> responsabilidade.**
 
 ---
 

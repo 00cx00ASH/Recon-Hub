@@ -543,9 +543,9 @@ docker compose exec reconhub cat /app/data/token</pre>
           <input id="plTarget" placeholder="exemplo.com" spellcheck="false" autocomplete="off">
         </div>
         <div class="field">
-          <label for="plProgram">Programa (escopo)</label>
+          <label for="plProgram">Programa (rótulo)</label>
           <select id="plProgram"><option value="">— sem programa —</option></select>
-          <span class="help">com escopo, o feed entre steps só passa hosts in-scope</span>
+          <span class="help">marca os findings/assets desta run com o programa (não filtra por escopo)</span>
         </div>
         <div id="plSteps" class="plsteps"></div>
         <button class="run" id="plRun" disabled>Rodar pipeline</button>

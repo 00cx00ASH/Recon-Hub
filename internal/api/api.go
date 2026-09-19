@@ -61,106 +61,12 @@ func (s *Server) resolveProgram(name string) (*scope.Program, error) {
 	return &p, nil
 }
 
-// scopeExempt lists tools whose "target" is never the program's own domain —
-// checking it against in_scope/out_of_scope would be meaningless (and would
-// wrongly block legitimate runs).
-var scopeExempt = map[string]bool{
-	"int-github-audit":   true, // target is an org/repo or username
-	"scan-postman-net":   true, // target is a Postman workspace/collection ID
-	"scan-postman-audit": true, // target is a Postman workspace/collection ID
-}
-
-// inScope reports whether target is allowed to run under prog for the given
-// tool. A nil program (no program selected) or an exempt tool always passes.
-// A target that doesn't look like a hostname (no dot — e.g. a pasted blob, a
-// search query, a file path used by "paste"/"file" modes) also passes: scope
-// is defined in terms of hosts, so it has nothing to say about those.
-func inScope(tool string, prog *scope.Program, target string) bool {
-	if prog == nil || scopeExempt[tool] {
-		return true
-	}
-	h := scope.Host(target)
-	if !strings.Contains(h, ".") {
-		return true
-	}
-	return prog.Contains(target)
-}
-
-// scopeListParams are params whose value is a delimited list of EXTRA
-// hosts/URLs a job actually reaches — the "lista colada" mode that most scan
-// tools have (urls/hosts/subdomains) alongside their single-target mode.
-// Without checking these too, scope enforcement is a no-op for any tool with
-// a list mode: Target can be a single in-scope decoy while the real targets
-// ride along in one of these params, completely unchecked.
-var scopeListParams = map[string]bool{"urls": true, "hosts": true, "subdomains": true}
-
-// scopeFileParams mirror scopeListParams but point at a file on the server
-// (one host/URL per line) instead of carrying values inline — same bypass,
-// checked by reading the file server-side before the job is accepted.
-var scopeFileParams = map[string]bool{"urls_file": true, "hosts_file": true, "subdomains_file": true}
-
-// scopeSingleParams carry exactly one extra URL a tool fetches, distinct
-// from Target: scan-idor's comparison endpoint, scan-auth-flow's known
-// authorization endpoint, js-supabase-probe's project URL.
-var scopeSingleParams = map[string]bool{"url_b": true, "authorize_url": true, "supabase_url": true}
-
-func splitScopeList(s string) []string {
-	return strings.FieldsFunc(s, func(r rune) bool {
-		return r == ',' || r == '\n' || r == '\r' || r == ' ' || r == '\t'
-	})
-}
-
-// paramsOutOfScope checks every param that names extra hosts/URLs (list
-// mode's urls/hosts/subdomains, their _file companions, and single
-// extra-URL params like url_b) against prog, and returns the first
-// out-of-scope value found, or "" if everything checks out. inScope alone
-// only ever sees the request's single Target field — list/file modes exist
-// specifically to carry many more targets, so they need the same check.
-func paramsOutOfScope(tool string, prog *scope.Program, params map[string]any) string {
-	if prog == nil || scopeExempt[tool] {
-		return ""
-	}
-	for name, raw := range params {
-		s, ok := raw.(string)
-		if !ok || strings.TrimSpace(s) == "" {
-			continue
-		}
-		switch {
-		case scopeListParams[name]:
-			for _, item := range splitScopeList(s) {
-				if !inScope(tool, prog, item) {
-					return item
-				}
-			}
-		case scopeSingleParams[name]:
-			if !inScope(tool, prog, s) {
-				return s
-			}
-		case scopeFileParams[name]:
-			b, err := os.ReadFile(s)
-			if err != nil {
-				continue // arquivo inválido/inacessível é erro do próprio job, não de escopo
-			}
-			for _, item := range splitScopeList(string(b)) {
-				if !inScope(tool, prog, item) {
-					return item
-				}
-			}
-		}
-	}
-	return ""
-}
-
-// outOfScopeMsg builds a 403 message that shows the target and the program's
-// actual in-scope patterns, so a user who set an empty or mismatched scope can
-// see immediately why everything is being rejected.
-func outOfScopeMsg(target string, prog *scope.Program) string {
-	in := strings.Join(prog.InScope, ", ")
-	if strings.TrimSpace(in) == "" {
-		in = "(vazio — defina o in-scope na aba Projetos)"
-	}
-	return fmt.Sprintf("alvo %q fora do escopo do programa %q. In-scope: %s", target, prog.Name, in)
-}
+// NOTE: o enforcement de escopo (bloquear job/pipeline/watch cujo alvo não
+// bate no in_scope do programa) foi REMOVIDO por decisão do dono do projeto.
+// O programa segue existindo como rótulo organizacional (marca job/asset/
+// finding, agrupa relatório/notas), e `in_scope` continua sendo um campo do
+// programa — mas é apenas informativo agora, não é mais imposto pelo servidor.
+// Ver a lição correspondente no CLAUDE.md.
 
 var (
 	errNoPrograms     = &apiErr{"nenhum programa configurado em ./programs"}
@@ -394,14 +300,6 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 	name := ""
 	if prog != nil {
 		name = prog.Name
-		if !inScope(req.Tool, prog, req.Target) {
-			writeErr(w, http.StatusForbidden, outOfScopeMsg(req.Target, prog))
-			return
-		}
-		if bad := paramsOutOfScope(req.Tool, prog, req.Params); bad != "" {
-			writeErr(w, http.StatusForbidden, outOfScopeMsg(bad, prog))
-			return
-		}
 	}
 	job, err := s.Engine.Submit(req.Tool, req.Target, name, req.Params)
 	if err != nil {
@@ -907,13 +805,8 @@ func (s *Server) createWatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wt.Program != "" {
-		prog, err := s.resolveProgram(wt.Program)
-		if err != nil {
+		if _, err := s.resolveProgram(wt.Program); err != nil {
 			writeErr(w, http.StatusBadRequest, "programa desconhecido: "+wt.Program)
-			return
-		}
-		if pl, ok := s.Pipelines.Get(wt.Pipeline); ok && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, wt.Target) {
-			writeErr(w, http.StatusForbidden, fmt.Sprintf("alvo %q fora do escopo do programa %q — um watch recorrente fora do escopo ficaria escaneando indevidamente", wt.Target, prog.Name))
 			return
 		}
 	}
@@ -1363,10 +1256,6 @@ func (s *Server) createPipelineRun(w http.ResponseWriter, r *http.Request) {
 	prog, err := s.resolveProgram(req.Program)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if prog != nil && len(pl.Steps) > 0 && !inScope(pl.Steps[0].Tool, prog, req.Target) {
-		writeErr(w, http.StatusForbidden, outOfScopeMsg(req.Target, prog))
 		return
 	}
 	run, err := s.Engine.SubmitPipeline(pl, req.Target, prog)

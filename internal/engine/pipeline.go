@@ -103,7 +103,7 @@ func (e *Engine) runPipeline(pl pipeline.Pipeline, run *store.PipelineRun, progr
 	}
 	msg := "pipeline iniciada: " + pl.Name + " → " + run.Target
 	if program != nil {
-		msg += "  (escopo: " + program.Name + ")"
+		msg += "  (programa: " + program.Name + ")"
 	}
 	if waves > 1 {
 		msg += "  (grafo: fan-out)"
@@ -144,7 +144,6 @@ func (e *Engine) runPipeline(pl pipeline.Pipeline, run *store.PipelineRun, progr
 			srcJob = jobID[idToIdx[plan[i].FeedFrom]]
 			mu.Unlock()
 			vals := e.collectStepValues(srcJob, step.Feed)
-			vals = filterScope(vals, step.Feed, program, e, run.ID)
 			if len(vals) > 0 {
 				fed = len(vals)
 				params[step.Feed.Param] = step.Feed.Join(vals)
@@ -283,32 +282,6 @@ func plSuffix(failed int) string {
 		return ""
 	}
 	return fmt.Sprintf(", %d step(s) com falha", failed)
-}
-
-// filterScope keeps only in-scope values when a program is set and the feed
-// carries hostnames/URLs (kinds subdomain/url). Other kinds (bucket, …) pass
-// through untouched.
-func filterScope(values []string, feed *pipeline.Feed, program *scope.Program, e *Engine, runID string) []string {
-	if program == nil || feed == nil {
-		return values
-	}
-	if feed.Kind != "" && feed.Kind != "subdomain" && feed.Kind != "url" {
-		return values
-	}
-	kept := values[:0:0]
-	var dropped int
-	for _, v := range values {
-		if program.Contains(v) {
-			kept = append(kept, v)
-		} else {
-			dropped++
-		}
-	}
-	if dropped > 0 {
-		e.pipeEmit(runID, "log",
-			fmt.Sprintf("escopo %s: %d de %d valores fora do escopo, descartados", program.Name, dropped, len(values)), nil)
-	}
-	return kept
 }
 
 func (e *Engine) failPipeline(run *store.PipelineRun, stepIdx int, msg string) {
