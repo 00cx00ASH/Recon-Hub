@@ -112,8 +112,13 @@ func (e *Engine) Submit(tool, target, program string, params map[string]any) (*s
 	if err != nil {
 		return nil, err
 	}
-	go e.execute(job)
+	// Snapshot the queued job BEFORE launching the worker: execute() mutates
+	// job.Status/StartedAt on its own goroutine, so copying after `go
+	// e.execute(job)` races with it (o caller serializa essa cópia na resposta
+	// do POST /api/jobs). Copiar antes garante um snapshot limpo (status
+	// queued) e deixa o `job` original só pra goroutine.
 	jc := *job
+	go e.execute(job)
 	return &jc, nil
 }
 

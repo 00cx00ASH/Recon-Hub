@@ -332,11 +332,11 @@ findings high". O MCP lê `data/token` sozinho (ou `RECONHUB_URL` /
 ferramenta do hub — só existe dentro de uma sessão do Claude Code neste
 repo, e só age através das 22 tools MCP acima (sem Bash, sem internet
 solta — o `tools:` do frontmatter do agente nem lista essas duas). Isso
-importa: **todo job/pipeline que ele dispara passa pelo mesmo
-enforcement de escopo do servidor** que qualquer outro caminho (UI,
-API, CLI) — testado na prática: pedir um alvo fora do
-`in_scope`/`out_of_scope` do programa devolve erro do próprio servidor,
-não é o agent "se comportando bem", é o hub recusando de verdade.
+importa: o agente só alcança o que as tools MCP do hub expõem — não tem
+como escanear nada fora do próprio hub por conta própria. (O hub **não**
+impõe mais escopo por `in_scope`/`out_of_scope` — isso foi removido; o
+programa virou rótulo organizacional. Apontar o hub só pra alvos
+autorizados é responsabilidade do operador, não uma trava do servidor.)
 
 > **⚠️ Isso só vale garantido se for de fato O AGENTE quem está agindo —
 > não a sessão raiz do Claude Code.** A sessão raiz TEM Bash/WebFetch

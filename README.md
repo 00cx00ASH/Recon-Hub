@@ -71,12 +71,13 @@ docker compose exec reconhub cat /app/data/token # docker
 8. [Relatório para bug bounty](#relatório-para-bug-bounty)
 9. [Monitoramento (watches)](#monitoramento-watches)
 10. [Backend de armazenamento](#backend-de-armazenamento)
-11. [Contrato de ferramenta](#contrato-de-ferramenta)
-12. [Catálogo das ferramentas](#catálogo-das-ferramentas)
-13. [Estrutura de pastas](#estrutura-de-pastas)
-14. [MCP](#mcp)
-15. [Desenvolvimento](#desenvolvimento)
-16. [Roadmap](#roadmap)
+11. [Backup e restauração](#backup-e-restauração)
+12. [Contrato de ferramenta](#contrato-de-ferramenta)
+13. [Catálogo das ferramentas](#catálogo-das-ferramentas)
+14. [Estrutura de pastas](#estrutura-de-pastas)
+15. [MCP](#mcp)
+16. [Desenvolvimento](#desenvolvimento)
+17. [Roadmap](#roadmap)
 
 ---
 
@@ -610,11 +611,15 @@ Passe `"program": "acme"` ao criar um job ou uma pipeline-run. Efeitos:
 
 - **tag** — todo job/asset/finding da execução leva `program: "acme"`; filtre com
   `?program=acme` em `/api/jobs`, `/api/findings`, `/api/assets`, `/api/pipeline-runs`.
-- **escopo no feed** — numa pipeline, o feed entre steps só passa hosts
-  in-scope (kinds `subdomain`/`url`); os de fora são descartados com um aviso no
-  stream. crt.sh devolve muita coisa; você só escaneia o que o programa cobre.
 - **dedup por programa** — a chave de dedup do finding inclui o programa, então
   re-rodar o recon de um programa é idempotente (sobe `count`, não duplica).
+
+> **`in_scope`/`out_of_scope` são informativos, não impostos.** O hub **não**
+> bloqueia mais um job/pipeline/watch cujo alvo esteja fora do `in_scope`, nem
+> filtra hosts fora do escopo no feed de pipeline (isso foi removido). Os
+> campos ficam como documentação do escopo do programa e alimentam o
+> relatório; **garantir que você só aponta o hub pra alvos autorizados é sua
+> responsabilidade.**
 
 ---
 
@@ -782,6 +787,52 @@ Docker: `docker build --build-arg RECONHUB_SQLITE=sqlite -t reconhub:sqlite .`
 
 `make test-sqlite` (incluído em `make check`) compila com a tag e roda os testes
 do backend.
+
+---
+
+## Backup e restauração
+
+Um backup de **um comando** salva o instância inteiro — todos os programas,
+findings, assets, jobs, runs de pipeline, notas por programa e as lições
+cross-programa — num único JSON, e restaura de volta num hub zerado (volume
+apagado, `Docker.raw` deletado, máquina nova). É o complemento global do export
+por-programa (`/api/programs/{name}/export`, que cobre só um).
+
+**Baixar** (pelo dashboard: painel esquerdo → **Backup** → *Baixar backup*, ou
+por link/curl):
+
+```bash
+curl -s "http://127.0.0.1:7878/api/backup?access_token=$TOKEN" -o reconhub-backup.json
+```
+
+**Restaurar** (dashboard → **Backup** → *Restaurar…*, ou curl):
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  --data-binary @reconhub-backup.json \
+  http://127.0.0.1:7878/api/backup/import
+```
+
+O restore é **aditivo, idempotente e nunca destrutivo**: só adiciona o que
+falta. Programa/template/watch que já existe é pulado (nunca sobrescrito);
+findings/assets deduplicam pela chave de conteúdo; notas/lições só são escritas
+se o destino estiver vazio, então rodar contra um instância vivo nunca apaga
+nem clobra o que já está lá — e reimportar o mesmo arquivo duas vezes é um
+no-op. A resposta traz um resumo `{added, skipped}` por categoria.
+
+**Credenciais de sessão (auth por programa)** ficam **fora** do backup por
+padrão — `auth.json` guarda cookie/bearer/proxy reais de aplicações de
+terceiros, é gitignored e 0600. Só entram com `?secrets=1` (ou o checkbox
+"incluir credenciais" no dashboard), e aí **o arquivo passa a ser tão sensível
+quanto o próprio token de acesso** — trate-o assim.
+
+> **Docker:** os dados vivem no volume nomeado `reconhub-data`, não no `./data`
+> do checkout. Além do backup pela API acima (recomendado), dá pra copiar o
+> volume inteiro: `docker run --rm -v reconhub-data:/data -v "$PWD":/out alpine
+> tar czf /out/reconhub-data.tgz -C /data .` — **nunca** apague o `Docker.raw`
+> na mão pra "limpar disco": ele é o disco de TODO o Docker (imagens,
+> containers e volumes), e deletá-lo zera tudo. Pra recuperar espaço use
+> `docker system prune` / `docker system df`.
 
 ---
 
@@ -1153,3 +1204,6 @@ arquivo no repo); ele orquestra o que já existe.
    [Backend de armazenamento](#backend-de-armazenamento).
 7. **Auth multiusuário** — hoje é um bearer token único (constant-time, gerado no
    1º start, `data/token`); contas/escopos depois, se precisar.
+8. ~~Backup/restore do instância inteiro~~ — **feito:** `GET /api/backup`
+   (tudo num JSON) + `POST /api/backup/import` (aditivo, idempotente, nunca
+   destrutivo). Ver [Backup e restauração](#backup-e-restauração).

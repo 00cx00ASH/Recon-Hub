@@ -75,5 +75,6 @@ Detalhe e causa-raiz de cada um desses: seção "Lições aprendidas" do
 - Não invente: chain nova só com entrada correspondente no "Playbook de
   encadeamento" do `bugbounty.md`; variante de encoding só onde atravessa
   filtro decodável; nada que fira "nunca DoS / pacing é padrão".
-- Escopo é enforced no servidor (`internal/scope` + `paramsOutOfScope`) —
-  nunca contorne "pra funcionar".
+- Escopo NÃO é mais enforced (removido por decisão do dono — ver lição no
+  `CLAUDE.md`): o programa é rótulo organizacional, `in_scope` é informativo.
+  Não reintroduza bloqueio por escopo sem o dono pedir.

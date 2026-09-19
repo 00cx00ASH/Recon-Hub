@@ -100,10 +100,9 @@ func main() {
 		emit(ev{Type: "error", Msg: "informe target (recurso da sessão A) e params.url_b (o MESMO endpoint pro recurso da sessão B)"})
 		os.Exit(2)
 	}
-	// url_b nunca passa pelo enforcement de escopo do servidor (só o
-	// target/RECONHUB_TARGET passa) — sem essa trava, um url_b apontando pra
-	// outro host contornaria o escopo do programa. IDOR é sempre "mesmo
-	// endpoint, ID diferente", então mesmo host é sempre esperado de verdade.
+	// IDOR é sempre "mesmo endpoint, ID diferente", então target e url_b têm
+	// que ser do mesmo host — hosts diferentes indicam erro de uso, não um
+	// teste de IDOR válido.
 	if hostOf(urlA) != hostOf(urlB) {
 		emit(ev{Type: "error", Msg: fmt.Sprintf(
 			"target e url_b precisam ser do MESMO host (%s ≠ %s) — scan-idor testa o mesmo endpoint com dois IDs, não hosts diferentes",
